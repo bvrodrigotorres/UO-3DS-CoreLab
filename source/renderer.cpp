@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "renderer.hpp"
+#include "avatar.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -21,6 +22,7 @@ static size_t bytes,objects;
 static int used;
 static bool overflow;
 static std::vector<Batch> batches;
+static RenderCache renderCache;
 static constexpr int Capacity=65536;
 static void push(Vertex v,C3D_Tex*texture){
     if(used>=Capacity){overflow=true;return;}
@@ -85,12 +87,14 @@ bool loadAtlases(int images,std::string&error){
 size_t textureBytes(){return bytes;}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
+bool hasRunAnimation(){return avatar&&C2D_SpriteSheetCount(avatar)>=72;}
+unsigned renderListBuilds(){return renderCache.rebuilds;}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               bool cutaway,int direction,int frame,bool authentic){
+               bool cutaway,int direction,int frame,bool authentic,bool moving,bool running){
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0);
     C3D_FrameDrawOn(target);used=0;objects=0;overflow=false;batches.clear();
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
-    auto list=renderList(w,actor,cutaway);
+    const auto&list=renderCache.get(w,actor,cutaway);
     for(const auto&d:list){
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
@@ -130,7 +134,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }else{
             Point foot=project(cameraX,cameraY,footZ);
             if(avatar){
-                unsigned uo=(direction+7)&7;auto image=C2D_SpriteSheetGetImage(avatar,uo*5+frame);
+                unsigned index=avatarImage(direction,moving,running,frame,C2D_SpriteSheetCount(avatar));
+                auto image=C2D_SpriteSheetGetImage(avatar,index);
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};
                 Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);

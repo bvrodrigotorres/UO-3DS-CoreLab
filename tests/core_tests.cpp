@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "core.hpp"
 #include "reference.hpp"
+#include "avatar.hpp"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -49,5 +50,30 @@ int main(int argc,char**argv){
     auto h=heights(w,11,10);assert(h.slope&&h.top==0&&h.right==2&&h.bottom==2&&h.left==0);
     w.vertices[0]=-3;w.vertices[1]=-3;w.vertices[17]=-2;w.vertices[18]=-2;
     h=heights(w,0,0);assert(h.average==-3); // arithmetic-shift-compatible negative average
-    std::cout<<comparisons<<" upstream differential cases + geometry/visibility/navigation checks passed\n";
+    RenderCache cache;
+    auto checkCache=[&](const World&world,Actor actor,bool cut){
+        auto expected=renderList(world,actor,cut);
+        const auto&actual=cache.get(world,actor,cut);
+        assert(actual.size()==expected.size());
+        for(size_t i=0;i<actual.size();++i){
+            assert(actual[i].kind==expected[i].kind&&actual[i].index==expected[i].index&&
+                   actual[i].priority==expected[i].priority&&actual[i].z==expected[i].z&&
+                   actual[i].x==expected[i].x&&actual[i].y==expected[i].y);
+        }
+    };
+    for(int i=0;i<120;++i)checkCache(w,{6,6,4},true);
+    assert(cache.rebuilds==1);
+    checkCache(w,{7,6,4},true);assert(cache.rebuilds==2);
+    checkCache(w,{7,6,20},true);assert(cache.rebuilds==3);
+    checkCache(w,{7,6,20},false);assert(cache.rebuilds==4);
+    World other=demoWorld();checkCache(other,{7,6,20},false);assert(cache.rebuilds==5);
+    cache.invalidate();checkCache(other,{7,6,20},false);assert(cache.rebuilds==6);
+    for(int direction=0;direction<8;++direction)for(unsigned frame=0;frame<4;++frame){
+        unsigned uo=(direction+7)&7;
+        assert(avatarImage(direction,true,true,frame,72)==40+uo*4+frame);
+        assert(avatarImage(direction,true,false,frame,72)==uo*5+1+frame);
+        assert(avatarImage(direction,false,true,frame,72)==uo*5);
+        assert(avatarImage(direction,true,true,frame,40)==uo*5+1+frame);
+    }
+    std::cout<<comparisons<<" upstream cases + cache equivalence + run/idle/walk atlas checks passed\n";
 }

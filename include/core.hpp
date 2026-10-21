@@ -38,6 +38,22 @@ struct Draw { Kind kind; int x,y,z,priority; size_t index; uint32_t order; };
 struct Actor {int x=0,y=0,z=0;};
 int priority(Kind kind,int z,int height,uint64_t flags,int average,bool slope);
 std::vector<Draw> renderList(const World&,const Actor&,bool cutaway);
+// Worlds are immutable after index(). Explicitly invalidate after editing one.
+class RenderCache {
+    const World* world=nullptr;
+    Actor actor;
+    bool cutaway=false;
+    std::vector<Draw> entries;
+public:
+    unsigned rebuilds=0;
+    const std::vector<Draw>&get(const World&w,const Actor&a,bool cut){
+        if(world!=&w||a.x!=actor.x||a.y!=actor.y||a.z!=actor.z||cut!=cutaway){
+            entries=renderList(w,a,cut);world=&w;actor=a;cutaway=cut;++rebuilds;
+        }
+        return entries;
+    }
+    void invalidate(){world=nullptr;}
+};
 struct Candidate {unsigned flags;int z,average,height;bool terrain=false;};
 // Normal walking subset of CrossUO CalculateNewZ, isolated from player/network/UI.
 bool solveCandidates(std::vector<Candidate> list,int currentZ,int minZ,int maxZ,int& nextZ);

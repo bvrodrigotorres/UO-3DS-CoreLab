@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.1
+# Primera prueba: UO-3DS-CoreLab v0.2
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -6,7 +6,7 @@ Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
 1. Copia la carpeta `UO-3DS-CoreLab` a `SD:/3ds/`.
 2. Abre `UO-3DS-CoreLab.3dsx` desde Homebrew Launcher.
-3. El título inferior debe decir `UO-3DS CoreLab v0.1`.
+3. El título inferior debe decir `UO-3DS CoreLab v0.2`.
 
 El paquete público contiene la demo incorporada. Si el paquete fue preparado
 localmente con los recursos privados, también incluye `scene.bin`, ocho o más

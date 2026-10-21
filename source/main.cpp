@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cmath>
 #include <algorithm>
+#include <malloc.h>
 
 int main(){
     gfxInitDefault();consoleInit(GFX_BOTTOM,nullptr);
@@ -18,7 +19,7 @@ int main(){
     bool authentic=available,cutaway=true,moving=false;int facing=4,actual=0,frames=0,spot=0;
     lab::World*w=authentic?&privateWorld:&demo;
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
-    float progress=0,cameraX=actor.x,cameraY=actor.y,foot=actor.z,fps=0;
+    float progress=0,cameraX=actor.x,cameraY=actor.y,foot=actor.z,fps=0,animationPhase=0;
     u64 last=osGetTime(),sample=last;int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
@@ -47,15 +48,18 @@ int main(){
                 from=actor;actor=next;moving=true;progress=0;facing=(actual+1)&7;blocked="--";
             }else blocked="BLOCKED";
         }
-        if(moving){progress+=dt/((held&KEY_B)?.20f:.40f);if(progress>=1){progress=1;moving=false;}
+        bool animateThisFrame=moving,running=(held&KEY_B)!=0;
+        if(moving){progress+=dt/(running?.20f:.40f);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
-        int animation=moving?1+(int)(now/125)%4:0;
-        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,cutaway,facing,animation,authentic);
+        if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
+        int animation=(int)animationPhase;
+        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,cutaway,facing,animation,authentic,animateThisFrame,running);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames%12==0){
-            std::printf("\x1b[H\x1b[2JUO-3DS CoreLab v0.1\n%s | %s\n\n",authentic?"PRIVATE UO SCENE":"SYNTHETIC TEST",cutaway?"CUTAWAY ON":"ALL HEIGHTS");
+            std::printf("\x1b[H\x1b[2JUO-3DS CoreLab v0.2\n%s | %s\n\n",authentic?"PRIVATE UO SCENE":"SYNTHETIC TEST",cutaway?"CUTAWAY ON":"ALL HEIGHTS");
             std::printf("XY %d,%d   Z %d\n%s\nFPS %.1f | Draw %lu\nCPU %.2fms GPU %.2fms\n",actor.x+w->originX,actor.y+w->originY,actor.z,blocked,fps,(unsigned long)lab::drawnObjects(),C3D_GetProcessingTime(),C3D_GetDrawingTime());
-            std::printf("Atlas %.2f MiB\nLinear free %.2f MiB\nApp free %.2f MiB\n\n",lab::textureBytes()/1048576.f,linearSpaceFree()/1048576.f,osGetMemRegionFree(MEMREGION_APPLICATION)/1048576.f);
+            auto heap=mallinfo();
+            std::printf("Atlas %.2f MiB | Lists %u\nLinear free %.2f MiB\nHeap used %.2f MiB\nHeap reusable %.2f MiB\nRun art: %s\n\n",lab::textureBytes()/1048576.f,lab::renderListBuilds(),linearSpaceFree()/1048576.f,heap.uordblks/1048576.f,heap.fordblks/1048576.f,lab::hasRunAnimation()?"YES":"NO (walk fallback)");
             std::printf("Pad: walk | B: run\nY: roofs | A: test spot/reset\nX: demo / private scene\nSTART: exit\n\n");
             if(!available)std::printf("%s\n",error.c_str());
             if(lab::rendererOverflow())std::printf("ERROR: vertex budget exceeded\n");
