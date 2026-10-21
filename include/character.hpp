@@ -11,6 +11,7 @@ struct Appearance {
     bool enabled=false,realClothes=false;
     std::string name="Avatar";
     uint8_t female=0,skin=1,hair=2,hairColor=1,beard=0,beardColor=1;
+    uint8_t robe=0;
     uint8_t hatColor=0,neckColor=0,glovesColor=0;
     uint8_t shirt=1,shirtColor=9,pants=1,pantsColor=3,shoes=1,bootsColor=0,robeColor=9;
     bool valid()const;
@@ -20,10 +21,15 @@ struct Appearance {
 };
 struct AppearanceEditor {
     Appearance draft;
-    int page=0,row=0,direction=4,preview=0;bool creation=true;
+    int page=0,row=0,direction=4;bool creation=true;unsigned equipment=0;
     std::string message;
     explicit AppearanceEditor(const Appearance&a,bool fresh=true):draft(a),creation(fresh){draft.enabled=true;}
-    void move(int delta){int n=page==3?3:5;row=(row+delta+n)%n;}
+    int rowCount()const{return page==0?3:page==3?6:4;}
+    int step()const{return page==3?21:25;}
+    int field()const{return fieldAt(row);}
+    int fieldAt(int r)const;
+    bool enabled(int field)const;
+    void move(int delta){int n=rowCount();row=(row+delta+n)%n;}
     void change(int delta);
     void randomize(uint32_t seed);
     std::string label(int field)const;

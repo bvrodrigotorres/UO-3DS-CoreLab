@@ -72,11 +72,11 @@ def main():
             else:
                 try:gump=decode_gump(u.read_raw((60000 if sex else 50000)+graphic))
                 except (ValueError,KeyError,TypeError):gump=decode_gump(u.read_raw(50000+graphic))
-            frames.append(sparse(pixels(gump.crop((38,52,144,226)))))
+            frames.append(sparse(pixels(gump.crop((38,28,144,226)))))
             offsets=[0]
             for f in frames:offsets.append(offsets[-1]+len(f))
             payload=struct.pack('<146I',*offsets)+b''.join(frames)
-            header=struct.pack('<4sHHHHII',b'UAP1',sex,graphic,144,0,len(payload),fnv(payload))
+            header=struct.pack('<4sHHHHII',b'UAP2',sex,graphic,144,0,len(payload),fnv(payload))
             path=a.out/f'{sex}-{graphic}.bin';path.write_bytes(header+payload)
             report.append(dict(file=path.name,bytes=path.stat().st_size,fnv=fnv(header+payload)))
             print(path.name,path.stat().st_size,flush=True)
@@ -88,5 +88,5 @@ def main():
         colors.extend(struct.unpack_from('<32H',raw,at))
     payload=struct.pack('<'+'H'*len(colors),*colors)
     (a.out/'hues.bin').write_bytes(struct.pack('<4sIII',b'UHP1',3000,len(payload),fnv(payload))+payload)
-    (a.out/'manifest.json').write_text(json.dumps(dict(race='human',bodies=[400,401],frames=144,canvas=[96,112],paperdoll=[106,174],hair=HAIR,beards=BEARD,files=report,animation_fallback=fallback),indent=2)+'\n')
+    (a.out/'manifest.json').write_text(json.dumps(dict(race='human',bodies=[400,401],frames=144,canvas=[96,112],paperdoll=[106,198],hair=HAIR,beards=BEARD,files=report,animation_fallback=fallback),indent=2)+'\n')
 if __name__=='__main__':main()

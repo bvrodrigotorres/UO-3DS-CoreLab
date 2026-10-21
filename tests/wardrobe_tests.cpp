@@ -25,11 +25,11 @@ int main(int argc,char**argv){
     for(int slot=0;slot<8;++slot){assert(i.unequip(slot));assert(prepared==i.equipmentMask());}
     assert(i.equipmentMask()==0);for(int t=5;t<16;++t)assert(total(i,t)==1);
     Appearance a;a.enabled=true;a.realClothes=true;AppearanceEditor pause(a,false);int shirt=a.shirt,pants=a.pants,shoes=a.shoes;
-    for(int field:{7,9,11}){pause.page=field/5;pause.row=field%5;pause.change(1);}
+    for(int row=0;row<4;++row){pause.page=2;pause.row=row;pause.change(1);}
     assert(pause.draft.shirt==shirt&&pause.draft.pants==pants&&pause.draft.shoes==shoes);
-    pause.page=1;pause.row=3;pause.change(1);assert(pause.draft.shirtColor!=a.shirtColor);
+    pause.page=3;pause.row=0;pause.change(1);assert(pause.draft.shirtColor!=a.shirtColor);
     for(int seed=0;seed<100;++seed){pause.randomize(seed);assert(pause.draft.shirt==shirt&&pause.draft.pants==pants&&pause.draft.shoes==shoes);}
-    pause.page=3;pause.row=2;pause.move(1);assert(pause.row==0);pause.change(1);assert(pause.draft.valid());
+    pause.page=3;pause.row=2;pause.move(1);assert(pause.row==3);pause.change(1);assert(pause.draft.valid());
     EquipmentCache<int>cache;cache.insert(1956,1,20);cache.insert(255,2,20);assert(cache.get(1956)==1&&cache.get(255)==2&&cache.victim(1956)==255);assert(cache.remove(1956)==1);
     const int xy[8][2]={{290,35},{290,59},{290,107},{204,35},{204,59},{290,83},{204,83},{204,107}};
     for(int slot=0;slot<8;++slot)assert(equipmentHit(xy[slot][0],xy[slot][1])==slot);

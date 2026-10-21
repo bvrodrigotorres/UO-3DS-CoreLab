@@ -39,9 +39,9 @@ int main(int argc,char**argv){
     inv.tap(w,player,25,200);assert(inv.bagPage==1);
     inv.tap(w,player,InventoryLayout::Left+2*44+3,InventoryLayout::Top+3*38+3);assert(inv.equipment[2]==7&&inv.backpack.size()==23);
     assert(inv.unequip(2)&&inv.backpack.size()==24);Inventory pages;pages.init(w,path);assert(pages.restored&&pages.backpack.size()==24&&pages.backpack[23].type==7);
-    auto bytes=read(path);assert(bytes[3]=='3');
+    auto bytes=read(path);assert(bytes[3]=='5');
     // UIN2 saves with the original nine slots migrate without resupply/loss.
-    inv.backpack={{0,17},{5,1}};inv.chests[0].items={{1,2}};assert(inv.checkpoint());bytes=read(path);bytes[3]='2';uint32_t hash=2166136261;
+    inv.backpack={{0,17},{5,1}};inv.chests[0].items={{1,2}};assert(inv.checkpoint());bytes=read(path);bytes.resize(bytes.size()-72);bytes.insert(bytes.end(),16,char(0xff));bytes[3]='2';uint32_t hash=2166136261;
     for(size_t i=0;i<bytes.size()-4;++i)hash=(hash^uint8_t(bytes[i]))*16777619u;
     for(int i=0;i<4;++i)bytes[bytes.size()-4+i]=char(hash>>(8*i));
     {std::ofstream f(path,std::ios::binary);f.write(bytes.data(),bytes.size());}

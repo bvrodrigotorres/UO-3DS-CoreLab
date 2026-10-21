@@ -76,7 +76,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.23",ink,1,13);
+    text(fb,225,20,"C.LAB V0.24",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -132,7 +132,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     const int positions[8][2]={{284,30},{284,54},{284,102},{198,30},{198,54},{284,78},{198,78},{198,102}};
     for(int slot=0;slot<8;++slot){int x=positions[slot][0],y=positions[slot][1];bool worn=inv&&inv->equipment[slot]>=0;
         box(fb,x,y,20,20,ink);box(fb,x+1,y+1,18,18,worn?gold:Color{161,143,108});text(fb,x+4,y+6,labels[slot],ink);}
-    text(fb,198,JournalLayout::ZoomTop,inv&&inv->equipmentMask()?"TOCA PARA QUITAR":"SIN EQUIPO",ink,1,17);
+    text(fb,198,JournalLayout::ZoomTop,inv&&inv->equipmentMask()?"TOCA: QUITA / PON":"SIN EQUIPO",ink,1,17);
     const PlayerStatus initial;const auto&stats=status?*status:initial;
     constexpr int ox=10,oy=146;
     if(statusArt&&statusArt->rgba.size()==300*82*4){
@@ -200,7 +200,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.23";
+    const std::string version="CORELAB V0.24";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -253,7 +253,7 @@ void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&e,const st
     static OverheadFont medieval;static bool tried=false;if(!tried){medieval.load("sdmc:/3ds/UO-3DS-CoreLab/npc_font.bin");tried=true;}
     int nameX=(400-int(medieval.width(e.draft.name))*2)/2;for(unsigned char c:e.draft.name){for(int y=0;y<16;++y)for(int x=0;x<16;++x)if(medieval.pixel(c,x,y))box(top,nameX+x*2,31+y*2,2,2,ink);nameX+=medieval.step(c)*2;}
     box(top,22,66,178,160,{191,169,132});box(top,210,66,168,160,{176,160,127});
-    std::vector<uint16_t>smallDoll(95*156);if(doll.size()==106*174){for(int y=0;y<156;++y)for(int x=0;x<95;++x)smallDoll[y*95+x]=doll[(y*174/156)*106+x*106/95];}image(top,smallDoll,95,156,62,68,1);image(top,sprite,96,112,246,55,1);
+    std::vector<uint16_t>smallDoll(95*178);if(doll.size()==106*198){for(int y=0;y<178;++y)for(int x=0;x<95;++x)smallDoll[y*95+x]=doll[(y*198/178)*106+x*106/95];}image(top,smallDoll,95,178,62,46,1);image(top,sprite,96,112,246,55,1);
     text(top,226,78,"VISTA EN EL MUNDO",ink);
     text(top,222,181,"X: GIRAR",ink);text(top,222,193,"HUMANO - CLASICO",ink);
 
@@ -262,9 +262,9 @@ void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&e,const st
     text(bottom,18,13,fresh?"CREAR PERSONAJE":"PERSONALIZACION",ink,1,40);
     const char*tabs[]={"IDENTIDAD","ASPECTO","ROPA","COLORES"};
     for(int i=0;i<4;++i){box(bottom,12+i*74,27,72,22,ink);box(bottom,14+i*74,29,68,18,i==e.page?gold:light);text(bottom,19+i*74,35,tabs[i],ink);}
-    for(int r=0;r<(e.page==3?3:5);++r){int f=e.page*5+r,y=57+r*25;
-        box(bottom,12,y,296,23,r==e.row?gold:Color{218,195,148});text(bottom,18,y+3,e.label(f),ink,1,22);
-        text(bottom,151,y+12,e.value(f),ink,1,25);text(bottom,18,y+13,"<",ink);text(bottom,295,y+13,">",ink);
+    for(int r=0;r<e.rowCount();++r){int f=e.fieldAt(r),y=57+r*e.step();bool active=e.enabled(f);Color fieldInk=active?ink:Color{120,111,91};
+        box(bottom,12,y,296,e.step()-2,r==e.row?gold:Color{218,195,148});text(bottom,18,y+2,e.label(f),fieldInk,1,22);
+        text(bottom,151,y+10,e.value(f),fieldInk,1,25);if(active){text(bottom,18,y+11,"<",ink);text(bottom,295,y+11,">",ink);}
     }
     text(bottom,15,187,e.message.empty()?"L/R: PAGINA  X: GIRAR  Y: AZAR":e.message,ink,1,48);
     text(bottom,15,197,"PAD: CAMBIAR  A: EDITAR  START: GUARDAR",ink,1,48);

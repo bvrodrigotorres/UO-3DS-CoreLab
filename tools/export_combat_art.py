@@ -26,12 +26,16 @@ def main():
     from export_overhead_font import export
     font=export((a.client/'fonts.mul').read_bytes());advance=font[16:144];rows=struct.unpack('<2048H',font[144:])
     tile=original.crop((40,26,90,42)).resize((292,12),Image.Resampling.LANCZOS)
-    panel.paste(tile,(4,3));title='ESTADO DEL PERSONAJE';x=(300-sum(advance[ord(c)] for c in title))//2
+    panel.paste(tile,(4,3));title='ESTADO DEL PERSONAJE'
+    width=sum(advance[ord(c)] for c in title);glyph=Image.new('RGBA',(width,16))
+    x=0
     for char in title:
         for y in range(16):
             for dx in range(16):
-                if rows[ord(char)*16+y]&(1<<(15-dx)) and 2+y<16:panel.putpixel((x+dx,2+y),(55,37,22,255))
+                if rows[ord(char)*16+y]&(1<<(15-dx)):glyph.putpixel((x+dx,y),(55,37,22,255))
         x+=advance[ord(char)]
+    glyph=glyph.crop(glyph.getbbox());glyph=glyph.resize((round(glyph.width*0.88),9),Image.Resampling.LANCZOS)
+    panel.alpha_composite(glyph,((300-glyph.width)//2,4))
     panel.paste(panel.crop((0,0,300,4)).transpose(Image.Transpose.FLIP_TOP_BOTTOM),(0,78))
     panel.save(a.out/'status.png');raw=panel.tobytes();(a.out/'status.bin').write_bytes(struct.pack('<4sHHII',b'UST1',300,82,len(raw),fnv(raw))+raw)
     pivots=[];names=list(ANIMALS);folder=a.out/'corpses';folder.mkdir(exist_ok=True)

@@ -20,7 +20,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);equipMode=false;dressed=accessories=false;
+    path=p;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=false;dressed=accessories=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -40,7 +40,7 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4))&&get(b,4)==identity&&get(b,8)==chests.size();
+    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4)||!std::memcmp(b.data(),"UIN5",4))&&get(b,4)==identity&&get(b,8)==chests.size();
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
@@ -56,9 +56,10 @@ void Inventory::init(const World&w,const std::string&p){
     }
     bool legacy=b.size()>=4&&b[3]=='1';
     std::array<int,8>loaded;loaded.fill(-1);
-    bool extended=b.size()>=4&&b[3]=='4';
+    bool remembered=b.size()>=4&&b[3]=='5';
+    bool extended=b.size()>=4&&(b[3]=='4'||remembered);
     if(ok&&!legacy){
-        if(pos+(extended?36:12)!=b.size()-4)ok=false;
+        if(pos+(remembered?68:extended?36:12)!=b.size()-4)ok=false;
         else for(int slot=0;slot<(extended?8:3);++slot){uint32_t value=get(b,pos);pos+=4;
             if(value==0xffffffffu)continue;
             if(value>=ItemTypes||itemDefs[value].slot!=slot){ok=false;break;}
@@ -66,6 +67,7 @@ void Inventory::init(const World&w,const std::string&p){
         }
     }
     if(ok&&extended){uint32_t flags=get(b,pos);pos+=4;if(flags>3)ok=false;dressed=flags&1;accessories=flags&2;}
+    if(ok&&remembered){for(int slot=0;slot<8;++slot){uint32_t type=get(b,pos);pos+=4;if(type==0xffffffffu)continue;if(type>=ItemTypes||itemDefs[type].slot!=slot){ok=false;break;}lastEquipment[slot]=type;}}
     if(!ok||pos!=b.size()-4){writable=false;backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
     restored=true;equipment=loaded;if(legacy)seedGear();
@@ -83,11 +85,12 @@ unsigned Inventory::equipmentMask()const{
     return m;
 }
 unsigned Inventory::prospectiveKey(size_t slot,int type)const{Inventory copy;copy.equipment=equipment;copy.equipment[slot]=type;return copy.equipmentMask();}
-void Inventory::initialDress(int shirt,int pants,bool shoes){
+void Inventory::initialDress(int shirt,int pants,bool shoes,bool robe){
     if(dressed)return;
     if(equipment[5]<0&&shirt)equipment[5]=shirt==1?8:9;
     if(equipment[7]<0&&pants)equipment[7]=pants==1?10:11;
     if(equipment[2]<0&&shoes)equipment[2]=12;
+    if(equipment[1]<0&&robe)equipment[1]=6;
     dressed=true;
 }
 void Inventory::addAccessories(){
@@ -98,15 +101,15 @@ void Inventory::addAccessories(){
 bool Inventory::equip(size_t index,SaveRename renameFile){
     if(!writable){message="ERROR INVENTARIO: ARCHIVO INTACTO";return false;}
     if(index>=backpack.size())return false;
-    auto item=backpack[index];int slot=itemDefs[item.type].slot;
+    auto item=backpack[index];if(item.type>=ItemTypes)return false;int slot=itemDefs[item.type].slot;
     if(slot<0){message="ESTE OBJETO NO SE PUEDE EQUIPAR";return false;}
     unsigned mask=prospectiveKey(slot,item.type);
     if(prepareEquipment&&!prepareEquipment(mask)){message="FALTAN RECURSOS DE EQUIPO";return false;}
-    Bag oldBag=backpack;auto oldEquipment=equipment;
+    Bag oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;
     backpack.erase(backpack.begin()+index);
     if(equipment[slot]>=0)backpack.push_back({uint16_t(equipment[slot]),1});
-    equipment[slot]=item.type;
-    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;return false;}
+    equipment[slot]=item.type;lastEquipment[slot]=item.type;
+    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;return false;}
     message=std::string(itemDefs[item.type].name)+" EQUIPADO - GUARDADO";return true;
 }
 bool Inventory::unequip(size_t slot,SaveRename renameFile){
@@ -114,10 +117,17 @@ bool Inventory::unequip(size_t slot,SaveRename renameFile){
     if(backpack.size()>=BagSlots){message="MOCHILA LLENA: HAZ ESPACIO";return false;}
     unsigned mask=prospectiveKey(slot,-1);
     if(prepareEquipment&&!prepareEquipment(mask)){message="FALTAN RECURSOS DE EQUIPO";return false;}
-    Bag oldBag=backpack;auto oldEquipment=equipment;int type=equipment[slot];
-    backpack.push_back({uint16_t(type),1});equipment[slot]=-1;
-    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;return false;}
+    Bag oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;int type=equipment[slot];
+    backpack.push_back({uint16_t(type),1});equipment[slot]=-1;lastEquipment[slot]=type;
+    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;return false;}
     message=std::string(itemDefs[type].name)+" A MOCHILA - GUARDADO";return true;
+}
+bool Inventory::toggleEquipment(size_t slot,SaveRename renameFile){
+    if(slot>=equipment.size()||!writable)return false;
+    if(equipment[slot]>=0)return unequip(slot,renameFile);
+    int type=lastEquipment[slot];if(type<0){message="NO HAY PRENDA ANTERIOR EN ESTA RANURA";return false;}
+    for(size_t i=0;i<backpack.size();++i)if(backpack[i].type==type)return equip(i,renameFile);
+    message="ULTIMA PRENDA NO ESTA EN MOCHILA";return false;
 }
 static bool meleeContainerReach(const World&w,const Actor&a,const Actor&b){
     if(!w.contains(a.x,a.y)||!w.contains(b.x,b.y)||std::abs(a.z-b.z)>8||std::max(std::abs(a.x-b.x),std::abs(a.y-b.y))>1)return false;
@@ -154,9 +164,10 @@ void Inventory::open(const World&w,const Actor&a){
 }
 bool Inventory::persist(std::string&error,SaveRename renameFile){
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(extended?'4':'3')};put(b,identity);put(b,chests.size());
+    bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
+    std::vector<uint8_t>b={'U','I','N',uint8_t(remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
-    append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?8u:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));put(b,hash(b));
+    append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?8u:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(int t:lastEquipment)put(b,uint32_t(t));put(b,hash(b));
     std::string tmp=path+".tmp",bak=path+".bak";
     FILE*f=std::fopen(tmp.c_str(),"wb");if(!f){error="ERROR SD: NO SE MOVIO EL OBJETO";return false;}
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fclose(f))ok=false;

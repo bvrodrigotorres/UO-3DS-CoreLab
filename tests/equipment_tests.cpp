@@ -35,12 +35,12 @@ int main(int argc,char**argv){
     inv.backpack={{0,10}};assert(!inv.equip(0)&&inv.backpack[0].count==10);
     inv.backpack.clear();for(int slot=0;slot<3;++slot)assert(inv.unequip(slot));assert(inv.equipmentMask()==0);
     // Convert a valid save to the exact previous UIN1 layout, then migrate.
-    auto bytes=read(path);assert(bytes[3]=='3');bytes.resize(bytes.size()-16);bytes[3]='1';put(bytes,hash(bytes));
+    auto bytes=read(path);assert(bytes[3]=='5');bytes.resize(bytes.size()-72);bytes[3]='1';put(bytes,hash(bytes));
     std::string legacy=std::string(argv[1])+"/legacy.sav";write(legacy,bytes);
     Inventory old;old.init(w,legacy);assert(old.equipmentMask()==0&&old.backpack.size()==3);
     auto robeTotal=total(old,6);assert(old.equip(1));Inventory migrated;migrated.init(w,legacy);assert(migrated.equipmentMask()==2&&total(migrated,6)==robeTotal);
     // A valid checksum cannot make an item occupy an incompatible layer.
-    bytes=read(legacy);bytes[bytes.size()-12]=5;bytes.resize(bytes.size()-4);put(bytes,hash(bytes));write(legacy,bytes);
+    bytes=read(legacy);bytes[bytes.size()-72+4]=5;bytes.resize(bytes.size()-4);put(bytes,hash(bytes));write(legacy,bytes);
     Inventory bad;bad.init(w,legacy);assert(bad.backpack.empty()&&bad.equipmentMask()==0&&!bad.equip(0));
     EquipmentArt art;assert(!art.load(legacy));
     std::vector<uint8_t>b={'U','E','Q','1',76,0,104,0};put(b,8*76*104*4);std::vector<uint8_t>pixels(8*76*104*4,0);put(b,hash(pixels));for(int i=0;i<8;++i)put(b,hash(pixels));b.insert(b.end(),pixels.begin(),pixels.end());

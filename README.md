@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.23
+# UO-3DS-CoreLab v0.24
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -35,6 +35,9 @@ persistente, personalización desde pausa y Salir del juego en el menú principa
 [Novedades v0.23](docs/v0.23.md): confirmación de nuevo juego, vista previa
 reorganizada, ropa inicial real y ocho ranuras de equipo persistentes.
 
+[Novedades v0.24](docs/v0.24.md): pestañas reorganizadas, túnica inicial,
+sombreros completos y botones para quitar o recuperar el último equipo.
+
 ## Qué cambia respecto al prototipo anterior
 
 - Se conservan todos los estáticos de la región exportada, con ID, X/Y/Z, hue,
@@ -49,7 +52,7 @@ reorganizada, ropa inicial real y ocho ranuras de equipo persistentes.
 
 ## Probar sin archivos de UO
 
-Descarga el artefacto **UO-3DS-CoreLab-v0.23** de un run verde en
+Descarga el artefacto **UO-3DS-CoreLab-v0.24** de un run verde en
 [Actions](https://github.com/bvrodrigotorres/UO-3DS-CoreLab/actions).
 También se puede compilar localmente con devkitPro y `make -j2`.
 

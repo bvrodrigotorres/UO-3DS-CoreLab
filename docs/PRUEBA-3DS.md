@@ -91,3 +91,12 @@ quitar camisa/pantalón/zapatos y volver a equiparlos desde la mochila. Buscar
 gorros, gorjales y guantes en los cofres; verificar las ocho ranuras y el pelo
 bajo el gorro. Personalizar desde pausa permite colores pero bloquea cambiar
 los tipos de prendas, incluso usando Y. Reiniciar y verificar todo el equipo.
+
+## v0.24: orden y equipo rápido
+
+Consultar [v0.24.md](v0.24.md). Reemplazar status.bin y character completos.
+Comprobar las cuatro pestañas y sus nuevos campos; crear con túnica Sí/No;
+comprobar colores de accesorios deshabilitados al crear y al quitar la prenda.
+Verificar sombrero entero y título de estado centrado. Tocar dos veces cada
+botón de equipo, reiniciar con una ranura vacía y volver a equipar su última
+prenda. Depositarla en un cofre y comprobar que el botón no crea una copia.

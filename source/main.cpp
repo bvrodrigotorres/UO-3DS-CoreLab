@@ -26,12 +26,12 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
 }
 bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,std::string&)>&commit){
     if(!assets.ready())return false;
-    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);std::vector<uint16_t>doll,sprite;
+    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
     while(aptMainLoop()){
         if(changed){
-            if(fresh&&editor.draft.realClothes){lab::Inventory initial;initial.initialDress(editor.draft.shirt,editor.draft.pants,editor.draft.shoes);equipment=initial.equipmentMask();}
-            unsigned mask=editor.preview==0?equipment:editor.preview==1?255:0;
+            if(fresh&&editor.draft.realClothes){lab::Inventory initial;initial.initialDress(editor.draft.shirt,editor.draft.pants,editor.draft.shoes,editor.draft.robe);equipment=initial.equipmentMask();}
+            unsigned mask=equipment;editor.equipment=equipment;
             valid=assets.compose(editor.draft,mask,doll,true)&&assets.compose(editor.draft,mask,sprite,false,editor.direction*5);
             if(!valid)editor.message="FALTAN ARCHIVOS CHARACTER";
             changed=false;
@@ -57,7 +57,7 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
             if(hit==20)return false;
             if(hit==21)confirm=true;
             if(hit>=10&&hit<=13){editor.page=hit-10;editor.row=0;}
-            if(hit>=0&&hit<5){editor.row=hit;if(editor.page==0&&hit==0)editName=true;else{editor.change(t.px<145?-1:1);changed=true;}}
+            if(hit>=0&&hit<editor.rowCount()){editor.row=hit;if(editor.page==0&&hit==0)editName=true;else{editor.change(t.px<145?-1:1);changed=true;}}
         }
         if(editName){
             SwkbdState keyboard;char name[65]{};swkbdInit(&keyboard,SWKBD_TYPE_NORMAL,2,16);
@@ -159,13 +159,13 @@ int main(){
         std::string prefix=campaign.prefix(generation),error;
         lab::Inventory freshPrivate,freshDemo;
         freshDemo.init(demo,saveRoot+prefix+"inventory-demo.sav");
-        freshDemo.initialDress(created.shirt,created.pants,created.shoes);freshDemo.addAccessories();
+        freshDemo.initialDress(created.shirt,created.pants,created.shoes,created.robe);freshDemo.addAccessories();
         if(!freshDemo.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-demo.sav",demo,{demo.startX,demo.startY,demo.startZ},error)){
             menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
         }
         if(available){
             freshPrivate.init(canonicalPrivate,saveRoot+prefix+"inventory-private.sav");
-            freshPrivate.initialDress(created.shirt,created.pants,created.shoes);freshPrivate.addAccessories();
+            freshPrivate.initialDress(created.shirt,created.pants,created.shoes,created.robe);freshPrivate.addAccessories();
             if(!freshPrivate.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-private.sav",canonicalPrivate,{canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},error)){
                 menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
             }
@@ -310,7 +310,7 @@ int main(){
             if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
-                int slot=lab::equipmentHit(pages.startX,pages.startY);if(slot>=0){inventory.unequip(slot);saveMessage=inventory.message;}
+                int slot=lab::equipmentHit(pages.startX,pages.startY);if(slot>=0){inventory.toggleEquipment(slot);saveMessage=inventory.message;}
             }
             pageChanged=true;
         }

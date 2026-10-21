@@ -27,9 +27,9 @@ class Inventory {
     Bag*external=nullptr;Actor externalPosition;std::string externalTitle;
     bool persist(std::string&,SaveRename);
 public:
-    std::array<int,8>equipment{{-1,-1,-1,-1,-1,-1,-1,-1}};
+    std::array<int,8>equipment{{-1,-1,-1,-1,-1,-1,-1,-1}},lastEquipment{{-1,-1,-1,-1,-1,-1,-1,-1}};
     bool equipMode=false,restored=false,dressed=false,accessories=false;
-    void initialDress(int shirt,int pants,bool shoes);
+    void initialDress(int shirt,int pants,bool shoes,bool robe=false);
     void addAccessories();
     unsigned prospectiveKey(size_t slot,int type)const;
     bool healthy()const{return writable;}
@@ -38,6 +38,7 @@ public:
     unsigned equipmentMask()const;
     bool equip(size_t,SaveRename=std::rename);
     bool unequip(size_t,SaveRename=std::rename);
+    bool toggleEquipment(size_t,SaveRename=std::rename);
     Bag backpack;
     std::vector<Chest> chests;
     int opened=-1,bagPage=0;
