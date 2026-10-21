@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.11
+# UO-3DS-CoreLab v0.12
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -8,8 +8,8 @@ ejecutable y carpeta de SD propios; no depende del repositorio UO-3DS-Offline.
 dibujo, geometría del terreno y diagnóstico de rendimiento. Incluye NPC locales y una primera mochila con cofres persistentes. No incluye
 combate, servidor ni recursos originales de Ultima Online.
 
-[Novedades e instalación de v0.11](docs/v0.11.md): daga, túnica y botas equipables,
-visibles en el mundo y en la imagen inferior, con guardado del equipo.
+[Novedades e instalación de v0.12](docs/v0.12.md): carga inicial, título en la
+pantalla superior y menú táctil con Nuevo Juego, Continuar y Opciones.
 
 ## Qué cambia respecto al prototipo anterior
 
@@ -25,7 +25,7 @@ visibles en el mundo y en la imagen inferior, con guardado del equipo.
 
 ## Probar sin archivos de UO
 
-Descarga el artefacto **UO-3DS-CoreLab-v0.11** de un run verde en
+Descarga el artefacto **UO-3DS-CoreLab-v0.12** de un run verde en
 [Actions](https://github.com/bvrodrigotorres/UO-3DS-CoreLab/actions).
 También se puede compilar localmente con devkitPro y `make -j2`.
 

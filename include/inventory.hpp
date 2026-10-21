@@ -20,7 +20,9 @@ class Inventory {
     bool persist(std::string&,SaveRename);
 public:
     std::array<int,3>equipment{{-1,-1,-1}};
-    bool equipMode=false;
+    bool equipMode=false,restored=false;
+    bool healthy()const{return writable;}
+    bool checkpoint(){if(!writable)return false;return persist(message,std::rename);}
     std::function<bool(unsigned)>prepareEquipment;
     unsigned equipmentMask()const;
     bool equip(size_t,SaveRename=std::rename);

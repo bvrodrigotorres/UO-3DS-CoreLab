@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.11
+# Primera prueba: UO-3DS-CoreLab v0.12
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -42,8 +42,11 @@ La demo y la escena privada no son un juego terminado. Un fallo de oclusión
 se registra con coordenadas, Z, modo de techo y una foto de ambas pantallas;
 no debe corregirse inventando datos en el exportador.
 
-Para el parche v0.11 y sus controles nuevos, consulta [v0.11.md](v0.11.md).
+Para el parche v0.12 y sus controles nuevos, consulta [v0.12.md](v0.12.md).
 La página 3 permite abrir un cofre cercano y transferir pilas con el táctil.
 
 Página 3: MODO: EQUIPAR permite ponerse daga, túnica o botas de la mochila.
 Página 2: M/R/B quitan cada pieza y la devuelven a la mochila.
+
+Al iniciar se muestra el menú. Pad y A o táctil para elegir.
+Nuevo Juego pide confirmar; Continuar conserva el inventario y equipo guardados.

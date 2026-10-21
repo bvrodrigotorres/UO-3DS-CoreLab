@@ -3,10 +3,14 @@
 #include "journal.hpp"
 #include "inventory.hpp"
 #include "equipment.hpp"
+#include "startup.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
 namespace lab {
+void drawTitle(uint8_t*,bool loading=false);
+void drawStartMenu(uint8_t*,const StartMenu&,bool canContinue);
+void drawLoading(uint8_t*,const std::string&,int stage);
 struct HudInfo {std::string scene,roofs;std::vector<std::string> lines;};
 // Writes a 320x240 BGR8 framebuffer in the native 3DS column layout.
 // No GPU state, extra textures, external font files or original UO artwork.

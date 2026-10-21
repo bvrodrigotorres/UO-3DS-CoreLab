@@ -10,6 +10,7 @@
 namespace lab {
 namespace {
 struct Color {uint8_t r,g,b;};
+static int canvasWidth=320;
 struct Glyph {char letter;const char*rows;};
 // Original compact bitmap alphabet. Row values are five-bit hexadecimal masks.
 const Glyph alphabet[]={
@@ -30,11 +31,11 @@ const Glyph alphabet[]={
  {'|',"04040404040404"},{'(',"02040808080402"},{')',"08040202020408"},
  {'+',"0004041F040400"},{'~',"00000916000000"},{'#',"0A0A1F0A1F0A0A"},
  {'@',"0E11171D17100F"},{'_',"0000000000001F"},{'?',"0E110102040004"},
- {'=',"00001F001F0000"},{'!',"04040404040004"},{'%',"19190204081313"}
+ {'>',"10080402040810"},{'=',"00001F001F0000"},{'!',"04040404040004"},{'%',"19190204081313"}
 };
 int hex(char c){return c<='9'?c-'0':c-'A'+10;}
 void pixel(uint8_t*fb,int x,int y,Color c){
-    if(x<0||x>=320||y<0||y>=240)return;
+    if(x<0||x>=canvasWidth||y<0||y>=240)return;
     auto p=fb+3*(x*240+239-y);p[0]=c.b;p[1]=c.g;p[2]=c.r;
 }
 void box(uint8_t*fb,int x,int y,int w,int h,Color c){for(int j=y;j<y+h;++j)for(int i=x;i<x+w;++i)pixel(fb,i,j,c);}
@@ -70,7 +71,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"CORELAB V0.11",ink,1,13);
+    text(fb,225,20,"CORELAB V0.12",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
@@ -164,6 +165,55 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     text(fb,20,199,inv.equipMode?"TOCA UN EQUIPABLE DE LA MOCHILA":"TOCA UNA PILA PARA TRANSFERIR",ink);
     text(fb,20,209,inv.nearest(w,a)>=0?"COFRE AL ALCANCE | AUTOGUARDADO":"ACERCATE A UN COFRE DEL MAPA",ink);
     text(fb,20,219,"R: PAGINA | DESLIZA 3/3",ink);
+}
+
+void drawTitle(uint8_t*fb,bool loading){
+    canvasWidth=400;
+    const Color gold={211,170,86},darkGold={110,75,33},stone={27,38,46};
+    for(int y=0;y<240;++y)for(int x=0;x<400;++x){int glow=std::max(0,80-std::abs(x-200)/2-std::abs(y-90)/2);
+        pixel(fb,x,y,{uint8_t(7+glow/6),uint8_t(14+glow/5),uint8_t(23+glow/4)});}
+    for(int x=15;x<390;x+=37){int y=18+(x*13)%43;pixel(fb,x,y,gold);}
+    // Original code-drawn battlements, without external title assets.
+    for(int side:{0,1}){int x=side?332:20;box(fb,x,157,48,76,stone);for(int n=0;n<4;++n)box(fb,x+n*14,148,7,14,stone);
+        for(int row=0;row<3;++row)box(fb,x+19,170+row*20,6,10,{8,15,23});}
+    box(fb,72,205,256,28,stone);for(int x=75;x<330;x+=18)box(fb,x,198,9,10,stone);
+    for(int y:{8,231}){box(fb,8,y,384,2,darkGold);box(fb,10,y+2,380,1,gold);}
+    for(int x:{8,390})box(fb,x,8,2,226,darkGold);
+    text(fb,46,73,"ULTIMA ONLINE",{0,0,0},4);
+    text(fb,44,71,"ULTIMA ONLINE",gold,4);
+    box(fb,108,111,184,1,darkGold);box(fb,140,114,120,1,gold);
+    text(fb,173,125,"3DS",gold,3);
+    std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
+    text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
+    text(fb,158,217,"CORELAB  V0.12",gold);
+    canvasWidth=320;
+}
+void drawLoading(uint8_t*fb,const std::string&stage,int progress){
+    drawHud(fb,{"ULTIMA ONLINE 3DS","CARGANDO",{}});
+    const Color ink={55,37,22},gold={174,131,64};
+    text(fb,32,83,"PREPARANDO TU AVENTURA",ink,1,42);
+    text(fb,32,108,stage,ink,1,42);
+    box(fb,30,137,260,16,ink);box(fb,32,139,256,12,{143,112,69});
+    box(fb,33,140,254*std::max(0,std::min(5,progress))/5,10,gold);
+    box(fb,18,187,284,41,{218,195,148});text(fb,47,205,"ESPERA UN MOMENTO...",ink);
+}
+void drawStartMenu(uint8_t*fb,const StartMenu&m,bool canContinue){
+    bool opts=m.page==MenuPage::Options,confirm=m.page==MenuPage::Confirm;
+    drawHud(fb,{"ULTIMA ONLINE 3DS",opts?"OPCIONES":confirm?"NUEVA PARTIDA":"INICIO",{}});
+    const Color ink={55,37,22},gold={174,131,64};
+    std::vector<std::string>rows;
+    if(opts){const char*roofs[]={"AUTO","OCULTOS","COMPLETOS"};const char*pages[]={"DIAGNOSTICO","MAPA","INVENTARIO"};
+        rows={std::string("TECHOS: ")+roofs[m.options.roofs],"ZOOM DEL MAPA: "+std::to_string(m.options.zoom)+"X",std::string("PAGINA: ")+pages[m.options.page],"VOLVER"};
+    }else if(confirm)rows={"CANCELAR","SI, NUEVO JUEGO"};
+    else rows={"NUEVO JUEGO",canContinue?"CONTINUAR":"CONTINUAR - SIN PARTIDA","OPCIONES"};
+    for(size_t i=0;i<rows.size();++i){int y=opts?58+int(i)*30:65+int(i)*38;bool selected=int(i)==m.selected;
+        box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,selected?gold:Color{196,168,117});
+        text(fb,36,y+10,selected?">":" ",ink);text(fb,50,y+10,rows[i],ink,1,40);}
+    if(confirm)text(fb,30,149,"MOCHILA, EQUIPO Y COFRES DESDE CERO",ink,1,43);
+    box(fb,18,187,284,41,{218,195,148});
+    text(fb,23,189,m.message.empty()?(confirm?"CONFIRMA PARA EMPEZAR DESDE CERO":opts?"LAS OPCIONES SE GUARDAN":"ELIGE TU AVENTURA"):m.message,ink,1,45);
+    text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);
+    text(fb,23,219,"B: VOLVER | START: SALIR",ink);
 }
 
 }

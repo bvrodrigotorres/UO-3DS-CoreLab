@@ -9,14 +9,27 @@
 #include <algorithm>
 #include <malloc.h>
 
+namespace {
+void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&stage="",int progress=0){
+    auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);
+    auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
+    lab::drawTitle(top,menu==nullptr);
+    if(menu)lab::drawStartMenu(bottom,*menu,canContinue);else lab::drawLoading(bottom,stage,progress);
+    GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
+    gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+}
+}
+
 int main(){
     gfxInitDefault();
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
+    startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
     if(!C3D_Init(C3D_DEFAULT_CMDBUF_SIZE)){gfxExit();return 1;}
     auto target=C3D_RenderTargetCreate(240,400,GPU_RB_RGBA8,GPU_RB_DEPTH16);
     if(!target||!lab::rendererInit()){consoleInit(GFX_BOTTOM,nullptr);std::printf("CoreLab: GPU init failed\nSTART to exit\n");while(aptMainLoop()){hidScanInput();if(hidKeysDown()&KEY_START)break;}C3D_Fini();gfxExit();return 1;}
     C3D_RenderTargetSetOutput(target,GFX_TOP,GFX_LEFT,GX_TRANSFER_FLIP_VERT(0)|GX_TRANSFER_OUT_TILED(0)|GX_TRANSFER_RAW_COPY(0)|GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8)|GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
+    startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
     std::string error;bool available=lab::loadWorld("sdmc:/3ds/UO-3DS-CoreLab/scene.bin",privateWorld,error);
     if(available)available=lab::loadAtlases(privateWorld.images,error);
@@ -24,15 +37,18 @@ int main(){
     lab::World legacyPrivate=privateWorld;lab::Doors doors;std::string doorError;
     bool hasDoors=available&&doors.load("sdmc:/3ds/UO-3DS-CoreLab/doors.bin","sdmc:/3ds/UO-3DS-CoreLab/scene.bin",privateWorld,doorError);
     if(hasDoors){legacyPrivate.objects.resize(doors.baseObjects);legacyPrivate.index();}
+    startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
     lab::TouchPages pages;lab::Journal journal;std::string journalError;
     bool hasJournal=available&&lab::loadJournal("sdmc:/3ds/UO-3DS-CoreLab/journal.bin","sdmc:/3ds/UO-3DS-CoreLab/scene.bin",journal,journalError);
+    const std::string saveRoot="sdmc:/3ds/UO-3DS-CoreLab/";
+    lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
     bool authentic=available,moving=false;int facing=4,actual=0,frames=0,spot=0;
     lab::World*w=authentic?&privateWorld:&demo;
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
     float progress=0,cameraX=actor.x,cameraY=actor.y,foot=actor.z,fps=0,animationPhase=0;
     std::string saveMessage;
-    auto positionPath=[&](){return std::string("sdmc:/3ds/UO-3DS-CoreLab/")+(authentic?"position-private.sav":"position-demo.sav");};
+    auto positionPath=[&](){return saveRoot+savePrefix+(authentic?"position-private.sav":"position-demo.sav");};
     auto savedWorld=[&]()->const lab::World&{return authentic?canonicalPrivate:demo;};
     auto restorePosition=[&](){
         if(lab::loadPosition(positionPath(),savedWorld(),actor,saveMessage))return true;
@@ -43,20 +59,78 @@ int main(){
         return false;
     };
     auto alignCamera=[&](){from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;progress=0;};
-    if(restorePosition())alignCamera();
+    startupFrame(nullptr,false,"POBLACION DE BRITANNIA",3);
     lab::Npcs npcs;std::string npcError;
     bool hasNpcs=available&&lab::loadNpcAtlases(npcError);
     if(hasNpcs)npcs.reset(privateWorld,actor);
-    lab::Inventory inventory;inventory.init(canonicalPrivate,"sdmc:/3ds/UO-3DS-CoreLab/inventory-private.sav");
-    lab::Inventory demoInventory;demoInventory.init(demo,"sdmc:/3ds/UO-3DS-CoreLab/inventory-demo.sav");
+    lab::Inventory inventory;inventory.init(canonicalPrivate,saveRoot+savePrefix+"inventory-private.sav");
+    lab::Inventory demoInventory;demoInventory.init(demo,saveRoot+savePrefix+"inventory-demo.sav");
     lab::ItemIcons itemIcons;itemIcons.load("sdmc:/3ds/UO-3DS-CoreLab/items.bin");
+    startupFrame(nullptr,false,"MOCHILA Y EQUIPAMIENTO",4);
     lab::EquipmentArt equipmentArt;std::string equipmentError;
     bool hasEquipment=equipmentArt.load("sdmc:/3ds/UO-3DS-CoreLab/equipment.bin");
     if(!hasEquipment)equipmentError="FALTA EQUIPMENT.BIN";
+    startupFrame(nullptr,false,"PREPARADO",5);
+    lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");
+    lab::Actor probe;std::string probeMessage;
+    bool positionSaved=lab::loadPosition(positionPath(),savedWorld(),probe,probeMessage);
+    if(!positionSaved&&authentic&&hasDoors)positionSaved=lab::loadPosition(positionPath(),legacyPrivate,probe,probeMessage);
+    bool canContinue=campaign.valid&&(authentic?inventory.healthy():demoInventory.healthy())&&(positionSaved||(authentic?inventory.restored:demoInventory.restored));
+    menu.selected=canContinue?1:0;
+    if(!campaign.valid)menu.message="ERROR AL LEER LA PARTIDA GUARDADA";
+    else if(!(authentic?inventory.healthy():demoInventory.healthy()))menu.message="ERROR EN INVENTARIO GUARDADO";
+    auto freshGame=[&](){
+        uint32_t generation=campaign.unusedGeneration();
+        if(!generation){menu.message="NO SE PUDO PREPARAR LA PARTIDA";return false;}
+        std::string prefix=campaign.prefix(generation),error;
+        lab::Inventory freshPrivate,freshDemo;
+        freshDemo.init(demo,saveRoot+prefix+"inventory-demo.sav");
+        if(!freshDemo.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-demo.sav",demo,{demo.startX,demo.startY,demo.startZ},error)){
+            menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
+        }
+        if(available){
+            freshPrivate.init(canonicalPrivate,saveRoot+prefix+"inventory-private.sav");
+            if(!freshPrivate.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-private.sav",canonicalPrivate,{canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},error)){
+                menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
+            }
+        }
+        if(!campaign.commit(generation,error)){menu.message=error;return false;}
+        savePrefix=prefix;inventory=std::move(freshPrivate);demoInventory=std::move(freshDemo);
+        privateWorld=canonicalPrivate;
+        if(available)hasDoors=doors.load(saveRoot+"doors.bin",saveRoot+"scene.bin",privateWorld,doorError);
+        actor={w->startX,w->startY,w->startZ};alignCamera();lab::invalidateRenderList();
+        saveMessage="NUEVA AVENTURA EN BRITANNIA";return true;
+    };
+    bool started=false,quit=false,touching=false;int touchX=0,touchY=0,touchLastX=0,touchLastY=0;
+    u64 nextPad=0;
+    while(aptMainLoop()&&!started&&!quit){
+        startupFrame(&menu,canContinue);hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
+        if(down&KEY_START){quit=true;continue;}
+        if(down&KEY_B)menu.back();
+        circlePosition pad;hidCircleRead(&pad);u64 now=osGetTime();
+        int direction=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
+        if(!direction)nextPad=0;
+        else if(now>=nextPad){menu.move(direction);nextPad=now+180;}
+        bool accept=(down&KEY_A)!=0;
+        if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);touchX=touchLastX=t.px;touchY=touchLastY=t.py;touching=true;}
+        if((held&KEY_TOUCH)&&touching){touchPosition t;hidTouchRead(&t);touchLastX=t.px;touchLastY=t.py;}
+        if((hidKeysUp()&KEY_TOUCH)&&touching){touching=false;int hit=menu.hit(touchX,touchY);if(hit>=0&&std::abs(touchLastX-touchX)<12&&std::abs(touchLastY-touchY)<12){menu.selected=hit;accept=true;}}
+        if(!accept)continue;
+        auto oldOptions=menu.options;auto action=menu.activate(canContinue);
+        if(menu.options.roofs!=oldOptions.roofs||menu.options.zoom!=oldOptions.zoom||menu.options.page!=oldOptions.page){
+            std::string message;if(!menu.options.save(saveRoot+"options.sav",message)){menu.options=oldOptions;menu.message=message;}else menu.message="OPCIONES GUARDADAS";
+        }
+        if(action==lab::MenuAction::NewGame)started=freshGame();
+        if(action==lab::MenuAction::Continue){if(restorePosition())alignCamera();started=true;}
+    }
+    if(!started){lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;}
+    startupFrame(nullptr,false,"ENTRANDO EN BRITANNIA",5);
+    roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;
+    if(hasNpcs)npcs.reset(privateWorld,actor);
     inventory.prepareEquipment=[&](unsigned mask){return lab::prepareEquipment(mask,equipmentArt,equipmentError);};
     if(hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     std::vector<lab::Actor>occupants;occupants.reserve(16);
-    u64 last=osGetTime(),sample=last;int sampleFrames=0;const char*blocked="--";
+    u64 last=osGetTime(),sample=last,lastAutoSave=last;int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
@@ -116,6 +190,7 @@ int main(){
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
         if(moving){progress+=dt/(running?.20f:.40f);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
+        if(!moving&&now-lastAutoSave>=10000){lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);lastAutoSave=now;}
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
         if(authentic&&hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
@@ -157,5 +232,6 @@ int main(){
             gfxScreenSwapBuffers(GFX_BOTTOM,false);
         }
     }
+    lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
 }

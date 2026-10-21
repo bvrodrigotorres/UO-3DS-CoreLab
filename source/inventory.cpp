@@ -20,7 +20,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;opened=-1;backpack.clear();chests.clear();writable=true;equipment.fill(-1);equipMode=false;
+    path=p;opened=-1;backpack.clear();chests.clear();writable=true;restored=false;equipment.fill(-1);equipMode=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -66,7 +66,7 @@ void Inventory::init(const World&w,const std::string&p){
     }
     if(!ok||pos!=b.size()-4){writable=false;backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
-    equipment=loaded;if(legacy)seedGear();
+    restored=true;equipment=loaded;if(legacy)seedGear();
     message=input==path?"INVENTARIO RESTAURADO":"INVENTARIO RECUPERADO";
 }
 void Inventory::seedGear(){
