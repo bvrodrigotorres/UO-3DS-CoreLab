@@ -27,7 +27,8 @@ int main(int argc,char**argv){
     assert(!inv.transfer(w,a,false,0)&&PlayerStatus::gold(&inv)==loot);
     auto oldFile=read(folder+"inventory.sav");auto oldBody=body.loot;auto oldBag=inv.backpack;
     assert(!inv.transfer(w,a,true,0,fail));assert(body.loot.size()==oldBody.size()&&inv.backpack.size()==oldBag.size()&&read(folder+"inventory.sav")==oldFile);
-    while(!body.loot.empty())assert(inv.transfer(w,a,true,0));assert(!inv.transfer(w,a,true,0));
+    while(!body.loot.empty()){assert(inv.transfer(w,a,true,0));}
+    assert(!inv.transfer(w,a,true,0));
     Inventory resumed;resumed.init(w,folder+"inventory.sav");assert(resumed.restored&&PlayerStatus::gold(&resumed)==loot);
     inv.update(w,{2,2,0});assert(!inv.hasContainer());assert(!inv.openExternal(w,{2,2,0},body.loot,body.position,"CADAVER"));
     // A full bag cannot consume a corpse item; no equipped/stacked items vanish.
@@ -44,7 +45,8 @@ int main(int argc,char**argv){
     a={7,8,0};rat.position=rat.from={8,9,0};rat.alive=true;rat.hostile=true;rat.moving=false;
     Object wall;wall.x=8;wall.y=8;wall.height=40;wall.flags=Wall|Impassable;w.objects={wall};w.index();assert(!meleeReach(w,a,rat.position));assert(!meleeReach(w,a,{7,8,20}));
     combat.reset(npcs);combat.toggle(npcs,a);int hp=stats.hits,enemyHp=combat.vitals()[0].hits;
-    for(int i=0;i<40;++i)combat.update(w,npcs,a,false,.05f,stats,inv);assert(stats.hits==hp&&combat.vitals()[0].hits==enemyHp);
+    for(int i=0;i<40;++i){combat.update(w,npcs,a,false,.05f,stats,inv);}
+    assert(stats.hits==hp&&combat.vitals()[0].hits==enemyHp);
     Bag external={{0,4}};assert(!inv.openExternal(w,a,external,rat.position,"CADAVER"));
     // Humans remain protected even when their notoriety is blue or gray.
     rat.animal=false;combat.reset(npcs);combat.select(npcs,a);assert(combat.target==-1);
