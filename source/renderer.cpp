@@ -82,13 +82,13 @@ static const Point whiteUV[]={{0,1},{1,1},{1,0},{0,0}};
 static void rect(float x,float y,float w,float h,float r,float g,float b,float a=1){
     Point p[]={{x,y},{x+w,y},{x+w,y+h},{x,y+h}};quad(p,whiteUV,&white,r,g,b,a);
 }
-static void labelText(float x,float y,const std::string&text,bool outline,float r,float g,float b){
+static void labelText(float x,float y,const std::string&text,bool outline,float r,float g,float b,float alpha=1){
     unsigned width=0;
     for(size_t i=0;i<text.size()&&i<30;++i){unsigned char c=text[i];if(c>=128)c='?';unsigned advance=overheadFont.step(c);if(width+advance>360)break;
         if(c!=' '){float u=float((c%16)*16+(outline?256:0))/512,v=1-float(c/16)*16/128;
             Point p[]={{x,y},{x+16,y},{x+16,y+16},{x,y+16}};
             Point uv[]={{u,v},{u+16.f/512,v},{u+16.f/512,v-16.f/128},{u,v-16.f/128}};
-            quad(p,uv,&labelFont,r,g,b,1);
+            quad(p,uv,&labelFont,r,g,b,alpha);
         }
         width+=advance;x+=advance;
     }
@@ -371,8 +371,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         size_t characters=std::min(size_t(30),n.name.size())+std::min(size_t(30),n.title.size());
         if(used+int(characters*18)>=Capacity)break;
         auto line=[&](const std::string&text,float y){float width=overheadFont.width(text);
-            float x=std::max(2.f,std::min(398-width,foot.x-width/2));y=std::max(2.f,y);
-            labelText(x+1,y+2,text,false,0,0,0);labelText(x,y,text,true,1,1,1);labelText(x,y,text,false,n.nameColor[0]/255.f,n.nameColor[1]/255.f,n.nameColor[2]/255.f);
+            float x=overheadPixelOrigin(std::max(2.f,std::min(398-width,foot.x-width/2)));y=overheadPixelOrigin(std::max(2.f,y));
+            labelText(x+1,y+1,text,false,0,0,0,.8f);labelText(x,y,text,true,1,1,1,.55f);labelText(x,y,text,false,n.nameColor[0]/255.f,n.nameColor[1]/255.f,n.nameColor[2]/255.f);
         };
         float top=std::max(2.f,head-(n.title.empty()?17:33));
         line(n.name,top);if(!n.title.empty())line(n.title,top+16);

@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cstring>
 #include <string>
+#include <cmath>
 namespace lab {
 class OverheadFont {
     std::array<std::array<uint16_t,16>,128>masks{};
@@ -23,9 +24,11 @@ public:
     }
     unsigned step(unsigned c)const{return advance[c<128?c:'?'];}
     bool pixel(unsigned c,int x,int y)const{return c<128&&x>=0&&x<16&&y>=0&&y<16&&(masks[c][y]&(1<<(15-x)));}
-    bool outline(unsigned c,int x,int y)const{if(pixel(c,x,y))return false;for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx)if(pixel(c,x+dx,y+dy))return true;return false;}
+    bool outline(unsigned c,int x,int y)const{if(pixel(c,x,y))return false;for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx)if(std::abs(dx)+std::abs(dy)==1&&pixel(c,x+dx,y+dy))return true;return false;}
     unsigned width(const std::string&s)const{unsigned width=0;for(size_t i=0;i<s.size()&&i<30;++i){unsigned next=step((unsigned char)s[i]);if(width+next>360)break;width+=next;}return width;}
 };
+// Bitmap glyphs must share an integer origin across fill, border and shadow.
+inline float overheadPixelOrigin(float value){return std::floor(value+0.5f);}
 inline size_t overheadPixelOffset(unsigned x,unsigned y){unsigned morton=0;for(unsigned b=0;b<3;++b){morton|=((x>>b)&1)<<(2*b);morton|=((y>>b)&1)<<(2*b+1);}return ((y/8)*64+x/8)*64+morton;}
 struct NamePresence {
     float nearby=0;

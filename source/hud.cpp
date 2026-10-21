@@ -50,7 +50,7 @@ void text(uint8_t*fb,int x,int y,const std::string&s,Color color,int scale=1,int
     }
 }
 }
-void drawHud(uint8_t*fb,const HudInfo&info){
+static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused){
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     static std::array<uint8_t,320*240*3> paper;
     static bool ready=false;
@@ -70,9 +70,11 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     ready=true;
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
+    if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.18",ink,1,13);
+    text(fb,225,20,"C.LAB V0.18.1",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
+    }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
     for(const auto&line:info.lines){if(y>174)break;text(fb,20,y,line,ink);y+=spacing;}
@@ -82,6 +84,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
     text(fb,20,219,"START: PAUSA | DESLIZA 1/3",ink);
 }
+void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
 void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status,const Inventory*inv,const EquipmentArt*equipment){
     drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/3",{}});
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
@@ -185,7 +188,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.18";
+    const std::string version="CORELAB V0.18.1";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -199,7 +202,7 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
     box(fb,18,187,284,41,{218,195,148});text(fb,47,205,"ESPERA UN MOMENTO...",ink);
 }
 void drawPause(uint8_t*fb,const PauseMenu&m){
-    drawHud(fb,{"ULTIMA ONLINE 3DS","PAUSA",{}});
+    drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
     const char*rows[]={"CONTINUAR","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
     for(int i=0;i<3;++i){int y=65+i*38;box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}

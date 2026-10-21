@@ -16,6 +16,11 @@ int main(int argc,char**argv){
         std::ifstream in(argv[1],std::ios::binary);std::vector<char>b((std::istreambuf_iterator<char>(in)),{});b.back()^=1;
         auto bad=std::string(argv[1])+".bad";std::ofstream out(bad,std::ios::binary);out.write(b.data(),b.size());out.close();assert(!font.load(bad)&&font.step('A')==before);
     }
+    for(float v:{-10.49f,-.49f,0.f,.1f,.49f,20.1f,20.49f})assert(overheadPixelOrigin(v)==std::floor(v+0.5f));
+    assert(overheadPixelOrigin(20.1f)==overheadPixelOrigin(20.49f));
+    assert(overheadPixelOrigin(20.51f)==21);
+    // A diagonal-only neighbor must not thicken the reduced outline.
+    OverheadFont fallback;assert(fallback.pixel('A',2,1));assert(!fallback.pixel('A',1,0));assert(!fallback.outline('A',1,0));
     NamePresence label;for(int i=0;i<119;++i){label.update(true,1.f/60);assert(label.visible());}
     label.update(true,1.f/60);assert(!label.visible());label.update(true,0);assert(!label.visible());label.update(false,0);assert(label.visible());
     World w;w.width=w.height=32;w.originX=1488;w.originY=1596;w.vertices.assign(1089,20);w.land.resize(1024);w.index();
