@@ -28,7 +28,10 @@ int main(int argc,char**argv){
         }
         auto expected=referenceOrder(input,size,flags,avg,slope);auto sorted=input;
         std::stable_sort(sorted.begin(),sorted.end(),[](const Draw&a,const Draw&b){if(a.priority!=b.priority)return a.priority<b.priority;if((a.kind==Kind::Land)!=(b.kind==Kind::Land))return a.kind==Kind::Land;return a.order<b.order;});
-        for(size_t i=0;i<sorted.size();++i)assert((int)sorted[i].index==expected[i]);++comparisons;
+        for(size_t i=0;i<sorted.size();++i){
+            assert((int)sorted[i].index==expected[i]);
+        }
+        ++comparisons;
     }
     int next=99;
     assert(solveCandidates({{7,0,0,0},{3,24,24,0}},0,0,2,next)&&next==0);
