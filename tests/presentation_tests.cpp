@@ -42,6 +42,14 @@ int main(int argc,char**argv){
     for(auto mode:{RoofMode::Auto,RoofMode::Hidden,RoofMode::Full})assert(objectOpacity(roof,18,mode,true,covering)==1);
     roof.flags=Wall;roof.z=18;roof.height=20;
     assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==.18f);
+    roof.flags=Wall|Door;
+    for(bool front:{false,true}){
+        assert(objectOpacity(roof,18,RoofMode::Auto,front,covering)==1);
+        assert(objectOpacity(roof,18,RoofMode::Hidden,front,covering)==1);
+    }
+    roof.z=40;assert(objectOpacity(roof,18,RoofMode::Hidden,true,covering)==0);
+    assert(objectOpacity(roof,18,RoofMode::Full,true,covering)==1);
+    roof.z=18;roof.flags=Wall;
     roof.height=1;assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==1);
     roof.flags=0;roof.height=80;assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==1);
     // At Z12 outside: ground-floor walls at Z20 remain, the entire next

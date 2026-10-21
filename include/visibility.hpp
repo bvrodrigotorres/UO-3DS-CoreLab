@@ -15,6 +15,9 @@ inline float objectOpacity(const Object&o,float footZ,RoofMode mode,bool afterAc
     // Cut the whole upper level, including walls, trim and furniture.
     // A flag-only roof filter leaves unsupported upper-storey walls floating.
     if(mode==RoofMode::Hidden&&o.z>=footZ+14)return 0;
+    // Door sprites keep their original wood color on either side. They must
+    // not inherit wall fading when the actor passes in front/behind them.
+    if(o.flags&Door)return 1;
     bool wall=(o.flags&Wall)&&o.z+o.height>footZ+5;
     bool overlaps=r.left<213&&r.right>187&&r.top<131&&r.bottom>81;
     return afterActor&&(upper||wall)&&overlaps?.18f:1.f;

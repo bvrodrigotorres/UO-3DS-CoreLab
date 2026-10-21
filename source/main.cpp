@@ -87,8 +87,10 @@ int main(){
             int dx=std::max(-1,std::min(1,sx+sy)),dy=std::max(-1,std::min(1,sy-sx));
             const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};
             int direction=0;for(int i=0;i<8;++i)if(xs[i]==dx&&ys[i]==dy)direction=i;
+            // Turning responds to intent even when movement is blocked.
+            facing=(direction+1)&7;
             lab::Actor next;
-            if(authentic&&doors.tryOpen(actor,dx,dy)){facing=(direction+1)&7;blocked="OPENING DOOR";}
+            if(authentic&&doors.tryOpen(actor,dx,dy)){blocked="OPENING DOOR";}
             else if(lab::step(*w,actor,direction,next,actual)&&(!authentic||!npcs.occupied(next))){
                 from=actor;actor=next;moving=true;progress=0;facing=(actual+1)&7;blocked="--";
             }else blocked="BLOCKED";
@@ -98,7 +100,7 @@ int main(){
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
-        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasDoors?&doors:nullptr,authentic&&hasNpcs?&npcs:nullptr);
+        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){
             lab::HudInfo hud{authentic?"PRIVATE UO SCENE":"SYNTHETIC TEST",lab::roofModeName(roofs),{}};

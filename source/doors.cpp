@@ -28,7 +28,7 @@ bool Doors::load(const std::string&path,const std::string&scene,const World&w,st
         indices[index]=i;next.push_back(d);
     }
     for(size_t i=0;i<next.size();++i)if(next[i].pair!=65535&&next[next[i].pair].pair!=i){error="Invalid paired doors";return false;}
-    entries=std::move(next);lookup=std::move(indices);baseObjects=base;error.clear();return true;
+    entries=std::move(next);baseObjects=base;error.clear();return true;
 }
 bool Doors::tryOpen(const Actor&a,int dx,int dy){
     bool pending=false;
@@ -39,8 +39,8 @@ bool Doors::tryOpen(const Actor&a,int dx,int dy){
         if(dx&&dy)target=target||(x==dx&&y==0)||(x==0&&y==dy);
         if(!target)continue;
         if(d.open){
-            d.closing=false;d.progress=1;d.elapsed=0;
-            if(d.pair!=65535){auto&other=entries[d.pair];other.closing=false;other.progress=1;other.elapsed=0;}
+            d.elapsed=0;
+            if(d.pair!=65535){auto&other=entries[d.pair];other.elapsed=0;}
             continue;
         }
         d.opening=true;pending=true;
@@ -59,29 +59,18 @@ bool Doors::update(World&w,float dt,const std::vector<Actor>&occupants){
     };
     for(auto&d:entries){
         if(d.opening&&!d.open){
-            d.progress=std::min(1.f,d.progress+dt/.18f);
-            if(d.progress>=1){
-                auto&o=w.objects[d.index];o.x=d.closed.x+d.dx;o.y=d.closed.y+d.dy;o.art=d.openArt;o.image=d.openImage;
-                d.open=true;d.opening=false;d.elapsed=0;changed=true;
-            }
+            // Like an item update in UO: graphic, cell and collision change
+            // together. Sliding the old sprite toward the new anchor produces
+            // a false vertical movement and uses the wrong painter order.
+            auto&o=w.objects[d.index];o.x=d.closed.x+d.dx;o.y=d.closed.y+d.dy;o.art=d.openArt;o.image=d.openImage;
+            d.open=true;d.opening=false;d.elapsed=0;changed=true;
         }else if(d.open){
-            if(occupied(d)||(d.pair!=65535&&occupied(entries[d.pair]))){
-                d.elapsed=0;d.closing=false;d.progress=1;continue;
-            }
+            if(occupied(d)||(d.pair!=65535&&occupied(entries[d.pair]))){d.elapsed=0;continue;}
             d.elapsed+=dt;
-            if(d.elapsed>=2.5f)d.closing=true;
-            if(d.closing){
-                d.progress=std::max(0.f,d.progress-dt/.18f);
-                if(d.progress<=0){w.objects[d.index]=d.closed;d.open=false;d.closing=false;d.elapsed=0;changed=true;}
-            }
+            if(d.elapsed>=2.5f){w.objects[d.index]=d.closed;d.open=false;d.elapsed=0;changed=true;}
         }
     }
     if(changed)w.index();
     return changed;
-}
-bool Doors::visual(size_t index,DoorVisual&v)const{
-    if(index>=lookup.size()||lookup[index]<0)return false;
-    const auto&d=entries[lookup[index]];
-    v={d.closed.x+d.dx*d.progress,d.closed.y+d.dy*d.progress,d.progress<.5f?d.closed.image:d.openImage};return true;
 }
 }

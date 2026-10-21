@@ -12,7 +12,7 @@ bool loadNpcAtlases(std::string&error);
 bool loadAtlases(int images,std::string&error);
 size_t textureBytes();
 void drawWorld(C3D_RenderTarget*,const World&,const Actor&,float cameraX,float cameraY,float footZ,
-               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Doors*doors=nullptr,const Npcs*npcs=nullptr);
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs=nullptr);
 size_t drawnObjects();
 bool rendererOverflow();
 bool hasRunAnimation();
