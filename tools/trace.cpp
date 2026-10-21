@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "core.hpp"
+#include "repairs.hpp"
 #include <cstdlib>
 #include <iostream>
 int main(int argc,char**argv){
@@ -12,6 +13,13 @@ int main(int argc,char**argv){
     std::cout<<"{\"actor\":["<<actor.x<<","<<actor.y<<","<<actor.z<<"],\"entries\":[";
     bool first=true;
     for(const auto&d:list){
+        if(d.kind==lab::Kind::Static){
+            if(const auto*floor=lab::floorUnderWall(w,w.objects[d.index])){
+                if(!first)std::cout<<",";
+                first=false;
+                std::cout<<"{\"kind\":1,\"x\":"<<d.x<<",\"y\":"<<d.y<<",\"z\":"<<d.z<<",\"priority\":"<<d.priority<<",\"image\":"<<floor->image<<",\"art\":"<<floor->art<<",\"visual_repair\":true}";
+            }
+        }
         if(!first)std::cout<<",";
         first=false;
         std::cout<<"{\"kind\":"<<(int)d.kind<<",\"x\":"<<d.x<<",\"y\":"<<d.y<<",\"z\":"<<d.z<<",\"priority\":"<<d.priority;

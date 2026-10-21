@@ -1,11 +1,25 @@
 // SPDX-License-Identifier: MIT
 #include "visibility.hpp"
+#include "repairs.hpp"
 #include "hud.hpp"
 #include <cassert>
 #include <fstream>
 #include <iostream>
 using namespace lab;
 int main(int argc,char**argv){
+    World repair;repair.width=repair.height=16;repair.originX=1488;repair.originY=1596;
+    repair.vertices.assign(17*17,0);repair.land.resize(16*16);
+    Object wall;wall.x=13;wall.y=15;wall.z=40;wall.art=308;wall.flags=Wall|Impassable;wall.height=20;
+    Object wood;wood.x=12;wood.y=15;wood.z=40;wood.art=1206;wood.image=141;wood.flags=Surface;
+    repair.objects={wall,wood};repair.index();
+    auto count=repair.objects.size();assert(floorUnderWall(repair,repair.objects[0])==&repair.objects[1]);
+    assert(repair.objects.size()==count&&repair.cells[15*16+13].size()==1);
+    assert(!floorUnderWall(repair,repair.objects[1]));
+    repair.objects[1].image=NoImage;assert(!floorUnderWall(repair,repair.objects[0]));
+    repair.objects[1]=wood;wood.x=13;repair.objects.push_back(wood);repair.index();
+    assert(!floorUnderWall(repair,repair.objects[0])); // never duplicate an existing floor
+    repair.objects.pop_back();repair.index();repair.originX=0;
+    assert(!floorUnderWall(repair,repair.objects[0])); // no global hole-filling heuristic
     TouchPages pages;
     pages.begin(260,110);pages.move(50,112);assert(pages.end()&&pages.page==1);
     assert(!pages.end()); // releasing twice must not change the page

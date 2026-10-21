@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "renderer.hpp"
 #include "avatar.hpp"
+#include "repairs.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -126,6 +127,17 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 Point p[]={{center.x-width/2,center.y+22-height},{center.x+width/2,center.y+22-height},{center.x+width/2,center.y+22},{center.x-width/2,center.y+22}};
                 float alpha=objectOpacity(o,footZ,roofs,afterActor,{p[0].x,p[0].y,p[2].x,p[2].y});
                 if(alpha==0)continue;
+                // Fill only the reported exposed wall footprint, before drawing
+                // the wall. Hidden upper levels suppress both pieces together.
+                if(const auto*floor=floorUnderWall(w,o)){
+                    C2D_Image wood;
+                    if(imageFor(floor->image,wood)){
+                        float fw=wood.subtex->width,fh=wood.subtex->height;
+                        Point fp[]={{center.x-fw/2,center.y+22-fh},{center.x+fw/2,center.y+22-fh},{center.x+fw/2,center.y+22},{center.x-fw/2,center.y+22}};
+                        float fa=objectOpacity(*floor,footZ,roofs,afterActor,{fp[0].x,fp[0].y,fp[2].x,fp[2].y});
+                        Point fuv[4];uvFor(wood,fuv);if(fa>0){quad(fp,fuv,wood.tex,1,1,1,fa);++objects;}
+                    }
+                }
                 Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,alpha);
             }else{
                 if(o.flags&Wall){

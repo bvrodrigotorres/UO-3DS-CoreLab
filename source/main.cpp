@@ -11,8 +11,8 @@
 
 int main(){
     gfxInitDefault();
-    gfxSetDoubleBuffering(GFX_BOTTOM,false);
-    gfxScreenSwapBuffers(GFX_BOTTOM,false);
+    // Draw the entire lower page into the hidden buffer, then present it.
+    gfxSetDoubleBuffering(GFX_BOTTOM,true);
     if(!C3D_Init(C3D_DEFAULT_CMDBUF_SIZE)){gfxExit();return 1;}
     auto target=C3D_RenderTargetCreate(240,400,GPU_RB_RGBA8,GPU_RB_DEPTH16);
     if(!target||!lab::rendererInit()){consoleInit(GFX_BOTTOM,nullptr);std::printf("CoreLab: GPU init failed\nSTART to exit\n");while(aptMainLoop()){hidScanInput();if(hidKeysDown()&KEY_START)break;}C3D_Fini();gfxExit();return 1;}
@@ -101,6 +101,7 @@ int main(){
             if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,saveMessage);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);
+            gfxScreenSwapBuffers(GFX_BOTTOM,false);
         }
     }
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
