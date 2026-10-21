@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.20
+# UO-3DS-CoreLab v0.21
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -26,6 +26,9 @@ debajo del mapa y personaje.
 [Novedades v0.20](docs/v0.20.md): estado original de UO, combate local,
 cadáveres con botín y reaparición.
 
+[Novedades v0.21](docs/v0.21.md): botín automático, Sacar todo, mochila de
+24 espacios en dos hojas y Estado del personaje en español.
+
 ## Qué cambia respecto al prototipo anterior
 
 - Se conservan todos los estáticos de la región exportada, con ID, X/Y/Z, hue,
@@ -40,7 +43,7 @@ cadáveres con botín y reaparición.
 
 ## Probar sin archivos de UO
 
-Descarga el artefacto **UO-3DS-CoreLab-v0.20** de un run verde en
+Descarga el artefacto **UO-3DS-CoreLab-v0.21** de un run verde en
 [Actions](https://github.com/bvrodrigotorres/UO-3DS-CoreLab/actions).
 También se puede compilar localmente con devkitPro y `make -j2`.
 
@@ -145,4 +148,4 @@ Cambios e instalación de esta entrega: [v0.2](docs/v0.2.md).
 
 **v0.17:** nombres y profesiones con notoriedad, pausa con START y tejados conectados. [Instalación](docs/v0.17.md).
 
-**v0.20:** fuente original con colores y borde, ocultación de nombres tras dos segundos cerca y sombreros encima del pelo. [Instalación](docs/v0.18.md).
+**v0.21:** fuente original con colores y borde, ocultación de nombres tras dos segundos cerca y sombreros encima del pelo. [Instalación](docs/v0.18.md).

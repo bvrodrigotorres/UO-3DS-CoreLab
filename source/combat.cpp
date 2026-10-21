@@ -88,8 +88,23 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     regen+=dt;if(regen>=1){regen-=1;status.mana=std::min(status.manaMax,status.mana+1);status.stamina=std::min(status.staminaMax,status.stamina+1);if(status.healthVisible<=0)status.hits=std::min(status.hitsMax,status.hits+1);}
     return false;
 }
-int Combat::nearestCorpse(const World&w,const Actor&a)const{int best=-1;for(size_t i=0;i<corpses.size();++i)if(corpses[i].active&&meleeReach(w,a,corpses[i].position)&&(best<0||distance(a,corpses[i].position)<distance(a,corpses[best].position)||(distance(a,corpses[i].position)==distance(a,corpses[best].position)&&((corpses[best].loot.empty()&&!corpses[i].loot.empty())||(corpses[best].loot.empty()==corpses[i].loot.empty()&&corpses[i].decay>corpses[best].decay)))))best=int(i);return best;}
-bool Combat::openCorpse(const World&w,const Actor&a,Inventory&inv){int i=nearestCorpse(w,a);return i>=0&&inv.openExternal(w,a,corpses[i].loot,corpses[i].position,"CADAVER");}
+int Combat::nearestCorpse(const World&w,const Actor&a)const{
+    int best=-1,range=100000;
+    for(size_t i=0;i<corpses.size();++i){const auto&c=corpses[i];if(!c.active||!meleeReach(w,a,c.position))continue;
+        int d=(a.x-c.position.x)*(a.x-c.position.x)+(a.y-c.position.y)*(a.y-c.position.y);
+        if(best<0||d<range||(d==range&&((corpses[best].loot.empty()&&!c.loot.empty())||(corpses[best].loot.empty()==c.loot.empty()&&c.decay>corpses[best].decay)))){best=int(i);range=d;}
+    }return best;
+}
+bool Combat::inspectNearest(const World&w,const Actor&a,Inventory&inv){
+    int body=nearestCorpse(w,a),chest=inv.nearest(w,a);
+    if(body>=0&&chest>=0){const auto&c=corpses[body].position;const auto&o=w.objects[inv.chests[chest].object];
+        int cd=(c.x-a.x)*(c.x-a.x)+(c.y-a.y)*(c.y-a.y),bd=(o.x-a.x)*(o.x-a.x)+(o.y-a.y)*(o.y-a.y);if(bd<cd)body=-1;
+    }
+    if(body>=0){auto&c=corpses[body];if(inv.isExternal(&c.loot))return false;return inv.openExternal(w,a,c.loot,c.position,c.name);}
+    if(chest>=0)return inv.followChest(chest);
+    bool changed=inv.hasContainer();inv.closeContainer();return changed;
+}
+bool Combat::openCorpse(const World&w,const Actor&a,Inventory&inv){int i=nearestCorpse(w,a);return i>=0&&inv.openExternal(w,a,corpses[i].loot,corpses[i].position,corpses[i].name.empty()?"CADAVER":corpses[i].name);}
 bool StatusArt::load(const std::string&path){
     std::ifstream f(path,std::ios::binary);std::vector<uint8_t>b(16+300*82*4);rgba.clear();
     if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UST1",4)||b[4]!=44||b[5]!=1||b[6]!=82||b[7]||get(b.data()+8)!=300*82*4||get(b.data()+12)!=hash(b.data()+16,b.size()-16))return false;

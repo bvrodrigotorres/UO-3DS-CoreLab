@@ -20,7 +20,7 @@ struct TouchPages {
         int dx=lastX-startX,dy=lastY-startY;
         if((dx>=40||dx<=-40)&&dx*dx>dy*dy){page=std::max(0,std::min(2,page+(dx<0?1:-1)));return true;}
         if(dx*dx+dy*dy<144){
-            if(page!=1&&startY>=215&&startX>=190){page=(page+1)%3;return true;}
+            if(page==0&&startY>=215&&startX>=190){page=(page+1)%3;return true;}
             if(page==1&&startY>=JournalLayout::ZoomTop&&startY<=JournalLayout::ZoomTop+13){
                 if(startX>=20&&startX<=47&&zoom>1){--zoom;return true;}
                 if(startX>=147&&startX<=178&&zoom<4){++zoom;return true;}

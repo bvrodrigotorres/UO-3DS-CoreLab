@@ -14,14 +14,24 @@ def main():
     a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
     u=UopFile(a.client/'gumpartLegacyMUL.uop','build/gumpartlegacymul/{0:D8}.tga',has_extra=True)
     original=decode_gump(u.read_raw(0x2a6c))
-    panel=original.crop((20,20,548,156)).resize((300,82),Image.Resampling.NEAREST)
-    panel.paste(original.crop((25,25,542,43)).resize((292,12),Image.Resampling.NEAREST),(4,3))
+    panel=original.crop((20,20,548,156)).resize((300,82),Image.Resampling.LANCZOS)
+    panel.paste(original.crop((25,25,542,43)).resize((292,12),Image.Resampling.LANCZOS),(4,3))
     for col,x in enumerate((40,124,207,288)):
         for row in range(3):
             box=(x,68+row*28,x+82,96+row*28)
             if col==3 and row==1:box=(453,154,535,178)
-            panel.paste(original.crop(box).resize((60,20),Image.Resampling.NEAREST),(8+60*col,17+20*row))
-    panel.paste(original.crop((453,68,535,151)).resize((44,60),Image.Resampling.NEAREST),(248,17))
+            panel.paste(original.crop(box).resize((60,20),Image.Resampling.LANCZOS),(8+60*col,17+20*row))
+    panel.paste(original.crop((453,68,535,151)).resize((44,60),Image.Resampling.LANCZOS),(248,17))
+    # Native UO font 9 instead of shrinking the English title with the gump.
+    from export_overhead_font import export
+    font=export((a.client/'fonts.mul').read_bytes());advance=font[16:144];rows=struct.unpack('<2048H',font[144:])
+    tile=original.crop((40,26,90,42)).resize((292,12),Image.Resampling.LANCZOS)
+    panel.paste(tile,(4,3));title='ESTADO DEL PERSONAJE';x=(300-sum(advance[ord(c)] for c in title))//2
+    for char in title:
+        for y in range(16):
+            for dx in range(16):
+                if rows[ord(char)*16+y]&(1<<(15-dx)) and 2+y<16:panel.putpixel((x+dx,2+y),(55,37,22,255))
+        x+=advance[ord(char)]
     panel.paste(panel.crop((0,0,300,4)).transpose(Image.Transpose.FLIP_TOP_BOTTOM),(0,78))
     panel.save(a.out/'status.png');raw=panel.tobytes();(a.out/'status.bin').write_bytes(struct.pack('<4sHHII',b'UST1',300,82,len(raw),fnv(raw))+raw)
     pivots=[];names=list(ANIMALS);folder=a.out/'corpses';folder.mkdir(exist_ok=True)

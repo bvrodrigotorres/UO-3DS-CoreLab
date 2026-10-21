@@ -74,7 +74,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.20",ink,1,13);
+    text(fb,225,20,"C.LAB V0.21",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -152,38 +152,32 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
 }
 
 void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons){
-    drawHudFrame(fb,{},false,true);
-    text(fb,20,23,"MOCHILA Y COFRES",{55,37,22},2);
+    (void)w;(void)a;drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
-    box(fb,17,45,286,1,ink);box(fb,17,181,286,1,ink);
-    text(fb,20,53,"MOCHILA "+std::to_string(inv.backpack.size())+"/9",ink);
-    text(fb,166,53,!inv.hasContainer()?"CONTENEDOR":inv.containerName(),ink);
-    box(fb,151,52,1,127,gold);
-    auto bag=[&](const Bag&items,int left){
-        for(int n=0;n<9;++n){int x=left+(n%3)*38,y=65+(n/3)*32;
-            box(fb,x,y,35,30,ink);box(fb,x+1,y+1,33,28,slotColor);
-            if(size_t(n)>=items.size())continue;
-            auto item=items[n];if(item.type>=ItemTypes)continue;
+    text(fb,18,18,"MOCHILA "+std::to_string(inv.backpack.size())+"/24",ink);
+    text(fb,170,18,inv.hasContainer()?inv.containerName():"SIN BOTIN CERCA",ink,1,22);
+    box(fb,156,34,1,154,gold);
+    auto bag=[&](const Bag&items,int left,size_t offset){
+        for(int n=0;n<12;++n){int x=left+(n%3)*InventoryLayout::StepX,y=InventoryLayout::Top+(n/3)*InventoryLayout::StepY;
+            box(fb,x,y,InventoryLayout::Width,InventoryLayout::Height,ink);box(fb,x+1,y+1,InventoryLayout::Width-2,InventoryLayout::Height-2,slotColor);
+            if(offset+n>=items.size())continue;
+            auto item=items[offset+n];if(item.type>=ItemTypes)continue;
             if(icons&&icons->rgba.size()==ItemTypes*24*24*4){
                 for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t p=(item.type*24*24+iy*24+ix)*4;
-                    if(icons->rgba[p+3]>127)pixel(fb,x+5+ix,y+1+iy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
-            }else text(fb,x+2,y+5,itemDefs[item.type].name,{244,222,160},1,5);
-            std::string count=std::to_string(item.count);box(fb,x+34-int(count.size())*6,y+21,int(count.size())*6,8,ink);
-            text(fb,x+34-int(count.size())*6,y+22,count,{244,222,160},1,5);
+                    if(icons->rgba[p+3]>127)pixel(fb,x+8+ix,y+3+iy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
+            }else text(fb,x+3,y+7,itemDefs[item.type].name,{244,222,160},1,6);
+            std::string count=std::to_string(item.count);box(fb,x+40-int(count.size())*6,y+26,int(count.size())*6,8,ink);
+            text(fb,x+40-int(count.size())*6,y+27,count,{244,222,160},1,5);
         }
     };
-    bag(inv.backpack,20);
-    static const Bag empty;
-    bag(inv.hasContainer()?inv.containerItems():empty,166);
-    box(fb,20,163,130,17,ink);box(fb,21,164,128,15,gold);
-    text(fb,26,168,inv.equipMode?"MODO: EQUIPAR":"MODO: TRANSFERIR",ink);
-    box(fb,166,163,134,17,ink);box(fb,167,164,132,15,gold);
-    text(fb,174,168,inv.hasContainer()?"CERRAR":"ABRIR CERCANO",ink);
-    box(fb,18,187,284,41,{218,195,148});
-    text(fb,20,189,inv.message,ink);
-    text(fb,20,199,inv.equipMode?"TOCA UN EQUIPABLE DE LA MOCHILA":"TOCA UNA PILA PARA TRANSFERIR",ink);
-    text(fb,20,209,inv.opened==-2?"BOTIN DEL CADAVER | GUARDADO":inv.nearest(w,a)>=0?"COFRE AL ALCANCE | AUTOGUARDADO":"COFRE O CADAVER: ABRIR CERCANO",ink);
-    text(fb,20,219,"R: PAGINA | DESLIZA 3/3",ink);
+    bag(inv.backpack,InventoryLayout::Left,inv.bagPage*BagPageSlots);bag(inv.containerItems(),InventoryLayout::Right,0);
+    auto button=[&](int x,int y,int width,int height,const std::string&label,bool active){box(fb,x,y,width,height,ink);box(fb,x+1,y+1,width-2,height-2,active?gold:Color{161,143,108});text(fb,x+7,y+(height-7)/2,label,ink);};
+    button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/2  >",true);
+    button(18,214,130,16,inv.equipMode?"MODO: EQUIPAR":"MODO: TRANSFERIR",true);
+    button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
+    // Capacity/write failures remain visible without restoring the old footer.
+    if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
+        text(fb,18,29,inv.message,ink,1,46);
 }
 
 void drawTitle(uint8_t*fb,bool loading){
@@ -204,7 +198,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.20";
+    const std::string version="CORELAB V0.21";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }

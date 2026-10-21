@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "core.hpp"
+#include "inventory.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
 namespace lab {
 inline bool equipmentTouchWhileMoving(bool equipMode,int x,int y){
-    return (y>=163&&y<181&&x>=20&&x<150)||(equipMode&&x>=20&&x<134&&y>=65&&y<161);
+    return InventoryLayout::mode(x,y)||InventoryLayout::page(x,y)||(equipMode&&InventoryLayout::slot(x,y,InventoryLayout::Left)>=0);
 }
 class PositionCheckpoint {
     Actor saved{};bool known=false;

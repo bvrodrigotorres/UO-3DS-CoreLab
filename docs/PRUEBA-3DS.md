@@ -69,3 +69,8 @@ Consultar [instalación y cambios](v0.18.md). Probar nombres amarillos/grises so
 ## v0.20: combate y estado original
 
 Consultar [instalación y controles](v0.20.md). A inicia/detiene el ataque y X cambia de criatura; acercarse con el pad. La segunda página muestra el gump de estado original. Desde la tercera página se abre el cadáver cercano con el mismo botón que los cofres. Verificar daño y barra sobre el jugador, botín persistente, reaparición a los 20 segundos, pausa de los temporizadores y retorno al punto inicial al morir.
+
+
+## v0.21: mochila y botín automático
+
+Consultar [v0.21.md](v0.21.md). Acercarse a un cofre o cadáver y abrir la tercera página: el contenido debe aparecer directamente. Probar SACAR TODO, mochila llena sin pérdida, 12 casillas por hoja y equipo desde la segunda hoja. Verificar ESTADO DEL PERSONAJE con el nuevo status.bin. Continuar debe conservar todo el equipo e inventario anterior.

@@ -35,7 +35,7 @@ int main(int argc,char**argv){
     inv.backpack={{0,10}};assert(!inv.equip(0)&&inv.backpack[0].count==10);
     inv.backpack.clear();for(int slot=0;slot<3;++slot)assert(inv.unequip(slot));assert(inv.equipmentMask()==0);
     // Convert a valid save to the exact previous UIN1 layout, then migrate.
-    auto bytes=read(path);assert(bytes[3]=='2');bytes.resize(bytes.size()-16);bytes[3]='1';put(bytes,hash(bytes));
+    auto bytes=read(path);assert(bytes[3]=='3');bytes.resize(bytes.size()-16);bytes[3]='1';put(bytes,hash(bytes));
     std::string legacy=std::string(argv[1])+"/legacy.sav";write(legacy,bytes);
     Inventory old;old.init(w,legacy);assert(old.equipmentMask()==0&&old.backpack.size()==3);
     auto robeTotal=total(old,6);assert(old.equip(1));Inventory migrated;migrated.init(w,legacy);assert(migrated.equipmentMask()==2&&total(migrated,6)==robeTotal);

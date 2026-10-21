@@ -19,6 +19,7 @@ public:
     bool update(const World&,Npcs&,Actor&,bool moving,float,PlayerStatus&,Inventory&);
     const std::vector<MobVitals>&vitals()const{return mob;}
     int nearestCorpse(const World&,const Actor&)const;
+    bool inspectNearest(const World&,const Actor&,Inventory&);
     bool openCorpse(const World&,const Actor&,Inventory&);
 };
 bool meleeReach(const World&,const Actor&,const Actor&);

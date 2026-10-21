@@ -205,12 +205,7 @@ int main(){
             int oldPage=pages.page,dx=pages.lastX-pages.startX,dy=pages.lastY-pages.startY;
             bool changed=pages.end();
             if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
-            {
-                if(pages.startY>=163&&pages.startY<181&&pages.startX>=166&&pages.startX<301){
-                    if(inventory.hasContainer())inventory.closeContainer();
-                    else if(!combat.openCorpse(*w,actor,inventory))inventory.open(*w,actor);
-                }else inventory.tap(*w,actor,pages.startX,pages.startY);
-            }
+                inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
                 for(int slot=0;slot<3;++slot)if(pages.startY>=lab::JournalLayout::EquipmentTop+slot*34&&pages.startY<lab::JournalLayout::EquipmentTop+18+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
             }
@@ -257,6 +252,7 @@ int main(){
             const auto&enemy=npcs.all()[combat.target];int tx=(enemy.position.x>actor.x)-(enemy.position.x<actor.x),ty=(enemy.position.y>actor.y)-(enemy.position.y<actor.y);
             const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};for(int d=0;d<8;++d)if(xs[d]==tx&&ys[d]==ty)facing=(d+1)&7;
         }
+        if(authentic&&pages.page==2&&combat.inspectNearest(*w,actor,inventory))pageChanged=true;
         if(animateThisFrame||sx||sy||(held&KEY_TOUCH)||down)positionCheckpoint().active(now);
         if(!moving&&positionCheckpoint().due(actor,now)){
             bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();

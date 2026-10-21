@@ -20,7 +20,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;equipment.fill(-1);equipMode=false;
+    path=p;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);equipMode=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -28,7 +28,7 @@ void Inventory::init(const World&w,const std::string&p){
         if(chestArt(o.art)&&chests.size()<1024){
             size_t n=chests.size();
             // Finite local exploration supplies, not server loot tables.
-            Bag loot;loot.reserve(BagSlots);
+            Bag loot;loot.reserve(ChestSlots);
             loot.push_back({0,uint16_t(15+n*7)});loot.push_back({1,uint16_t(2+n%3)});loot.push_back({3,uint16_t(4+n%4)});
             loot.push_back({uint16_t(n%2?4:2),uint16_t(n%2?1:3)});
             if(n%3==0)loot.push_back({5,1});
@@ -40,12 +40,12 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4))&&get(b,4)==identity&&get(b,8)==chests.size();
+    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4))&&get(b,4)==identity&&get(b,8)==chests.size();
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
         if(pos+4>b.size()-4){ok=false;break;}unsigned count=get(b,pos);pos+=4;
-        if(count>BagSlots||pos+count*8>b.size()-4){ok=false;break;}
+        if(count>(n==0?BagSlots:ChestSlots)||pos+count*8>b.size()-4){ok=false;break;}
         Bag bag;std::array<bool,ItemTypes>used{};
         for(unsigned k=0;k<count;++k){unsigned type=get(b,pos),amount=get(b,pos+4);pos+=8;
             if(type>=ItemTypes||!amount||amount>65535||(used[type]&&itemDefs[type].stackable)||(!itemDefs[type].stackable&&amount!=1)){ok=false;break;}
@@ -71,7 +71,7 @@ void Inventory::init(const World&w,const std::string&p){
 }
 void Inventory::seedGear(){
     // One-time additions to old UIN1 and new games, never refill UIN2 saves.
-    for(auto&c:chests)if(c.items.size()+2<=BagSlots){c.items.push_back({6,1});c.items.push_back({7,1});}
+    for(auto&c:chests)if(c.items.size()+2<=ChestSlots){c.items.push_back({6,1});c.items.push_back({7,1});}
 }
 unsigned Inventory::equipmentMask()const{unsigned m=0;for(size_t s=0;s<equipment.size();++s)if(equipment[s]>=0)m|=1u<<s;return m;}
 bool Inventory::equip(size_t index,SaveRename renameFile){
@@ -116,10 +116,12 @@ bool Inventory::reachable(const World&w,const Actor&a,size_t n)const{
     }
     return true;
 }
-int Inventory::nearest(const World&w,const Actor&a)const{for(size_t n=0;n<chests.size();++n)if(reachable(w,a,n))return int(n);return -1;}
+int Inventory::nearest(const World&w,const Actor&a)const{
+    int best=-1,distance=100000;for(size_t n=0;n<chests.size();++n)if(reachable(w,a,n)){const auto&o=w.objects[chests[n].object];int d=(o.x-a.x)*(o.x-a.x)+(o.y-a.y)*(o.y-a.y);if(d<distance){distance=d;best=int(n);}}return best;
+}
 bool Inventory::openExternal(const World&w,const Actor&a,Bag&bag,const Actor&position,const std::string&title){
     if(!writable||!meleeContainerReach(w,a,position))return false;
-    external=&bag;externalPosition=position;externalTitle=title;opened=-2;equipMode=false;message="CADAVER ABIERTO - TOCA EL BOTIN";return true;
+    external=&bag;externalPosition=position;externalTitle=title;opened=-2;message="CADAVER ABIERTO - TOCA EL BOTIN";return true;
 }
 void Inventory::update(const World&w,const Actor&a){
     if((opened>=0&&!reachable(w,a,size_t(opened)))||(opened==-2&&!meleeContainerReach(w,a,externalPosition))){closeContainer();message="CONTENEDOR FUERA DE ALCANCE";}
@@ -130,7 +132,7 @@ void Inventory::open(const World&w,const Actor&a){
     opened=nearest(w,a);message=opened<0?"ACERCATE AL LADO DE UN COFRE":"COFRE ABIERTO - TOCA UN OBJETO";
 }
 bool Inventory::persist(std::string&error,SaveRename renameFile){
-    std::vector<uint8_t>b={'U','I','N','2'};put(b,identity);put(b,chests.size());
+    std::vector<uint8_t>b={'U','I','N','3'};put(b,identity);put(b,chests.size());
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
     append(backpack);for(const auto&c:chests)append(c.items);for(int type:equipment)put(b,uint32_t(type));put(b,hash(b));
     std::string tmp=path+".tmp",bak=path+".bak";
@@ -155,21 +157,34 @@ bool Inventory::transfer(const World&w,const Actor&a,bool fromChest,size_t slot,
     Bag&source=fromChest?container:backpack;Bag&dest=fromChest?backpack:container;
     if(slot>=source.size())return false;
     auto item=source[slot];if(item.type>=ItemTypes)return false;auto found=std::find_if(dest.begin(),dest.end(),[&](ItemStack s){return itemDefs[item.type].stackable&&s.type==item.type;});
-    if((found==dest.end()&&dest.size()>=BagSlots)||(found!=dest.end()&&unsigned(found->count)+item.count>65535)){message="SIN ESPACIO PARA ESA PILA";return false;}
+    if((found==dest.end()&&dest.size()>=(fromChest?BagSlots:ChestSlots))||(found!=dest.end()&&unsigned(found->count)+item.count>65535)){message="SIN ESPACIO PARA ESA PILA";return false;}
     Bag oldSource=source,oldDest=dest;
     if(found==dest.end())dest.push_back(item);else found->count+=item.count;
     source.erase(source.begin()+slot);
     if(!persist(message,renameFile)){source=oldSource;dest=oldDest;return false;}
     message=std::string(itemDefs[item.type].name)+(fromChest?" A MOCHILA - GUARDADO":" AL COFRE - GUARDADO");return true;
 }
+bool Inventory::takeAll(const World&w,const Actor&a,SaveRename renameFile){
+    update(w,a);if(!writable||!hasContainer()){message="NO HAY BOTIN AL ALCANCE";return false;}
+    Bag&source=opened==-2?*external:chests[opened].items;
+    if(source.empty()){message="CONTENEDOR VACIO";return false;}
+    Bag oldSource=source,oldBag=backpack;size_t moved=0;
+    for(size_t i=0;i<source.size();){auto item=source[i];if(item.type>=ItemTypes){++i;continue;}
+        auto found=std::find_if(backpack.begin(),backpack.end(),[&](ItemStack s){return itemDefs[item.type].stackable&&s.type==item.type;});
+        if((found==backpack.end()&&backpack.size()>=BagSlots)||(found!=backpack.end()&&unsigned(found->count)+item.count>65535)){++i;continue;}
+        if(found==backpack.end())backpack.push_back(item);else found->count+=item.count;
+        source.erase(source.begin()+i);++moved;
+    }
+    if(!moved){message="MOCHILA LLENA";return false;}
+    if(!persist(message,renameFile)){source=oldSource;backpack=oldBag;return false;}
+    message=source.empty()?"TODO RECOGIDO - GUARDADO":"MOCHILA LLENA - QUEDA BOTIN";return true;
+}
 void Inventory::tap(const World&w,const Actor&a,int x,int y){
-    if(y>=163&&y<181&&x>=20&&x<150){equipMode=!equipMode;message=equipMode?"TOCA ROPA O ARMA DE TU MOCHILA":"MODO TRANSFERIR AL COFRE";return;}
-    if(y>=163&&y<181&&x>=166&&x<301){open(w,a);return;}
-    if(y<65||y>=161)return;
-    bool right=x>=166;int left=right?166:20;
-    if(x<left||x>=left+114)return;
-    int col=(x-left)/38,row=(y-65)/32;
-    if(!right&&equipMode)equip(size_t(row*3+col));
-    else transfer(w,a,right,size_t(row*3+col));
+    if(InventoryLayout::page(x,y)){bagPage=1-bagPage;return;}
+    if(InventoryLayout::mode(x,y)){equipMode=!equipMode;return;}
+    if(InventoryLayout::take(x,y)){takeAll(w,a);return;}
+    int left=InventoryLayout::slot(x,y,InventoryLayout::Left),right=InventoryLayout::slot(x,y,InventoryLayout::Right);
+    if(left>=0){size_t index=bagPage*BagPageSlots+left;if(equipMode)equip(index);else transfer(w,a,false,index);}
+    else if(right>=0)transfer(w,a,true,size_t(right));
 }
 }

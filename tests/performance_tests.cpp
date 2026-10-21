@@ -4,9 +4,9 @@
 #include <iostream>
 using namespace lab;
 int main(){
-    assert(equipmentTouchWhileMoving(true,30,75));
-    assert(!equipmentTouchWhileMoving(false,30,75));
-    assert(equipmentTouchWhileMoving(false,25,170));
+    assert(equipmentTouchWhileMoving(true,30,80));
+    assert(!equipmentTouchWhileMoving(false,30,80));
+    assert(equipmentTouchWhileMoving(false,25,220));
     assert(!equipmentTouchWhileMoving(true,180,75));
     assert(!equipmentTouchWhileMoving(true,180,170));
     Actor a{5,6,40};PositionCheckpoint save;save.baseline(a,0);

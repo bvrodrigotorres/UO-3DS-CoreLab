@@ -44,9 +44,9 @@ int main(int argc,char**argv){
     for(int n=0;n<16;++n)assert(pixels[n]==0xA5&&pixels[pixels.size()-1-n]==0xA5);
     TouchPages pages;pages.page=1;pages.begin(260,100);pages.move(20,101);assert(pages.end()&&pages.page==2);
     pages.begin(50,100);pages.move(250,102);assert(pages.end()&&pages.page==1);
-    pages.page=2;pages.begin(250,220);assert(pages.end()&&pages.page==0);
-    inv.init(w,std::string(argv[1])+"/touch.sav");inv.tap(w,a,200,170);assert(inv.opened==0);
-    inv.tap(w,a,170,70);assert(!inv.backpack.empty());inv.tap(w,a,25,70);assert(inv.backpack.empty());
+    pages.page=2;pages.begin(250,220);assert(!pages.end()&&pages.page==2);
+    inv.init(w,std::string(argv[1])+"/touch.sav");inv.open(w,a);assert(inv.opened==0);
+    inv.tap(w,a,175,42);assert(!inv.backpack.empty());inv.tap(w,a,23,42);assert(inv.backpack.empty());
     std::cout<<"Inventory conservation, reach, transfer, merge, persistence, failed SD rollback, corruption, touch and HUD passed\n";
     if(argc==3){
         World actual;std::string error;assert(loadWorld(argv[2],actual,error));Inventory map;map.init(actual,std::string(argv[1])+"/map.sav");assert(map.chests.size()==8);

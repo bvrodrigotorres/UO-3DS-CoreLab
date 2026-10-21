@@ -5,7 +5,14 @@
 #include <array>
 #include <functional>
 namespace lab {
-constexpr size_t ItemTypes=8, BagSlots=9;
+constexpr size_t ItemTypes=8, BagSlots=24, ChestSlots=12, BagPageSlots=12;
+struct InventoryLayout {
+    static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
+    static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
+    static bool page(int x,int y){return x>=18&&x<148&&y>=194&&y<210;}
+    static bool mode(int x,int y){return x>=18&&x<148&&y>=214&&y<230;}
+    static bool take(int x,int y){return x>=170&&x<300&&y>=194&&y<230;}
+};
 struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;};
 extern const std::array<ItemDef,ItemTypes> itemDefs;
 struct ItemStack {uint16_t type=0,count=0;};
@@ -30,10 +37,12 @@ public:
     bool unequip(size_t,SaveRename=std::rename);
     Bag backpack;
     std::vector<Chest> chests;
-    int opened=-1;
+    int opened=-1,bagPage=0;
     bool hasContainer()const{return opened>=0||(opened==-2&&external);}
     const Bag&containerItems()const{static const Bag empty;return opened==-2&&external?*external:opened>=0&&size_t(opened)<chests.size()?chests[opened].items:empty;}
-    std::string containerName()const{return opened==-2?externalTitle:"COFRE "+std::to_string(opened+1);}
+    std::string containerName()const{return opened==-2?externalTitle:"COFRE";}
+    bool isExternal(const Bag*bag)const{return opened==-2&&external==bag;}
+    bool followChest(int index){if(index<0||size_t(index)>=chests.size()){bool changed=hasContainer();closeContainer();return changed;}if(opened==index&&index>=0)return false;closeContainer();opened=index;return true;}
     void closeContainer(){opened=-1;external=nullptr;}
     void closeExternal(const Bag*bag){if(external==bag)closeContainer();}
     bool openExternal(const World&,const Actor&,Bag&,const Actor&,const std::string&);
@@ -44,6 +53,7 @@ public:
     void update(const World&,const Actor&);
     void open(const World&,const Actor&);
     bool transfer(const World&,const Actor&,bool fromChest,size_t,SaveRename=std::rename);
+    bool takeAll(const World&,const Actor&,SaveRename=std::rename);
     void tap(const World&,const Actor&,int x,int y);
 };
 }
