@@ -7,7 +7,7 @@ namespace {
 uint32_t get(const std::vector<uint8_t>&b,size_t p){return uint32_t(b[p])|uint32_t(b[p+1])<<8|uint32_t(b[p+2])<<16|uint32_t(b[p+3])<<24;}
 }
 bool EquipmentArt::load(const std::string&p){
-    std::ifstream f(p,std::ios::binary);std::vector<uint8_t>b(48+8*76*104*4);dolls.clear();checksums.fill(0);
+    std::ifstream f(p,std::ios::binary);std::vector<uint8_t>b(48+8*76*104*4);dolls.clear();playerName.clear();checksums.fill(0);
     if(!f.read(reinterpret_cast<char*>(b.data()),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UEQ1",4)||b[4]!=76||b[5]||b[6]!=104||b[7]||get(b,8)!=8*76*104*4)return false;
     uint32_t hash=2166136261u;for(size_t i=48;i<b.size();++i)hash=(hash^b[i])*16777619u;
     if(hash!=get(b,12))return false;

@@ -5,12 +5,15 @@
 #include "doors.hpp"
 #include "npcs.hpp"
 #include "equipment.hpp"
+#include "character.hpp"
 #include "combat.hpp"
 #include <citro2d.h>
 namespace lab {
 bool rendererInit();
 void rendererShutdown();
 bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
+void clearAppearance();
+bool applyAppearance(const CharacterAssets&,const Appearance&,EquipmentArt&,unsigned,std::string&);
 void warmEquipment(unsigned,const EquipmentArt&);
 bool loadPopulationAtlases(const Npcs&,const std::string&,std::string&);
 bool loadCombatArt(const std::string&root,const std::string&population,std::string&error);

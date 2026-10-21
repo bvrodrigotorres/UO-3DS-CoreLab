@@ -7,6 +7,7 @@
 namespace lab {
 struct EquipmentArt {
     std::vector<uint8_t>dolls;
+    std::string playerName;
     std::array<uint32_t,8>checksums{};
     bool load(const std::string&);
 };

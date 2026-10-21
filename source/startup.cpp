@@ -49,7 +49,7 @@ bool Campaign::load(){
 }
 uint32_t Campaign::unusedGeneration()const{
     for(uint32_t next=generation+1,tries=0;tries<1024&&next<1000000000u;++next,++tries){bool occupied=false;
-        for(const auto&file:{"position-private.sav","inventory-private.sav","position-demo.sav","inventory-demo.sav"})
+        for(const auto&file:{"position-private.sav","inventory-private.sav","position-demo.sav","inventory-demo.sav","appearance.sav"})
             for(const auto&suffix:{"",".bak",".tmp"})if(exists(root+prefix(next)+file+suffix))occupied=true;
         if(!occupied)return next;
     }
@@ -61,12 +61,12 @@ bool Campaign::commit(uint32_t next,std::string&error,SaveRename renameFile){
     if(!write(root+"campaign.sav",b,error,renameFile))return false;
     generation=next;valid=true;return true;
 }
-void StartMenu::move(int delta){int count=page==MenuPage::Main?3:page==MenuPage::Options?4:2;selected=(selected+delta+count)%count;}
+void StartMenu::move(int delta){int count=page==MenuPage::Confirm?2:4;selected=(selected+delta+count)%count;}
 void StartMenu::back(){page=MenuPage::Main;selected=0;message.clear();}
 int StartMenu::hit(int x,int y)const{
     if(x<25||x>=295)return -1;
-    int count=page==MenuPage::Main?3:page==MenuPage::Options?4:2;
-    for(int row=0;row<count;++row){int top=page==MenuPage::Options?58+row*30:65+row*38;if(y>=top&&y<top+28)return row;}
+    int count=page==MenuPage::Confirm?2:4;
+    for(int row=0;row<count;++row){int top=page==MenuPage::Confirm?65+row*38:58+row*30;if(y>=top&&y<top+28)return row;}
     return -1;
 }
 MenuAction StartMenu::activate(bool canContinue){
@@ -78,8 +78,9 @@ MenuAction StartMenu::activate(bool canContinue){
         if(selected==3)back();
         return MenuAction::None;
     }
-    if(selected==0){page=MenuPage::Confirm;selected=0;message="REINICIAR PROGRESO Y EQUIPO?";}
+    if(selected==0)return MenuAction::NewGame;
     else if(selected==1){if(canContinue)return MenuAction::Continue;message="NO HAY UNA PARTIDA PARA CONTINUAR";}
+    else if(selected==3)return MenuAction::Exit;
     else {page=MenuPage::Options;selected=0;message.clear();}
     return MenuAction::None;
 }

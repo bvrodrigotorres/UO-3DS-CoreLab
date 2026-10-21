@@ -30,7 +30,7 @@ class SceneTests(unittest.TestCase):
 
     def test_exterior_visibility_and_hud(self):
         binary=Path(self.temp.name)/'presentation_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/presentation_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/presentation_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
     def test_journal_validation(self):
@@ -45,17 +45,23 @@ class SceneTests(unittest.TestCase):
 
     def test_inventory_transactions(self):
         binary=Path(self.temp.name)/'inventory_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/inventory_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/inventory_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
 
     def test_equipment(self):
         binary=Path(self.temp.name)/'equipment_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/equipment_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/equipment.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/equipment_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/equipment.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
 
     def test_startup_and_campaigns(self):
         binary=Path(self.temp.name)/'startup_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/startup_tests.cpp'),str(ROOT/'source/startup.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/startup_tests.cpp'),str(ROOT/'source/startup.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:
+            subprocess.run([str(binary),folder],check=True)
+
+    def test_character_customization(self):
+        binary=Path(self.temp.name)/'character_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/character_tests.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:
             subprocess.run([str(binary),folder],check=True)
 
@@ -211,17 +217,17 @@ class SceneTests(unittest.TestCase):
 
     def test_npc_push_and_status(self):
         binary=Path(self.temp.name)/'npc_push_status_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_push_status_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_push_status_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
     def test_combat_and_corpses(self):
         binary=Path(self.temp.name)/'combat_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/combat_tests.cpp'),str(ROOT/'source/combat.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/combat_tests.cpp'),str(ROOT/'source/combat.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
     def test_inventory_pages_and_take_all(self):
         binary=Path(self.temp.name)/'inventory_pages_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/inventory_pages_tests.cpp'),str(ROOT/'source/combat.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/inventory_pages_tests.cpp'),str(ROOT/'source/combat.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
     def test_npc_simulation(self):

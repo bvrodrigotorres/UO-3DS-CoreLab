@@ -74,3 +74,11 @@ Consultar [instalación y controles](v0.20.md). A inicia/detiene el ataque y X c
 ## v0.21: mochila y botín automático
 
 Consultar [v0.21.md](v0.21.md). Acercarse a un cofre o cadáver y abrir la tercera página: el contenido debe aparecer directamente. Probar SACAR TODO, mochila llena sin pérdida, 12 casillas por hoja y equipo desde la segunda hoja. Verificar ESTADO DEL PERSONAJE con el nuevo status.bin. Continuar debe conservar todo el equipo e inventario anterior.
+
+## v0.22: personalización
+
+Consultar [v0.22.md](v0.22.md) para instalar la carpeta character completa. Probar
+crear/cancelar, teclado para nombre, ambos cuerpos, pelo/barba y colores, giro,
+las tres vistas de equipo, guardar desde pausa y Continuar tras reiniciar.
+Verificar que el mundo siga detenido al editar y que no cambien mochila ni
+equipo. Probar Salir del juego desde el menú principal.

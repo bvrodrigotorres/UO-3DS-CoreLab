@@ -27,9 +27,11 @@ jobs:
           mkdir -p dist/UO-3DS-CoreLab
           cp UO-3DS-CoreLab.3dsx UO-3DS-CoreLab.smdh dist/UO-3DS-CoreLab/
           cp docs/PRUEBA-3DS.md dist/LEEME.md
+          cp LICENSE THIRD_PARTY.md dist/
+          cp -R LICENSES dist/
           sha256sum UO-3DS-CoreLab.3dsx > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: UO-3DS-CoreLab-v0.21
+          name: UO-3DS-CoreLab-v0.22
           path: dist/
           if-no-files-found: error

@@ -22,7 +22,8 @@ int main(int argc,char**argv){
     assert(roofs.hidden(w,4,inside,RoofMode::Hidden));assert(!roofs.hidden(w,5,inside,RoofMode::Hidden));
     PauseMenu pause;pause.open();assert(pause.active&&pause.selected==0&&pause.activate()==PauseAction::Resume);
     pause.move(-1);assert(pause.activate()==PauseAction::Exit);pause.move(-1);assert(pause.activate()==PauseAction::MainMenu);
-    assert(pause.hit(50,80)==0&&pause.hit(50,115)==1&&pause.hit(50,155)==2&&pause.hit(0,80)==-1);
+    pause.selected=1;assert(pause.activate()==PauseAction::Customize);
+    assert(pause.hit(50,70)==0&&pause.hit(50,100)==1&&pause.hit(50,130)==2&&pause.hit(50,160)==3&&pause.hit(0,80)==-1);
     PositionCheckpoint checkpoint;checkpoint.baseline({0,0,0},1000);checkpoint.active(2000);Actor moved{1,0,0};
     assert(!checkpoint.due(moved,6000));checkpoint.suspend(120000);assert(!checkpoint.due(moved,126000));assert(checkpoint.due(moved,182000));
     assert(labelPixelOffset(0,0)==0&&labelPixelOffset(127,63)==8191);

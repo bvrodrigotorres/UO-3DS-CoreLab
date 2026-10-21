@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <malloc.h>
 #include <fstream>
+#include <functional>
 
 namespace {
 void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&stage="",int progress=0){
@@ -23,6 +24,56 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
     GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
     gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
 }
+bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,std::string&)>&commit){
+    if(!assets.ready())return false;
+    C3D_FrameSync();lab::AppearanceEditor editor(initial);std::vector<uint16_t>doll,sprite;
+    u64 repeat=0;bool changed=true,valid=false;
+    while(aptMainLoop()){
+        if(changed){unsigned mask=editor.preview==0?equipment:editor.preview==1?7:0;
+            valid=assets.compose(editor.draft,mask,doll,true)&&assets.compose(editor.draft,mask,sprite,false,editor.direction*5);
+            if(!valid)editor.message="FALTAN ARCHIVOS CHARACTER";
+            changed=false;
+        }
+        auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
+        lab::drawAppearance(top,bottom,editor,doll,sprite,fresh);
+        GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
+        gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+        hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();
+        if(down&KEY_B)return false;
+        if(down&KEY_L){editor.page=(editor.page+2)%3;editor.row=0;}
+        if(down&KEY_R){editor.page=(editor.page+1)%3;editor.row=0;}
+        if(down&KEY_X){editor.direction=(editor.direction+1)%8;changed=true;}
+        if(down&KEY_Y){editor.randomize(now);changed=true;}
+        circlePosition stick;hidCircleRead(&stick);
+        int vertical=((held&KEY_DOWN)||stick.dy< -35)-((held&KEY_UP)||stick.dy>35);
+        int horizontal=((held&KEY_RIGHT)||stick.dx>35)-((held&KEY_LEFT)||stick.dx< -35);
+        if(!vertical&&!horizontal)repeat=0;
+        else if(now>=repeat){if(vertical)editor.move(vertical);else{editor.change(horizontal);changed=true;}repeat=now+170;}
+        bool confirm=(down&KEY_START)!=0,editName=false;
+        if(down&KEY_A){if(editor.page==0&&editor.row==0)editName=true;else{editor.change(1);changed=true;}}
+        if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);int hit=editor.hit(t.px,t.py);
+            if(hit==20)return false;
+            if(hit==21)confirm=true;
+            if(hit>=10&&hit<=12){editor.page=hit-10;editor.row=0;}
+            if(hit>=0&&hit<5){editor.row=hit;if(editor.page==0&&hit==0)editName=true;else{editor.change(t.px<145?-1:1);changed=true;}}
+        }
+        if(editName){
+            SwkbdState keyboard;char name[65]{};swkbdInit(&keyboard,SWKBD_TYPE_NORMAL,2,16);
+            swkbdSetInitialText(&keyboard,editor.draft.name.c_str());swkbdSetHintText(&keyboard,"Nombre: 1 a 16 letras");
+            swkbdSetButton(&keyboard,SWKBD_BUTTON_LEFT,"Cancelar",false);swkbdSetButton(&keyboard,SWKBD_BUTTON_RIGHT,"Aceptar",true);
+            if(swkbdInputText(&keyboard,name,sizeof name)==SWKBD_BUTTON_RIGHT){if(lab::Appearance::validName(name)){editor.draft.name=name;editor.message.clear();}else editor.message="USA LETRAS A-Z, ESPACIOS O GUIONES";}
+            hidScanInput();repeat=0;
+        }
+        if(confirm){
+            if(!valid||!editor.draft.valid()){editor.message="REVISA EL NOMBRE Y LOS RECURSOS";continue;}
+            lab::drawLoading(gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr),"GUARDANDO TU PERSONAJE",4);
+            auto fb=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);GSPGPU_FlushDataCache(fb,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+            if(commit(editor.draft,editor.message))return true;
+        }
+    }
+    return false;
+}
+
 }
 
 int main(){
@@ -85,6 +136,9 @@ int main(){
     lab::EquipmentArt equipmentArt;std::string equipmentError;
     bool hasEquipment=equipmentArt.load("sdmc:/3ds/UO-3DS-CoreLab/equipment.bin");
     if(!hasEquipment)equipmentError="FALTA EQUIPMENT.BIN";
+    lab::CharacterAssets characterAssets;characterAssets.load(baseRoot+"character/");
+    lab::Appearance appearance;
+    bool appearanceOk=appearance.load(saveRoot+savePrefix+"appearance.sav");
     lab::StatusArt statusArt;statusArt.load(baseRoot+"status.bin");
     std::string combatArtError;if(hasNpcs&&npcs.hasPopulation())lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);
     startupFrame(nullptr,false,"PREPARADO",5);
@@ -92,11 +146,12 @@ int main(){
     lab::Actor probe;std::string probeMessage;
     bool positionSaved=lab::loadPosition(positionPath(),savedWorld(),probe,probeMessage);
     if(!positionSaved&&authentic&&hasDoors)positionSaved=lab::loadPosition(positionPath(),legacyPrivate,probe,probeMessage);
-    bool canContinue=campaign.valid&&(authentic?inventory.healthy():demoInventory.healthy())&&(positionSaved||(authentic?inventory.restored:demoInventory.restored));
+    bool canContinue=appearanceOk&&campaign.valid&&(authentic?inventory.healthy():demoInventory.healthy())&&(positionSaved||(authentic?inventory.restored:demoInventory.restored));
     menu.selected=canContinue?1:0;
-    if(!campaign.valid)menu.message="ERROR AL LEER LA PARTIDA GUARDADA";
+    if(!appearanceOk)menu.message="PERSONALIZACION GUARDADA INVALIDA";
+    else if(!campaign.valid)menu.message="ERROR AL LEER LA PARTIDA GUARDADA";
     else if(!(authentic?inventory.healthy():demoInventory.healthy()))menu.message="ERROR EN INVENTARIO GUARDADO";
-    auto freshGame=[&](){
+    auto freshGame=[&](const lab::Appearance&created){
         uint32_t generation=campaign.unusedGeneration();
         if(!generation){menu.message="NO SE PUDO PREPARAR LA PARTIDA";return false;}
         std::string prefix=campaign.prefix(generation),error;
@@ -111,8 +166,9 @@ int main(){
                 menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
             }
         }
+        if(!created.save(saveRoot+prefix+"appearance.sav",error)){menu.message=error;return false;}
         if(!campaign.commit(generation,error)){menu.message=error;return false;}
-        savePrefix=prefix;inventory=std::move(freshPrivate);demoInventory=std::move(freshDemo);
+        appearance=created;savePrefix=prefix;inventory=std::move(freshPrivate);demoInventory=std::move(freshDemo);
         privateWorld=canonicalPrivate;
         if(available)hasDoors=doors.load(saveRoot+"doors.bin",saveRoot+"scene.bin",privateWorld,doorError);
         actor={w->startX,w->startY,w->startZ};alignCamera();lab::invalidateRenderList();
@@ -141,7 +197,20 @@ int main(){
         if(menu.options.roofs!=oldOptions.roofs||menu.options.zoom!=oldOptions.zoom||menu.options.page!=oldOptions.page){
             std::string message;if(!menu.options.save(saveRoot+"options.sav",message)){menu.options=oldOptions;menu.message=message;}else menu.message="OPCIONES GUARDADAS";
         }
-        if(action==lab::MenuAction::NewGame)started=freshGame();
+        if(action==lab::MenuAction::Exit){quit=true;continue;}
+        if(action==lab::MenuAction::NewGame){
+            if(!characterAssets.ready()){
+                if(!available){lab::Appearance diagnostic;started=freshGame(diagnostic);continue;}
+                menu.message="FALTA LA CARPETA CHARACTER";continue;
+            }
+            lab::Appearance created;created.enabled=true;
+            started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,std::string&message){
+                std::vector<uint8_t>dolls;std::vector<uint16_t>frames;
+                if(!characterAssets.dolls(a,dolls)||!characterAssets.compose(a,7,frames)){message="FALTAN CAPAS DE EQUIPAMIENTO";return false;}
+                bool ok=freshGame(a);if(!ok)message=menu.message;return ok;
+            });
+            if(!started)menu.back();
+        }
         if(action==lab::MenuAction::Continue){if(restorePosition())alignCamera();started=true;}
     }
     if(!started)break;
@@ -150,6 +219,12 @@ int main(){
     roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;
     if(hasNpcs)npcs.reset(privateWorld,actor);
     inventory.prepareEquipment=[&](unsigned mask){return lab::prepareEquipment(mask,equipmentArt,equipmentError);};
+    if(appearance.enabled){
+        if(!lab::applyAppearance(characterAssets,appearance,equipmentArt,inventory.equipmentMask(),equipmentError)){
+            menu.back();menu.message=equipmentError;continue;
+        }
+        hasEquipment=true;
+    }else {lab::clearAppearance();hasEquipment=equipmentArt.load(baseRoot+"equipment.bin");}
     if(hasEquipment){
         startupFrame(nullptr,false,"PREPARANDO EQUIPAMIENTO",5);
         lab::warmEquipment(inventory.equipmentMask(),equipmentArt);
@@ -181,6 +256,21 @@ int main(){
             }
             if(action==lab::PauseAction::Resume){
                 pause.active=false;positionCheckpoint().suspend(now-pauseAt);pages.active=false;frames=0;
+            }else if(action==lab::PauseAction::Customize){
+                auto&bag=authentic?inventory:demoInventory;
+                if(!characterAssets.ready())pause.message="FALTA LA CARPETA CHARACTER";
+                else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,std::string&message){
+                    const auto previous=appearance;
+                    if(!lab::applyAppearance(characterAssets,a,equipmentArt,bag.equipmentMask(),message))return false;
+                    if(!a.save(saveRoot+savePrefix+"appearance.sav",message)){
+                        std::string ignored;if(previous.enabled)lab::applyAppearance(characterAssets,previous,equipmentArt,bag.equipmentMask(),ignored);
+                        else {lab::clearAppearance();equipmentArt.load(baseRoot+"equipment.bin");lab::prepareEquipment(bag.equipmentMask(),equipmentArt,ignored);}
+                        return false;
+                    }
+                    appearance=a;hasEquipment=true;lab::warmEquipment(bag.equipmentMask(),equipmentArt);return true;
+                });
+                now=osGetTime();pausePad=0;frames=0;
+                lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus);
             }else if(action==lab::PauseAction::MainMenu||action==lab::PauseAction::Exit){
                 bool saved=true;
                 if(positionCheckpoint().dirty(actor)){saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);positionCheckpoint().result(actor,pauseAt,saved);}

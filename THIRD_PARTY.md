@@ -61,3 +61,9 @@ Para v0.9 se consulta el punto innkeeper (1493,1616,20) de Spawns/felucca.xml
 de la misma revisión de ServUO. Los dos viajeros son población ambiental local,
 no entradas del servidor. Las capas de personaje y los colores se convierten
 exclusivamente desde el cliente privado del usuario; no se distribuyen en Git.
+
+Para v0.22 se contrastan los identificadores de peinados/barbas y las tablas
+de colores humanos con CharacterCreationValues.cs de MobileUO/ClassicUO
+(revisión cb04dae2a935adfa358cc24df225ca70fea6eb18, BSD-2-Clause). El editor,
+formato de capas dispersas y compositor son propios; los estilos y paletas
+son los del cliente original. Véase LICENSES/ClassicUO-BSD-2-Clause.txt.

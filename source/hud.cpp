@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
+#include "character.hpp"
 #include "combat.hpp"
 #include "exploration.hpp"
 #include <cmath>
@@ -32,7 +33,7 @@ const Glyph alphabet[]={
  {'|',"04040404040404"},{'(',"02040808080402"},{')',"08040202020408"},
  {'+',"0004041F040400"},{'~',"00000916000000"},{'#',"0A0A1F0A1F0A0A"},
  {'@',"0E11171D17100F"},{'_',"0000000000001F"},{'?',"0E110102040004"},
- {'>',"10080402040810"},{'=',"00001F001F0000"},{'!',"04040404040004"},{'%',"19190204081313"}
+ {'<',"01020408040201"},{'\'',"04040000000000"},{'>',"10080402040810"},{'=',"00001F001F0000"},{'!',"04040404040004"},{'%',"19190204081313"}
 };
 int hex(char c){return c<='9'?c-'0':c-'A'+10;}
 void pixel(uint8_t*fb,int x,int y,Color c){
@@ -74,7 +75,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.21",ink,1,13);
+    text(fb,225,20,"C.LAB V0.22",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -91,7 +92,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     (void)message;
-    text(fb,20,14,"MINIMAPA",ink);text(fb,164,14,"2/3",ink);text(fb,210,14,"PERSONAJE",ink);
+    text(fb,20,14,"MINIMAPA",ink);text(fb,164,14,"2/3",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
     box(fb,192,25,1,116,gold);
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
@@ -198,7 +199,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.21";
+    const std::string version="CORELAB V0.22";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -214,8 +215,8 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
 void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
-    const char*rows[]={"CONTINUAR","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
-    for(int i=0;i<3;++i){int y=65+i*38;box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    for(int i=0;i<4;++i){int y=58+i*30;box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }
@@ -227,8 +228,8 @@ void drawStartMenu(uint8_t*fb,const StartMenu&m,bool canContinue){
     if(opts){const char*roofs[]={"AUTO","OCULTOS","COMPLETOS"};const char*pages[]={"DIAGNOSTICO","MAPA","INVENTARIO"};
         rows={std::string("TECHOS: ")+roofs[m.options.roofs],"ZOOM DEL MAPA: "+std::to_string(m.options.zoom)+"X",std::string("PAGINA: ")+pages[m.options.page],"VOLVER"};
     }else if(confirm)rows={"CANCELAR","SI, NUEVO JUEGO"};
-    else rows={"NUEVO JUEGO",canContinue?"CONTINUAR":"CONTINUAR - SIN PARTIDA","OPCIONES"};
-    for(size_t i=0;i<rows.size();++i){int y=opts?58+int(i)*30:65+int(i)*38;bool selected=int(i)==m.selected;
+    else rows={"NUEVO JUEGO",canContinue?"CONTINUAR":"CONTINUAR - SIN PARTIDA","OPCIONES","SALIR DEL JUEGO"};
+    for(size_t i=0;i<rows.size();++i){int y=confirm?65+int(i)*38:58+int(i)*30;bool selected=int(i)==m.selected;
         box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,selected?gold:Color{196,168,117});
         text(fb,36,y+10,selected?">":" ",ink);text(fb,50,y+10,rows[i],ink,1,40);}
     if(confirm)text(fb,30,149,"MOCHILA, EQUIPO Y COFRES DESDE CERO",ink,1,43);
@@ -236,6 +237,35 @@ void drawStartMenu(uint8_t*fb,const StartMenu&m,bool canContinue){
     text(fb,23,189,m.message.empty()?(confirm?"CONFIRMA PARA EMPEZAR DESDE CERO":opts?"LAS OPCIONES SE GUARDAN":"ELIGE TU AVENTURA"):m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);
     text(fb,23,219,"B: VOLVER | START: SALIR",ink);
+}
+
+void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&e,const std::vector<uint16_t>&doll,const std::vector<uint16_t>&sprite,bool fresh){
+    const Color ink={55,37,22},gold={174,131,64},light={231,213,177};
+    auto image=[&](uint8_t*fb,const std::vector<uint16_t>&v,int w,int h,int left,int above,int scale){
+        if(v.size()!=size_t(w*h))return;
+        for(int y=0;y<h;++y)for(int x=0;x<w;++x){uint16_t c=v[y*w+x];if(c&1)box(fb,left+x*scale,above+y*scale,scale,scale,{uint8_t((c>>11)*255/31),uint8_t((c>>6&31)*255/31),uint8_t((c>>1&31)*255/31)});}
+    };
+    canvasWidth=400;
+    for(int y=0;y<240;++y)for(int x=0;x<400;++x)pixel(top,x,y,{uint8_t(21+(x+y)%4),uint8_t(31+(x+y)%4),uint8_t(38+(x+y)%4)});
+    box(top,8,8,384,228,ink);box(top,10,10,380,224,light);
+    text(top,30,19,"PERSONALIZA TU PERSONAJE",ink,2);
+    box(top,22,43,178,174,{191,169,132});box(top,210,43,168,174,{176,160,127});
+    image(top,doll,106,174,56,42,1);image(top,sprite,96,112,245,72,1);
+    text(top,226,57,"VISTA EN EL MUNDO",ink);
+    text(top,222,181,"X: GIRAR",ink);text(top,222,193,"HUMANO - CLASICO",ink);
+    text(top,(400-int(e.draft.name.size())*12)/2,218,e.draft.name,ink,2);
+    canvasWidth=320;
+    drawHudFrame(bottom,{},false,true);
+    text(bottom,18,13,fresh?"CREAR PERSONAJE":"PERSONALIZACION",ink,1,40);
+    const char*tabs[]={"IDENTIDAD","ASPECTO","VESTIMENTA"};
+    for(int i=0;i<3;++i){box(bottom,12+i*99,27,97,22,ink);box(bottom,14+i*99,29,93,18,i==e.page?gold:light);text(bottom,19+i*99,35,tabs[i],ink);}
+    for(int r=0;r<5;++r){int f=e.page*5+r,y=57+r*25;
+        box(bottom,12,y,296,23,r==e.row?gold:Color{218,195,148});text(bottom,18,y+3,e.label(f),ink,1,22);
+        text(bottom,151,y+12,e.value(f),ink,1,25);text(bottom,18,y+13,"<",ink);text(bottom,295,y+13,">",ink);
+    }
+    text(bottom,15,187,e.message.empty()?"L/R: PAGINA  X: GIRAR  Y: AZAR":e.message,ink,1,48);
+    text(bottom,15,197,"PAD: CAMBIAR  A: EDITAR  START: GUARDAR",ink,1,48);
+    for(int i=0;i<2;++i){box(bottom,12+i*151,207,145,24,ink);box(bottom,14+i*151,209,141,20,i?gold:light);text(bottom,35+i*151,216,i?(fresh?"CREAR JUEGO":"GUARDAR"):"B: CANCELAR",ink);}
 }
 
 }

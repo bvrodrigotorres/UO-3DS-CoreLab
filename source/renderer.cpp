@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "renderer.hpp"
 #include "avatar.hpp"
+#include "character.hpp"
 #include "repairs.hpp"
 #include "character_depth.hpp"
 #include "performance.hpp"
@@ -34,9 +35,32 @@ static std::vector<size_t>sheetCosts;
 static std::vector<uint64_t>sheetUsed;
 static uint64_t textureClock=0;
 static constexpr size_t WorldTextureBudget=10*1024*1024;
-static C2D_SpriteSheet avatar,outfit;
+struct Outfit {
+    C2D_SpriteSheet legacy=nullptr;
+    C3D_Tex texture{};
+    std::array<Tex3DS_SubTexture,72>frames{};
+    bool custom=false;
+};
+static C2D_SpriteSheet avatar;
+static Outfit*outfit=nullptr;
+static const CharacterAssets*characterAssets=nullptr;
+static Appearance characterAppearance;
+static void freeOutfit(Outfit*p){if(!p)return;if(p->custom)C3D_TexDelete(&p->texture);else if(p->legacy)C2D_SpriteSheetFree(p->legacy);delete p;}
+static C2D_Image outfitImage(Outfit*p,unsigned n){return p->custom?C2D_Image{&p->texture,&p->frames[n]}:C2D_SpriteSheetGetImage(p->legacy,n);}
+static size_t outfitBytes(Outfit*p){return p->custom?p->texture.size:C2D_SpriteSheetGetImage(p->legacy,0).tex->size;}
+static Outfit*customOutfit(const std::vector<uint16_t>&pixels){
+    if(pixels.size()!=72*96*112)return nullptr;
+    auto*p=new Outfit;
+    if(!C3D_TexInit(&p->texture,1024,1024,GPU_RGBA5551)){delete p;return nullptr;}
+    p->custom=true;std::memset(p->texture.data,0,p->texture.size);
+    auto*data=static_cast<uint16_t*>(p->texture.data);
+    for(unsigned n=0;n<72;++n){unsigned left=n%10*96,top=n/10*112;
+        p->frames[n]={96,112,left/1024.f,1-top/1024.f,(left+96)/1024.f,1-(top+112)/1024.f};
+        for(unsigned y=0;y<112;++y)for(unsigned x=0;x<96;++x)data[characterTexel(left+x,top+y,1024)]=pixels[n*96*112+y*96+x];}
+    C3D_TexFlush(&p->texture);C3D_TexSetFilter(&p->texture,GPU_NEAREST,GPU_NEAREST);return p;
+}
 static unsigned outfitMask=99;
-static EquipmentCache<C2D_SpriteSheet>outfitCache;
+static EquipmentCache<Outfit*>outfitCache;
 static std::vector<C2D_SpriteSheet>npcSheets;
 static size_t npcBytes;
 static C2D_SpriteSheet corpseSheet=nullptr;static std::vector<uint8_t>corpseTypes;static std::array<std::array<int,2>,5>corpsePivots{};static size_t corpseBytes=0;
@@ -123,7 +147,7 @@ bool rendererInit(){
 void rendererShutdown(){
     C3D_FrameSync();for(auto s:sheets)if(s)C2D_SpriteSheetFree(s);sheets.clear();
     if(avatar)C2D_SpriteSheetFree(avatar);
-    for(unsigned i=0;i<8;++i)if(auto cached=outfitCache.remove(i))C2D_SpriteSheetFree(cached);
+    for(unsigned i=0;i<8;++i)if(auto cached=outfitCache.remove(i))freeOutfit(cached);
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
     npcSheets.clear();if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);corpseSheet=nullptr;corpseBytes=0;
     C3D_TexDelete(&labelFont);C3D_TexDelete(&white);if(buffer)linearFree(buffer);
@@ -210,22 +234,42 @@ bool prepareEquipment(unsigned mask,const EquipmentArt&art,std::string&error){
     if(mask>7)return false;
     if(auto cached=outfitCache.get(mask)){outfit=cached;outfitMask=mask;error.clear();return true;}
     if(art.dolls.empty()){error="FALTAN RECURSOS DE EQUIPO";return mask==0;}
+    std::vector<uint16_t>customPixels;
+    bool custom=characterAppearance.enabled&&characterAssets;
+    if(custom&&!characterAssets->compose(characterAppearance,mask,customPixels)){error="PERSONAJE: CAPAS INCOMPLETAS";return false;}
     char path[128];std::snprintf(path,sizeof path,"sdmc:/3ds/UO-3DS-CoreLab/equip_%02u.t3x",mask);
-    if(!equipmentChecksum(path,art.checksums[mask])){error="EQUIPO: ATLAS INVALIDO";return false;}
+    if(!custom&&!equipmentChecksum(path,art.checksums[mask])){error="EQUIPO: ATLAS INVALIDO";return false;}
     // Keep the current outfit intact if a new load fails. Leave at least 2 MiB
     // of linear memory for gameplay; cold misses evict only inactive outfits.
     C3D_FrameSync();
     constexpr size_t required=2*1024*1024,reserve=2*1024*1024;
     while(linearSpaceFree()<required+reserve||(streamed&&outfitCache.bytes()>=8*1024*1024)){
         int victim=outfitCache.victim(outfitMask);if(victim<0)break;
-        C2D_SpriteSheetFree(outfitCache.remove(unsigned(victim)));
+        freeOutfit(outfitCache.remove(unsigned(victim)));
     }
     if(linearSpaceFree()<required+reserve){error="EQUIPO: MEMORIA RESERVADA";return false;}
-    auto next=C2D_SpriteSheetLoad(path);
-    if(!next||C2D_SpriteSheetCount(next)!=72){if(next)C2D_SpriteSheetFree(next);error="EQUIPO: SIN MEMORIA O ATLAS INVALIDO";return false;}
-    auto image=C2D_SpriteSheetGetImage(next,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);
-    outfitCache.insert(mask,next,image.tex->size);
+    Outfit*next=nullptr;
+    if(custom)next=customOutfit(customPixels);
+    else {auto sheet=C2D_SpriteSheetLoad(path);
+        if(sheet&&C2D_SpriteSheetCount(sheet)==72){next=new Outfit;next->legacy=sheet;auto image=outfitImage(next,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);}
+        else if(sheet)C2D_SpriteSheetFree(sheet);
+    }
+    if(!next){error="EQUIPO: SIN MEMORIA O ATLAS INVALIDO";return false;}
+    outfitCache.insert(mask,next,outfitBytes(next));
     outfit=next;outfitMask=mask;error.clear();return true;
+}
+void clearAppearance(){C3D_FrameSync();for(unsigned i=0;i<8;++i)freeOutfit(outfitCache.remove(i));outfit=nullptr;outfitMask=99;characterAssets=nullptr;characterAppearance=Appearance{};}
+bool applyAppearance(const CharacterAssets&assets,const Appearance&a,EquipmentArt&art,unsigned mask,std::string&error){
+    std::vector<uint8_t>dolls;std::vector<uint16_t>pixels;
+    if(!assets.dolls(a,dolls)||!assets.compose(a,mask,pixels)){error="FALTAN CAPAS DE PERSONALIZACION";return false;}
+    C3D_FrameSync();
+    // Editor transitions may discard streamed world pages, never world data.
+    if(streamed){for(auto&sheet:sheets)if(sheet){C2D_SpriteSheetFree(sheet);sheet=nullptr;}bytes=0;}
+    while(linearSpaceFree()<4*1024*1024){int victim=outfitCache.victim(outfitMask);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
+    auto*next=customOutfit(pixels);if(!next){error="PERSONALIZACION: SIN MEMORIA";return false;}
+    for(unsigned i=0;i<8;++i)freeOutfit(outfitCache.remove(i));
+    characterAssets=&assets;characterAppearance=a;art.dolls=std::move(dolls);art.playerName=a.name;
+    outfitCache.insert(mask,next,outfitBytes(next));outfit=next;outfitMask=mask;error.clear();return true;
 }
 void warmEquipment(unsigned current,const EquipmentArt&art){
     std::string ignored;
@@ -254,7 +298,7 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
             int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&(victim<0||sheetUsed[j]<sheetUsed[victim]))victim=int(j);
             if(victim>=0){auto image=C2D_SpriteSheetGetImage(sheets[victim],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[victim]);sheets[victim]=nullptr;continue;}
             victim=outfitCache.victim(outfitMask);if(victim<0)break;
-            C2D_SpriteSheetFree(outfitCache.remove(unsigned(victim)));
+            freeOutfit(outfitCache.remove(unsigned(victim)));
         }
         if(linearSpaceFree()<sheetCosts[i]+2*1024*1024){textureFailure=true;continue;}
         char name[32];std::snprintf(name,sizeof name,"atlas_%02u.t3x",unsigned(i));
@@ -376,10 +420,11 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }else{
             afterActor=true;
             Point foot=project(cameraX,cameraY,footZ);
-            auto player=authentic&&outfit?outfit:avatar;
-            if(player){
-                unsigned index=avatarImage(direction,moving,running&&(authentic&&outfit?true:runVerified),frame,C2D_SpriteSheetCount(player));
-                auto image=C2D_SpriteSheetGetImage(player,index);
+            bool dressed=authentic&&outfit;
+            auto player=avatar;
+            if(dressed||player){
+                unsigned index=avatarImage(direction,moving,running&&(authentic&&outfit?true:runVerified),frame,dressed?72:C2D_SpriteSheetCount(player));
+                auto image=dressed?outfitImage(outfit,index):C2D_SpriteSheetGetImage(player,index);
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};
                 Point uv[4];uvFor(image,uv);float tint=status&&status->flash>0?.35f:1;quad(p,uv,image.tex,1,tint,tint,1);
