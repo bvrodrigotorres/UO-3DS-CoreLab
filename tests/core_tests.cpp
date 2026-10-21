@@ -9,7 +9,19 @@
 #include <random>
 #include <cstring>
 #include <fstream>
+#include <cerrno>
+#include <sys/stat.h>
 using namespace lab;
+static int fatRename(const char*source,const char*target){
+    struct stat info;
+    if(stat(target,&info)==0){errno=EEXIST;return -1;}
+    return std::rename(source,target);
+}
+static int failInstall(const char*source,const char*target){
+    std::string path=source;
+    if(path.size()>=4&&path.substr(path.size()-4)==".tmp"){errno=EIO;return -1;}
+    return fatRename(source,target);
+}
 int main(int argc,char**argv){
     if(argc==3&&std::string(argv[1])=="--exploration"){
         std::string root=argv[2],error;World w=demoWorld();Actor a={7,7,4},b={0,0,0};
@@ -18,6 +30,19 @@ int main(int argc,char**argv){
         assert(a.x==b.x&&a.y==b.y&&a.z==b.z);
         assert(savePosition(file,w,{8,10,0},error));
         assert(loadPosition(file,w,b,error)&&b.x==8&&b.y==10);
+        // Emulate SD/FAT rename: an existing target cannot be overwritten.
+        for(int i=0;i<4;++i){
+            assert(savePosition(file,w,{7+i,10,0},error,fatRename));
+            assert(loadPosition(file,w,b,error)&&b.x==7+i&&b.y==10);
+        }
+        assert(!savePosition(file,w,{5,10,0},error,failInstall));
+        assert(loadPosition(file,w,b,error)&&b.x==10); // rollback kept last save
+        // Simulated interruption after the old file moved to .bak.
+        std::remove((file+".bak").c_str());
+        assert(fatRename(file.c_str(),(file+".bak").c_str())==0);
+        assert(loadPosition(file,w,b,error)&&b.x==10);
+        assert(savePosition(file,w,{8,10,0},error,fatRename));
+        assert(loadPosition(file,w,b,error)&&b.x==8);
         World changed=w;changed.vertices[0]++;
         assert(!loadPosition(file,changed,b,error));
         {std::fstream f(file,std::ios::binary|std::ios::in|std::ios::out);f.seekp(9);f.put('x');}

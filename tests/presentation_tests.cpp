@@ -21,6 +21,16 @@ int main(int argc,char**argv){
     assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==.18f);
     roof.height=1;assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==1);
     roof.flags=0;roof.height=80;assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==1);
+    // At Z12 outside: ground-floor walls at Z20 remain, the entire next
+    // storey at Z40 disappears, regardless of flags or screen overlap.
+    roof.flags=Wall;roof.z=20;roof.height=20;
+    assert(objectOpacity(roof,12,RoofMode::Hidden,false,away)==1);
+    roof.z=40;
+    assert(objectOpacity(roof,12,RoofMode::Hidden,false,away)==0);
+    roof.flags=0;
+    assert(objectOpacity(roof,12,RoofMode::Hidden,false,away)==0);
+    assert(objectOpacity(roof,40,RoofMode::Hidden,false,away)==1);
+    assert(objectOpacity(roof,12,RoofMode::Full,true,covering)==1);
     assert(nextRoofMode(nextRoofMode(nextRoofMode(RoofMode::Auto)))==RoofMode::Auto);
     // Overhang regression: object on a neighboring cell can cover the actor.
     roof.flags=Roof;roof.z=58;roof.x=5;roof.y=7;

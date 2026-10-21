@@ -36,7 +36,10 @@ int main(){
         if(down&KEY_START)break;
         if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
         if(down&KEY_R)showMap=!showMap;
-        if((down&KEY_SELECT)&&!moving)lab::savePosition(positionPath(),*w,actor,saveMessage);
+        if(down&KEY_SELECT){
+            if(moving)saveMessage="Stop moving before saving";
+            else lab::savePosition(positionPath(),*w,actor,saveMessage);
+        }
         if((down&KEY_L)&&!moving&&lab::loadPosition(positionPath(),*w,actor,saveMessage))alignCamera();
         if((down&KEY_X)&&!moving){
             if(available)authentic=!authentic;

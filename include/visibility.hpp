@@ -12,7 +12,9 @@ struct ScreenRect {float left,top,right,bottom;};
 inline float objectOpacity(const Object&o,float footZ,RoofMode mode,bool afterActor,ScreenRect r){
     if(mode==RoofMode::Full)return 1;
     bool upper=(o.flags&(Roof|Surface))&&o.z>=footZ+14;
-    if(mode==RoofMode::Hidden&&upper)return 0;
+    // Cut the whole upper level, including walls, trim and furniture.
+    // A flag-only roof filter leaves unsupported upper-storey walls floating.
+    if(mode==RoofMode::Hidden&&o.z>=footZ+14)return 0;
     bool wall=(o.flags&Wall)&&o.z+o.height>footZ+5;
     bool overlaps=r.left<213&&r.right>187&&r.top<131&&r.bottom>81;
     return afterActor&&(upper||wall)&&overlaps?.18f:1.f;
