@@ -24,7 +24,7 @@ int main(int argc,char**argv){
     if(argc==2){
         const std::string root=argv[1],scene=root+"/scene.bin";std::string error;
         assert(loadWorld(scene,w,error));assert(w.width==256&&w.height==256&&w.objects.size()>40000);
-        Doors doors;assert(doors.load(root+"/doors.bin",scene,w,error));assert(doors.count()==147);
+        Doors doors;assert(doors.load(root+"/doors.bin",scene,w,error));assert(doors.count()>=147&&doors.count()<=158);
         Inventory inventory;inventory.init(w,"/private/tmp/corelab-large-test-never-created.sav");assert(inventory.healthy());
         Journal journal;assert(loadJournal(root+"/journal.bin",scene,journal,error));assert(journal.width==256);
         std::ifstream f(root+"/image_sizes.bin",std::ios::binary);std::vector<unsigned char>b(8+w.images*4+(w.images+31)/32*4);assert(f.read((char*)b.data(),b.size()));

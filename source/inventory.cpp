@@ -35,7 +35,7 @@ void Inventory::init(const World&w,const std::string&p){
             chests.push_back({i,loot});
         }
     }
-    identity=hash(key);message="ACERCATE A UN COFRE";
+    identity=w.compatibleInventory?w.compatibleInventory:hash(key);message="ACERCATE A UN COFRE";
     std::string input=path;
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}

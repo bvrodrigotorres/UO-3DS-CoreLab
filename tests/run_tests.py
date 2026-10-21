@@ -85,6 +85,62 @@ class SceneTests(unittest.TestCase):
         with self.assertRaises(ValueError):placements('SomeAddon 0x123\n1501 1611 40\n',1488,1596,32)
         with self.assertRaises(ValueError):placements('malformed',1488,1596,32)
 
+    def test_original_door_precedence(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from import_britain import resolve_doors
+        source='class MetalDoor : BaseDoor { : base(0x675 + (2 * (int)facing), 0x676 + (2 * (int)facing), 0, 0, offset) {} }'
+        explicit=[dict(x=3,y=3,z=0,art=0x675,hue=0,type='MetalDoor',props='Facing=WestCW'),dict(x=4,y=3,z=0,art=0x677,hue=0,type='MetalDoor',props='Facing=EastCCW')]
+        generic=[dict(x=3,y=3,z=0,art=0x6A5,hue=0,type='DarkWoodDoor',open_art=0x6A6,dx=-1,dy=1,facing='WestCW',pair=None)]
+        remaining,doors,promoted=resolve_doors([(7,7,0,0x675,0)],explicit,generic,source,16)
+        self.assertEqual(remaining,[])
+        self.assertEqual(len(doors),3)
+        self.assertEqual(doors[0]['art'],0x675)
+        self.assertEqual(doors[0]['open_art'],0x676)
+        self.assertEqual(doors[0]['pair'],1)
+        self.assertEqual(doors[1]['pair'],0)
+        self.assertEqual(promoted,[0])
+        self.assertEqual(doors[2]['base_index'],0)
+
+    def test_door_only_save_migration(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_save_compat import export,fnv
+        with tempfile.TemporaryDirectory() as folder:
+            old=Path(folder)/'old.bin';new=Path(folder)/'new.bin'
+            raw=self.fixture();old.write_bytes(raw);new.write_bytes(raw)
+            alias=export(old,new)
+            magic,checksum,pos,inventory=struct.unpack('<4sIII',alias.read_bytes())
+            self.assertEqual(magic,b'UWC1');self.assertEqual(checksum,fnv(raw));self.assertTrue(pos and inventory)
+            self.assertEqual(subprocess.run([str(self.binary),str(new)],capture_output=True).returncode,0)
+            data=bytearray(alias.read_bytes());data[4]^=1;alias.write_bytes(data)
+            self.assertEqual(subprocess.run([str(self.binary),str(new)],capture_output=True).returncode,2)
+            new.write_bytes(raw[:32]+bytes([1])+raw[33:])
+            with self.assertRaises(ValueError):export(old,new)
+
+    def test_spawner_identity_and_rectangles(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_population import spawn_requests
+        def point(uid,x,y,width,height,objects,count,running='True'):
+            values=dict(UniqueId=uid,Map='Felucca',IsRunning=running,InContainer='False',X=x,Y=y,Width=width,Height=height,CentreX=x+width//2,CentreY=y+height//2,CentreZ=0,Range=5,Objects2=objects,MaxCount=count)
+            return '<Points>'+''.join('<'+k+'>'+str(v)+'</'+k+'>' for k,v in values.items())+'</Points>'
+        one=point('a',10,10,0,0,'mage:MX=2:OBJ=alchemist:MX=2',3)
+        two=point('b',10,10,0,0,'mage:MX=2:OBJ=alchemist:MX=2',3)
+        edge=point('c',0,20,12,4,'Chicken:MX=5',5)
+        inactive=point('d',11,11,0,0,'Cat:MX=2',2,'False')
+        with tempfile.TemporaryDirectory() as t:
+            path=Path(t)/'spawns.xml';path.write_text('<Spawns>'+one+two+edge+inactive+'</Spawns>')
+            rows,excluded,duplicates=spawn_requests(path,(10,10),16)
+            self.assertEqual(len(rows),11)
+            self.assertEqual(sum(r['animal'] for r in rows),5)
+            self.assertEqual(duplicates,0)
+            self.assertEqual(set(r['spawner'] for r in rows),{'a','b','c'})
+            self.assertEqual(next(r['bounds'] for r in rows if r['animal']),[0,10,2,14])
+            path.write_text('<Spawns>'+one+one+'</Spawns>')
+            rows,_,duplicates=spawn_requests(path,(10,10),16)
+            self.assertEqual((len(rows),duplicates),(3,1))
+
     def test_npc_simulation(self):
         binary=Path(self.temp.name)/'npc_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_tests.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)

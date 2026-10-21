@@ -84,7 +84,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
         Actor next;int actual;
         if(!n.roam)continue;
         if(!n.animal&&doors.tryOpen(n.position,dx[d],dy[d]))continue;
-        if(!step(w,n.position,d,next,actual)||next.z!=n.home.z||std::abs(next.x-n.home.x)>n.roam||std::abs(next.y-n.home.y)>n.roam||
+        if(!step(w,n.position,d,next,actual)||(!n.animal&&next.z!=n.home.z)||std::abs(next.x-n.home.x)>n.roam||std::abs(next.y-n.home.y)>n.roam||
            same(next,player)||(playerMoving&&same(next,from))||occupied(next,(int)i))continue;
         if(actual&1){
             Actor s1{n.position.x+dx[actual],n.position.y,n.position.z},s2{n.position.x,n.position.y+dy[actual],n.position.z};

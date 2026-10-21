@@ -33,6 +33,14 @@ bool loadWorld(const std::string&path,World&out,std::string&error){
         if(!w.contains(o.x,o.y)||!imageOK(o.image)||pad){error="Invalid object";return false;}w.objects.push_back(o);
     }
     if(!ok){error="Truncated scene";return false;}
+    std::ifstream migration(path+".saves",std::ios::binary);
+    if(migration){
+        unsigned char a[16];migration.read((char*)a,16);
+        auto u=[&](int at){return uint32_t(a[at])|uint32_t(a[at+1])<<8|uint32_t(a[at+2])<<16|uint32_t(a[at+3])<<24;};
+        uint32_t hash=2166136261u;for(auto v:b)hash=(hash^v)*16777619u;
+        if(!migration||migration.peek()!=EOF||std::memcmp(a,"UWC1",4)||u(4)!=hash||!u(8)||!u(12)){error="Invalid save migration";return false;}
+        w.compatiblePosition=u(8);w.compatibleInventory=u(12);
+    }
     w.index();out=std::move(w);error.clear();return true;
 }
 }

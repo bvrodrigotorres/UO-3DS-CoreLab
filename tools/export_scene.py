@@ -227,7 +227,7 @@ def main():
         decoration=json.loads(args.decorations.read_text())
         if decoration['origin']!=[args.x,args.y] or decoration['side']!=args.side or decoration['base_objects']!=base_count:
             raise ValueError('Decoration manifest belongs to another region')
-        for obj in decoration['placements']+decoration['doors']:
+        for obj in decoration['placements']+[d for d in decoration['doors'] if 'base_index' not in d]:
             rows.append(tuple(obj[k] for k in ('x','y','z','art','hue')))
     if len(rows) > 131072:
         raise ValueError('Scene exceeds 131072 objects; choose a smaller region')
@@ -287,8 +287,10 @@ def main():
         objects.append(OBJECT.pack(x, y, z, height, art, hue, picture('static', art), flags, order, 0))
     door_records=[]
     if decoration:
+        append_index=base_count+len(decoration['placements'])
         for n,door in enumerate(decoration['doors']):
-            index=base_count+len(decoration['placements'])+n
+            if 'base_index' in door:index=door['base_index']
+            else:index=append_index;append_index+=1
             opened=picture('static',door['open_art'])
             pair=door['pair'] if door['pair'] is not None else 65535
             door_records.append(struct.pack('<IHHbbH',index,door['open_art'],opened,door['dx'],door['dy'],pair))

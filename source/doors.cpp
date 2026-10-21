@@ -22,7 +22,7 @@ bool Doors::load(const std::string&path,const std::string&scene,const World&w,st
     for(unsigned i=0;i<count;++i){
         size_t p=16+12*i,index=n(p,4);DoorState d;
         d.index=index;d.openArt=n(p+4,2);d.openImage=n(p+6,2);d.dx=(int8_t)b[p+8];d.dy=(int8_t)b[p+9];d.pair=n(p+10,2);
-        if(index>=w.objects.size()||index<base||indices[index]!=-1||d.openImage>=w.images||std::abs(d.dx)>1||std::abs(d.dy)>1||(d.pair!=65535&&(d.pair>=count||d.pair==i))){error="Invalid door record";return false;}
+        if(index>=w.objects.size()||indices[index]!=-1||d.openImage>=w.images||std::abs(d.dx)>1||std::abs(d.dy)>1||(d.pair!=65535&&(d.pair>=count||d.pair==i))){error="Invalid door record";return false;}
         d.closed=w.objects[index];
         if(!(d.closed.flags&Door)||!w.contains(d.closed.x+d.dx,d.closed.y+d.dy)){error="Invalid door placement";return false;}
         indices[index]=i;next.push_back(d);

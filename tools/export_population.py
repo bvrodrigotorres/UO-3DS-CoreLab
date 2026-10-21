@@ -9,7 +9,7 @@ from export_journal import fnv
 
 # Mobile classes in the pinned reference. These book spawners are not mobiles.
 BOOKS={'trades','britanniawaters','maceandblade','lightandmight','artssection','foldedsteel','oilandoubliette','wizardscompendium','understandinganimals','songsofnote','skeletonkey','pasttreasures'}
-ANIMALS={'bird':6,'cat':201,'dog':217,'rat':238}
+ANIMALS={'bird':6,'cat':201,'dog':217,'rat':238,'chicken':208}
 # Deterministic original-client clothes, grouped by profession. Runtime random
 # outfit state of a live server cannot be recovered from static spawn records.
 PROFILES={
@@ -41,27 +41,33 @@ def profile(kind):
     return 'merchant'
 
 def spawn_requests(path,origin,side):
-    rows=[];excluded=[];duplicates=0;seen=set()
+    rows=[];excluded=[];duplicates=0;seen={}
     for node in ET.parse(path).getroot().findall('Points'):
+        if node.findtext('Map','Felucca')!='Felucca' or node.findtext('IsRunning','True')=='False' or node.findtext('InContainer','False')=='True':continue
         x,y,z=(int(node.findtext(k)) for k in ('CentreX','CentreY','CentreZ'))
-        if not origin[0]<=x<origin[0]+side or not origin[1]<=y<origin[1]+side:continue
+        ax,ay,width,height=(int(node.findtext(k,str(v))) for k,v in zip(('X','Y','Width','Height'),(x,y,0,0)))
+        if width<0 or height<0:raise ValueError('Negative spawn rectangle')
+        left,top=max(ax,origin[0]),max(ay,origin[1]);right,bottom=min(ax+width,origin[0]+side-1),min(ay+height,origin[1]+side-1)
+        if left>right or top>bottom:continue
+        uid=node.findtext('UniqueId')
+        signature=ET.tostring(node)
+        if uid and uid in seen:
+            if seen[uid]!=signature:raise ValueError('Conflicting spawner UniqueId')
+            duplicates+=1;continue
+        if uid:seen[uid]=signature
         parts=[]
         for text in node.findtext('Objects2','').split(':OBJ='):
             fields=text.split(':');kind=fields[0];mx=next((int(f[3:]) for f in fields if f.startswith('MX=')),1)
             if kind.lower() in BOOKS:excluded.append(kind);continue
             if kind and mx>0:parts.append((kind,mx))
-        signature=(x,y,z,int(node.findtext('Range')),tuple((k.lower(),n) for k,n in parts))
         if not parts:continue
-        if signature in seen:duplicates+=1;continue
-        seen.add(signature);left=max(0,min(int(node.findtext('MaxCount')),sum(n for k,n in parts)))
-        # Round-robin matches maxima without multiplying a shared MaxCount.
+        count=max(0,min(int(node.findtext('MaxCount')),sum(n for k,n in parts)))
         counts=[0]*len(parts)
-        while left:
-            for i,(kind,maximum) in enumerate(parts):
-                if counts[i]<maximum and left:
-                    animal=kind.lower() in ANIMALS
-                    rows.append(dict(type=kind,x=x-origin[0],y=y-origin[1],z=z,roam=min(120,int(node.findtext('Range'))),animal=animal,profile=profile(kind),source=node.findtext('Name')))
-                    counts[i]+=1;left-=1
+        for slot in range(count):
+            # Deterministic fair initial fill; live servers choose entries randomly.
+            i=next(i for i in range(len(parts)) if counts[i]<parts[i][1] and counts[i]==min(counts[j] for j in range(len(parts)) if counts[j]<parts[j][1]))
+            kind,maximum=parts[i];counts[i]+=1;animal=kind.lower() in ANIMALS
+            rows.append(dict(type=kind,x=max(left,min(right,x))-origin[0],y=max(top,min(bottom,y))-origin[1],z=z,roam=max(0,min(120,int(node.findtext('Range')))),animal=animal,profile=profile(kind),source=node.findtext('Name'),spawner=uid,source_center=[x,y,z],bounds=[left-origin[0],top-origin[1],right-origin[0],bottom-origin[1]],original_bounds=[ax,ay,ax+width,ay+height],max_count=int(node.findtext('MaxCount')),min_delay=node.findtext('MinDelay'),max_delay=node.findtext('MaxDelay'),relative_home=node.findtext('IsHomeRangeRelative','True')=='True'))
     return rows,excluded,duplicates
 
 def read_layer(client,body,action,direction):
@@ -122,7 +128,7 @@ def main():
     for row in rows:row['style']=names.index(row['profile'])
     (a.out/'requests.json').write_text(json.dumps(rows,indent=2))
     with (a.out/'requests.bin').open('wb') as f:
-        for row in rows:f.write(struct.pack('<HHhHHH32s',row['x'],row['y'],row['z'],row['style'],row['roam'],int(row['animal']),row['type'].upper().encode('ascii')[:31].ljust(32,b'\0')))
+        for row in rows:f.write(struct.pack('<HHhHHH32s',row['x'],row['y'],row['z'],row['style'],row['roam'],int(row['animal']),row['type'].upper().encode('ascii')[:31].ljust(32,b'\0'))+struct.pack('<4H',*row['bounds']))
     report=dict(count=len(rows),humans=sum(not r['animal'] for r in rows),animals=sum(r['animal'] for r in rows),styles=styles,excluded_objects=excluded,duplicate_spawners=duplicates,source_sha256=hashlib.sha256(a.reference.read_bytes()).hexdigest(),source_revision='ServUO pub57 d76bf4443cf76d081ddaf8f57c87ff33749256af',scene_fnv=fnv(raw))
     (a.out/'manifest.json').write_text(json.dumps(report,indent=2));print(json.dumps({k:v for k,v in report.items() if k!='styles'},indent=2))
     placer=a.out/'place-population'

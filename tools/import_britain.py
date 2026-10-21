@@ -84,6 +84,49 @@ def generate_doors(rows,data,source,ox,oy,side,boundary=None):
                 d['pair']=next(k for k,t in enumerate(doors) if (t['x'],t['y'],t['z'])==other)
     return doors
 
+def resolve_doors(rows,additions,generated,source,side):
+    """Explicit decoration/static doors take precedence over generic frame doors."""
+    families={}
+    for kind,closed,opened in re.findall(r'class (\w+) : BaseDoor.*?: base\((0x[\da-fA-F]+) \+ \(2 \* \(int\)facing\), (0x[\da-fA-F]+) \+',source,re.S):
+        families[kind]=(int(closed,16),int(opened,16))
+    if not families:raise ValueError('Missing door families')
+    explicit=[];remaining=[];promoted=[]
+    def convert(row):
+        kind=row['type'];base,opened=families[kind]
+        match=re.search(r'Facing\s*=\s*(\w+)',row.get('props',''))
+        facing=FACING.index(match[1]) if match else (row['art']-base)//2
+        if not 0<=facing<8:raise ValueError('Unsupported door facing')
+        d=dict(row,art=base+2*facing,open_art=opened+2*facing,dx=OFFSETS[facing][0],dy=OFFSETS[facing][1],facing=FACING[facing],pair=None)
+        if not 0<=d['x']+d['dx']<side or not 0<=d['y']+d['dy']<side:return None
+        return d
+    for row in additions:
+        if row['type'] in families:
+            d=convert(row)
+            if d:explicit.append(d)
+            else:remaining.append(row)
+        else:remaining.append(row)
+    for index,(x,y,z,art,hue) in enumerate(rows):
+        for kind,(base,opened) in families.items():
+            if base<=art<base+16 and (art-base)%2==0:
+                d=convert(dict(x=x,y=y,z=z,art=art,hue=hue,type=kind,base_index=index))
+                if d:explicit.append(d);promoted.append(index)
+                break
+    doors={}
+    for d in explicit:
+        key=(d['x'],d['y'],d['z'])
+        if key in doors and doors[key]['art']!=d['art']:raise ValueError('Conflicting original door materials')
+        doors[key]=d
+    for d in generated:doors.setdefault((d['x'],d['y'],d['z']),dict(d,pair=None))
+    result=list(doors.values())
+    # Original opposite-facing adjacent leaves are a linked pair.
+    opposites={0:1,1:0,2:3,3:2,4:5,5:4,6:7,7:6}
+    for i,d in enumerate(result):
+        f=FACING.index(d['facing']);axis=(1,0) if f<4 else (0,1)
+        for j,e in enumerate(result):
+            if i==j or e['z']!=d['z'] or e['pair'] is not None or d['pair'] is not None:continue
+            if abs(e['x']-d['x'])==axis[0] and abs(e['y']-d['y'])==axis[1] and FACING.index(e['facing'])==opposites[f]:d['pair']=j;e['pair']=i;break
+    return remaining,result,promoted
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--client',type=Path,required=True);p.add_argument('--reference',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--x',type=int,default=1488);p.add_argument('--y',type=int,default=1596);p.add_argument('--side',type=int,default=32);args=p.parse_args()
     if args.out.exists():raise FileExistsError(args.out)
@@ -102,11 +145,12 @@ def main():
     boundary=[]
     doors=generate_doors(rows,data,(args.reference/'DoorGenerator.cs').read_text(),ox,oy,side,boundary)
     additions+=boundary
+    additions,doors,promoted=resolve_doors(rows,additions,doors,(args.reference/'Doors.cs').read_text(),side)
     existing=set(rows);unique=[];duplicates=0
     for r in additions:
         key=(r['x'],r['y'],r['z'],r['art'],r['hue'])
         if key in existing:duplicates+=1;continue
         existing.add(key);unique.append(r)
-    report=dict(origin=[ox,oy],side=side,source='ServUO pub57 Britain / patches / signs / door frames',base_objects=len(rows),decoration_candidates=len(additions),boundary_doors=len(boundary),duplicates=duplicates,placements=unique,doors=doors,source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in args.reference.iterdir() if f.is_file()})
+    report=dict(origin=[ox,oy],side=side,source='ServUO pub57 Britain / patches / signs / door frames',base_objects=len(rows),decoration_candidates=len(additions),boundary_doors=len(boundary),duplicates=duplicates,placements=unique,doors=doors,promoted_base_doors=promoted,source_sha256={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in args.reference.iterdir() if f.is_file()})
     args.out.write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(dict(base=len(rows),decoration=len(unique),doors=len(doors),types=sorted(set(r['type'] for r in unique))),indent=2))
 if __name__=='__main__':main()

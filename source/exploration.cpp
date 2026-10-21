@@ -9,6 +9,7 @@
 namespace lab {
 static uint32_t hashBytes(const unsigned char*p,size_t n){uint32_t h=2166136261u;for(size_t i=0;i<n;++i)h=(h^p[i])*16777619u;return h;}
 static uint32_t worldId(const World&w){
+    if(w.compatiblePosition)return w.compatiblePosition;
     uint32_t h=2166136261u;
     auto add=[&](uint64_t v){for(int i=0;i<8;++i){h=(h^(v&255))*16777619u;v>>=8;}};
     add(w.width);add(w.height);add(w.originX);add(w.originY);
