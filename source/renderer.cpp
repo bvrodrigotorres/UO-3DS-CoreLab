@@ -36,13 +36,22 @@ static std::vector<Draw>mergedDraws;
 static constexpr int Capacity=65536;
 static void push(Vertex v,C3D_Tex*texture){
     if(used>=Capacity){overflow=true;return;}
-    if(batches.empty()||batches.back().texture!=texture||batches.back().mode!=pixelMode)batches.push_back({texture,used,0,pixelMode});
+    const auto state=pixelMode==PixelMode::Character?PixelMode::World:pixelMode;
+    if(batches.empty()||batches.back().texture!=texture||batches.back().mode!=state)batches.push_back({texture,used,0,state});
     buffer[used++]=v;++batches.back().count;
 }
 struct Point {float x,y;};
 static void quad(const Point*p,const Point*uv,C3D_Tex*texture,float r,float g,float b,float a){
+    const auto savedMode=pixelMode;
+    if(pixelMode==PixelMode::Support){
+        float left=p[0].x,right=left,top=p[0].y,bottom=top;
+        for(int i=1;i<4;++i){left=std::min(left,p[i].x);right=std::max(right,p[i].x);top=std::min(top,p[i].y);bottom=std::max(bottom,p[i].y);}
+        // No protected player texels exist outside its sprite footprint.
+        if(right<=152||left>=248||bottom<=19||top>=131)pixelMode=PixelMode::World;
+    }
     const int indices[]={0,1,2,2,3,0};
     for(int i:indices)push({p[i].x,p[i].y,pixelMode==PixelMode::Character?CharacterDepthZ:WorldDepthZ,uv[i].x,uv[i].y,r,g,b,a},texture);
+    pixelMode=savedMode;
 }
 static void uvFor(C2D_Image image,Point*uv){
     Tex3DS_SubTextureTopLeft(image.subtex,&uv[0].x,&uv[0].y);
@@ -143,7 +152,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     }
     for(const auto&d:mergedDraws){
         pixelMode=d.kind==Kind::Actor?PixelMode::Character:
-            supportingFragment(w,d,actor,footZ)?PixelMode::Support:PixelMode::World;
+            afterActor&&supportingFragment(w,d,actor,footZ)?PixelMode::Support:PixelMode::World;
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
         ++objects;
@@ -225,12 +234,14 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     C3D_AlphaTest(true,GPU_GREATER,0);C3D_AlphaBlend(GPU_BLEND_ADD,GPU_BLEND_ADD,GPU_SRC_ALPHA,GPU_ONE_MINUS_SRC_ALPHA,GPU_ONE,GPU_ZERO);
     auto env=C3D_GetTexEnv(0);C3D_TexEnvInit(env);C3D_TexEnvSrc(env,C3D_Both,GPU_TEXTURE0,GPU_PRIMARY_COLOR,GPU_PRIMARY_COLOR);C3D_TexEnvFunc(env,C3D_Both,GPU_MODULATE);
     GSPGPU_FlushDataCache(buffer,used*sizeof(Vertex));
+    DepthStateCache depthState;
     for(const auto&batch:batches){
         // Alpha rejection precedes depth writes, so transparent sprite texels
         // never protect an empty rectangle. Foreground walls/items/NPC reset
         // the marker at their own opaque pixels, retaining normal occlusion.
-        C3D_DepthTest(true,batch.mode==PixelMode::Support?GPU_LEQUAL:GPU_ALWAYS,
-            batch.mode==PixelMode::Translucent?GPU_WRITE_COLOR:GPU_WRITE_ALL);
+        const bool support=batch.mode==PixelMode::Support,write=batch.mode!=PixelMode::Translucent;
+        if(depthState.change(support,write))
+            C3D_DepthTest(true,support?GPU_LEQUAL:GPU_ALWAYS,write?GPU_WRITE_ALL:GPU_WRITE_COLOR);
         C3D_TexBind(0,batch.texture);C3D_DrawArrays(GPU_TRIANGLES,batch.first,batch.count);
     }
     C3D_FrameEnd(0);

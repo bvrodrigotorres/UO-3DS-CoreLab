@@ -20,6 +20,14 @@ int main(int argc,char**argv){
     assert(!support(35,0,Surface,27));
     assert(!supportingFragment(w,{Kind::Npc,8,8,20,21,0,0},actor,37));
     assert(fragmentDepth(CharacterDepthZ)<fragmentDepth(WorldDepthZ));
+    DepthStateCache cached;unsigned changes=0;
+    for(int batch=0;batch<4000;++batch)changes+=cached.change(false,true);
+    assert(changes==1); // texture-only batches must not resend effect registers
+    assert(cached.change(true,true));assert(!cached.change(true,true));
+    assert(cached.change(false,false));assert(!cached.change(false,false));
+    assert(cached.change(false,true));
+    DepthStateCache nextFrame;assert(nextFrame.change(false,true));
+    static_assert(FrameCommandBytes==4*0x40000,"GPU command margin");
     // Emulate the explicit GPU depth test: supports use <=, all other draws
     // use ALWAYS. Normal opaque scenery releases the actor marker; rejected
     // transparent texels write neither color nor depth.

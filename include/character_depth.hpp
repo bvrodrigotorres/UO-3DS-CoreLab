@@ -17,6 +17,16 @@ inline bool supportingFragment(const World&w,const Draw&d,const Actor&a,float vi
     // Bridge tiles are walked at half their tiledata height (same as movement).
     return o.z+((o.flags&Bridge)?o.height/2:o.height)<=ceiling;
 }
+// A frame can exceed the library's 256 KiB default in a dense walking view.
+constexpr unsigned FrameCommandBytes=1024*1024;
+class DepthStateCache {
+    bool valid=false,previousTest=false,previousWrite=false;
+public:
+    bool change(bool testSupport,bool writeDepth){
+        if(valid&&testSupport==previousTest&&writeDepth==previousWrite)return false;
+        valid=true;previousTest=testSupport;previousWrite=writeDepth;return true;
+    }
+};
 constexpr float WorldDepthZ=0.f,CharacterDepthZ=.5f;
 // Mtx_OrthoTilt(-1,1,leftHanded=true) and DepthMap(true,-1,0).
 constexpr float fragmentDepth(float vertexZ){return .5f-.5f*vertexZ;}

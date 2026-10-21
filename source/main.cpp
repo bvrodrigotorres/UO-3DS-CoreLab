@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "core.hpp"
 #include "renderer.hpp"
+#include "character_depth.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include <3ds.h>
@@ -25,7 +26,7 @@ int main(){
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
-    if(!C3D_Init(C3D_DEFAULT_CMDBUF_SIZE)){gfxExit();return 1;}
+    if(!C3D_Init(lab::FrameCommandBytes)){gfxExit();return 1;}
     auto target=C3D_RenderTargetCreate(240,400,GPU_RB_RGBA8,GPU_RB_DEPTH16);
     if(!target||!lab::rendererInit()){consoleInit(GFX_BOTTOM,nullptr);std::printf("CoreLab: GPU init failed\nSTART to exit\n");while(aptMainLoop()){hidScanInput();if(hidKeysDown()&KEY_START)break;}C3D_Fini();gfxExit();return 1;}
     C3D_RenderTargetSetOutput(target,GFX_TOP,GFX_LEFT,GX_TRANSFER_FLIP_VERT(0)|GX_TRANSFER_OUT_TILED(0)|GX_TRANSFER_RAW_COPY(0)|GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8)|GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
@@ -201,7 +202,7 @@ int main(){
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};
             std::snprintf(line,sizeof(line),"XY %d,%d   Z %d | %s",actor.x+w->originX,actor.y+w->originY,actor.z,blocked);add();
-            std::snprintf(line,sizeof(line),"FPS %.1f | DRAW %lu",fps,(unsigned long)lab::drawnObjects());add();
+            std::snprintf(line,sizeof(line),"FPS %.1f DRAW %lu CMD %.0f%%",fps,(unsigned long)lab::drawnObjects(),C3D_GetCmdBufUsage()*100.f);add();
             std::snprintf(line,sizeof(line),"CPU %.2fMS | GPU %.2fMS",C3D_GetProcessingTime(),C3D_GetDrawingTime());add();
             {
                 auto heap=mallinfo();
