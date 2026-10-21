@@ -42,3 +42,5 @@ Cada dependencia conserva su propia licencia.
 
 No se distribuyen mapas, arte, sonidos o animaciones originales de Ultima Online.
 El usuario aporta los datos locales. Este proyecto no está afiliado a sus titulares.
+
+El conversor tools/export_avatar.py procede del trabajo previo del usuario en UO-3DS-Offline, adaptado aquí con acción 2 correcta y metadata. No se modifica el conversor ni los recursos del repositorio anterior.

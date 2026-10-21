@@ -18,6 +18,7 @@ static int uniformProjection;
 static C3D_Tex white;
 static std::vector<C2D_SpriteSheet> sheets;
 static C2D_SpriteSheet avatar;
+static bool runVerified=false;
 static size_t bytes,objects;
 static int used;
 static bool overflow;
@@ -60,6 +61,8 @@ bool rendererInit(){
     C3D_TexSetFilter(&white,GPU_NEAREST,GPU_NEAREST);
     avatar=C2D_SpriteSheetLoad("sdmc:/3ds/UO-3DS-CoreLab/player_anim.t3x");
     if(avatar&&C2D_SpriteSheetCount(avatar)<40){C2D_SpriteSheetFree(avatar);avatar=nullptr;}
+    runVerified=avatar&&C2D_SpriteSheetCount(avatar)==72&&verifyRunAtlas(
+        "sdmc:/3ds/UO-3DS-CoreLab/player_anim.t3x","sdmc:/3ds/UO-3DS-CoreLab/player_anim.meta");
     batches.reserve(512);return true;
 }
 void rendererShutdown(){
@@ -87,7 +90,7 @@ bool loadAtlases(int images,std::string&error){
 size_t textureBytes(){return bytes;}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
-bool hasRunAnimation(){return avatar&&C2D_SpriteSheetCount(avatar)>=72;}
+bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
                bool cutaway,int direction,int frame,bool authentic,bool moving,bool running){
@@ -134,7 +137,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }else{
             Point foot=project(cameraX,cameraY,footZ);
             if(avatar){
-                unsigned index=avatarImage(direction,moving,running,frame,C2D_SpriteSheetCount(avatar));
+                unsigned index=avatarImage(direction,moving,running&&runVerified,frame,C2D_SpriteSheetCount(avatar));
                 auto image=C2D_SpriteSheetGetImage(avatar,index);
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};

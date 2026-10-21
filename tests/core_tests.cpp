@@ -2,13 +2,38 @@
 #include "core.hpp"
 #include "reference.hpp"
 #include "avatar.hpp"
+#include "exploration.hpp"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <random>
 #include <cstring>
+#include <fstream>
 using namespace lab;
 int main(int argc,char**argv){
+    if(argc==3&&std::string(argv[1])=="--exploration"){
+        std::string root=argv[2],error;World w=demoWorld();Actor a={7,7,4},b={0,0,0};
+        std::string file=root+"/position.sav";
+        assert(savePosition(file,w,a,error));assert(loadPosition(file,w,b,error));
+        assert(a.x==b.x&&a.y==b.y&&a.z==b.z);
+        assert(savePosition(file,w,{8,10,0},error));
+        assert(loadPosition(file,w,b,error)&&b.x==8&&b.y==10);
+        World changed=w;changed.vertices[0]++;
+        assert(!loadPosition(file,changed,b,error));
+        {std::fstream f(file,std::ios::binary|std::ios::in|std::ios::out);f.seekp(9);f.put('x');}
+        Actor before=b;assert(!loadPosition(file,w,b,error));assert(b.x==before.x&&b.y==before.y&&b.z==before.z);
+        assert(!savePosition(file,w,{-1,0,0},error));
+        assert(mapCell(w,a,7,7)=='@'&&mapCell(w,a,-1,0)==' '&&mapCell(w,a,4,5)=='#');
+        {std::ofstream f(root+"/avatar.t3x",std::ios::binary);f<<"hello";}
+        {std::ofstream f(root+"/avatar.meta");f<<"UOA1 400 0 4 2 72 4f9f2cab\n";}
+        assert(verifyRunAtlas(root+"/avatar.t3x",root+"/avatar.meta"));
+        {std::ofstream f(root+"/avatar.meta");f<<"UOA1 400 0 4 1 72 4f9f2cab\n";}
+        assert(!verifyRunAtlas(root+"/avatar.t3x",root+"/avatar.meta"));
+        {std::ofstream f(root+"/avatar.meta");f<<"UOA1 400 0 4 2 72 4f9f2cab\n";}
+        {std::ofstream f(root+"/avatar.t3x",std::ios::binary);f<<"wrong";}
+        assert(!verifyRunAtlas(root+"/avatar.t3x",root+"/avatar.meta"));
+        std::cout<<"Save integrity, scene identity, map and run provenance passed\n";return 0;
+    }
     if(argc>1){World w;std::string error;bool ok=loadWorld(argv[1],w,error);std::cout<<(ok?"OK":"INVALID")<<" "<<error<<"\n";return ok?0:2;}
     std::mt19937 random(71425);int comparisons=0;
     for(int test=0;test<20000;++test){

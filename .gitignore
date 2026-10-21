@@ -16,4 +16,6 @@ __pycache__/
 *.uop
 *.bin
 *.zip
+*.sav
+*.sav.tmp
 .DS_Store

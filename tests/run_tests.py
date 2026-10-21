@@ -19,7 +19,7 @@ class SceneTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         cls.binary = Path(cls.temp.name)/'core_tests'
-        subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++17', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g', '-I'+str(ROOT/'include'), '-I'+str(ROOT/'tests'), str(ROOT/'tests/core_tests.cpp'), str(ROOT/'tests/reference.cpp'), str(ROOT/'source/core.cpp'), str(ROOT/'source/scene_io.cpp'), '-o', str(cls.binary)], check=True)
+        subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++17', '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter', '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-g', '-I'+str(ROOT/'include'), '-I'+str(ROOT/'tests'), str(ROOT/'tests/core_tests.cpp'), str(ROOT/'tests/reference.cpp'), str(ROOT/'source/core.cpp'), str(ROOT/'source/scene_io.cpp'), str(ROOT/'source/exploration.cpp'), str(ROOT/'source/avatar_io.cpp'), '-o', str(cls.binary)], check=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -38,6 +38,17 @@ class SceneTests(unittest.TestCase):
 
     def test_valid_scene(self):
         self.assertEqual(self.load(self.fixture()),0)
+
+    def test_save_map_and_avatar_provenance(self):
+        with tempfile.TemporaryDirectory() as folder:
+            subprocess.run([str(self.binary),'--exploration',folder],check=True)
+
+    def test_avatar_export_default_is_unarmed_run(self):
+        import ast
+        tree=ast.parse((ROOT/'tools/export_avatar.py').read_text())
+        calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and n.args and isinstance(n.args[0],ast.Constant) and n.args[0].value=='--run-action']
+        self.assertEqual(len(calls),1)
+        self.assertEqual(next(k.value.value for k in calls[0].keywords if k.arg=='default'),2)
 
     def test_truncations_and_trailing_bytes(self):
         raw = self.fixture()

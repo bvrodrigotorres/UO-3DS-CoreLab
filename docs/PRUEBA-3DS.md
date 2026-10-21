@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.2
+# Primera prueba: UO-3DS-CoreLab v0.3
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -6,7 +6,7 @@ Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
 1. Copia la carpeta `UO-3DS-CoreLab` a `SD:/3ds/`.
 2. Abre `UO-3DS-CoreLab.3dsx` desde Homebrew Launcher.
-3. El título inferior debe decir `UO-3DS CoreLab v0.2`.
+3. El título inferior debe decir `UO-3DS CoreLab v0.3`.
 
 El paquete público contiene la demo incorporada. Si el paquete fue preparado
 localmente con los recursos privados, también incluye `scene.bin`, ocho o más
@@ -40,3 +40,5 @@ con memoria libre estable. No es un rendimiento ya verificado.
 La demo y la escena privada no son un juego terminado. Un fallo de oclusión
 se registra con coordenadas, Z, modo de techo y una foto de ambas pantallas;
 no debe corregirse inventando datos en el exportador.
+
+Para el parche v0.3 y sus controles nuevos, consulta [v0.3.md](v0.3.md).
