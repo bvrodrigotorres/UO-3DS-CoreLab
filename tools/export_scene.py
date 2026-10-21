@@ -205,8 +205,8 @@ def main():
     p.add_argument('--spawn-y', type=int, default=1612)
     p.add_argument('--spawn-z', type=int, default=20)
     args = p.parse_args()
-    if not 1 <= args.side <= 32:
-        p.error('--side must be 1..32')
+    if not 1 <= args.side <= 256:
+        p.error('--side must be 1..256')
     if not args.x <= args.spawn_x < args.x+args.side or not args.y <= args.spawn_y < args.y+args.side or not -127 <= args.spawn_z <= 127:
         p.error('Spawn outside scene or invalid height')
     out = args.out.resolve()
@@ -229,20 +229,20 @@ def main():
             raise ValueError('Decoration manifest belongs to another region')
         for obj in decoration['placements']+decoration['doors']:
             rows.append(tuple(obj[k] for k in ('x','y','z','art','hue')))
-    if len(rows) > 8192:
-        raise ValueError('Scene exceeds 8192 objects; choose a smaller region')
+    if len(rows) > 131072:
+        raise ValueError('Scene exceeds 131072 objects; choose a smaller region')
     from ultima_sdk import Files, Art
     Files.set_directory(str(client))
     if not Art.initialize():
         raise ValueError('Cannot initialize Ultima SDK Art')
-    palette, images = {}, []
+    palette, images, identical = {}, [], {}
     texture_files = (find(client, 'texidx.mul', False), find(client, 'texmaps.mul', False))
     def picture(kind, graphic):
         key = (kind, graphic)
         if key in palette:
             return palette[key]
-        if len(images) >= 512:
-            raise ValueError('More than 512 graphics; choose a smaller region')
+        if len(images) >= 4096:
+            raise ValueError('More than 4096 graphics; choose a smaller region')
         if kind == 'static':
             image = static_image(Art, graphic)
         elif kind == 'land':
@@ -264,7 +264,9 @@ def main():
                 image = pixels555(pixels.read(length), side, side)
         if image is None or image.getbbox() is None or max(image.size) > 1024:
             raise ValueError(f'Invalid image {key}')
-        palette[key] = len(images)
+        digest=(image.size,hashlib.sha256(image.tobytes()).digest())
+        if digest in identical:palette[key]=identical[digest];return palette[key]
+        palette[key] = len(images);identical[digest]=len(images)
         images.append(image)
         return palette[key]
     cells = []
@@ -290,6 +292,23 @@ def main():
             opened=picture('static',door['open_art'])
             pair=door['pair'] if door['pair'] is not None else 65535
             door_records.append(struct.pack('<IHHbbH',index,door['open_art'],opened,door['dx'],door['dy'],pair))
+    # Group similarly sized images before packing. Remap only texture indices;
+    # tile art, placement, flags and draw order remain identical.
+    permutation=sorted(range(len(images)),key=lambda i:(max(images[i].size),images[i].width*images[i].height,images[i].width))
+    remap={old:new for new,old in enumerate(permutation)}
+    images=[images[old] for old in permutation]
+    next_cells=[]
+    for cell in cells:
+        values=list(LAND.unpack(cell));values[1]=remap.get(values[1],NONE);next_cells.append(LAND.pack(*values))
+    cells=next_cells
+    next_objects=[]
+    for obj in objects:
+        values=list(OBJECT.unpack(obj));values[6]=remap[values[6]];next_objects.append(OBJECT.pack(*values))
+    objects=next_objects
+    next_doors=[]
+    for record in door_records:
+        values=list(struct.unpack('<IHHbbH',record));values[2]=remap[values[2]];next_doors.append(struct.pack('<IHHbbH',*values))
+    door_records=next_doors
     # Base data is preserved; audited server additions follow it.
 
     vertices = bytes(z & 255 for row in grid for art, z in row)
@@ -308,6 +327,7 @@ def main():
             image.save(folder/f'{i:02d}.png')
         (folder/'page.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(len(group))))
         subprocess.run([tex3ds, '-i', 'page.t3s', '-o', str(out/f'atlas_{page:02d}.t3x')], cwd=folder, check=True)
+    (out/'image_sizes.bin').write_bytes(struct.pack('<4sHH',b'UOI1',len(images),(len(images)+31)//32)+b''.join(struct.pack('<HH',*im.size) for im in images)+b''.join(struct.pack('<I',(out/f'atlas_{page:02d}.t3x').stat().st_size) for page in range((len(images)+31)//32)))
     (out/'scene.bin').write_bytes(raw)
     if decoration:
         scene_hash=2166136261

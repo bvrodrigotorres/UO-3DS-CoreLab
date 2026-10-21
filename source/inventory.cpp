@@ -11,7 +11,7 @@ namespace {
 uint32_t hash(const std::vector<uint8_t>&v){uint32_t h=2166136261u;for(auto b:v)h=(h^b)*16777619u;return h;}
 void put(std::vector<uint8_t>&b,uint32_t n){for(int i=0;i<4;++i)b.push_back(uint8_t(n>>(i*8)));}
 uint32_t get(const std::vector<uint8_t>&b,size_t p){return uint32_t(b[p])|uint32_t(b[p+1])<<8|uint32_t(b[p+2])<<16|uint32_t(b[p+3])<<24;}
-bool chestArt(unsigned art){return (art>=0xE40&&art<=0xE43)||art==0xE80;}
+bool chestArt(unsigned art){return (art>=0xE40&&art<=0xE43)||art==0xE80||art==0x9AB||art==0xE7C;}
 bool exists(const std::string&p){struct stat s;return stat(p.c_str(),&s)==0;}
 }
 bool ItemIcons::load(const std::string&p){
@@ -25,7 +25,7 @@ void Inventory::init(const World&w,const std::string&p){
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
         put(key,o.art);put(key,o.x);put(key,o.y);put(key,o.z);
-        if(chestArt(o.art)&&chests.size()<64){
+        if(chestArt(o.art)&&chests.size()<1024){
             size_t n=chests.size();
             // Finite local exploration supplies, not server loot tables.
             Bag loot;loot.reserve(BagSlots);
@@ -39,8 +39,8 @@ void Inventory::init(const World&w,const std::string&p){
     std::string input=path;
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
-    std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(65537);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=65536&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4))&&get(b,4)==identity&&get(b,8)==chests.size();
+    std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
+    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4))&&get(b,4)==identity&&get(b,8)==chests.size();
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
@@ -103,8 +103,10 @@ bool Inventory::reachable(const World&w,const Actor&a,size_t n)const{
     const auto&o=w.objects[chests[n].object];
     if(!w.contains(a.x,a.y)||std::abs(a.x-o.x)+std::abs(a.y-o.y)>1||std::abs(a.z-o.z)>8)return false;
     // Do not reach through walls or closed doors sharing either endpoint.
-    for(const auto&v:w.objects)if(((v.x==a.x&&v.y==a.y)||(v.x==o.x&&v.y==o.y))&&(&v!=&o)&&
-        (v.flags&(Wall|Door))&&v.z<a.z+14&&v.z+std::max(1,v.height)>a.z+2)return false;
+    const int xs[]={a.x,o.x},ys[]={a.y,o.y};
+    for(int cell=0;cell<2;++cell)for(size_t index:w.cells[ys[cell]*w.width+xs[cell]]){
+        const auto&v=w.objects[index];if(&v!=&o&&(v.flags&(Wall|Door))&&v.z<a.z+14&&v.z+std::max(1,v.height)>a.z+2)return false;
+    }
     return true;
 }
 int Inventory::nearest(const World&w,const Actor&a)const{for(size_t n=0;n<chests.size();++n)if(reachable(w,a,n))return int(n);return -1;}

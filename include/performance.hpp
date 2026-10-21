@@ -5,6 +5,9 @@
 #include <cstddef>
 #include <cstdint>
 namespace lab {
+inline bool equipmentTouchWhileMoving(bool equipMode,int x,int y){
+    return (y>=163&&y<181&&x>=20&&x<150)||(equipMode&&x>=20&&x<134&&y>=65&&y<161);
+}
 class PositionCheckpoint {
     Actor saved{};bool known=false;
     uint64_t attempted=0,activity=0;

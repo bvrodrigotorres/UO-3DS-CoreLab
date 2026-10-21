@@ -8,7 +8,7 @@ bool loadWorld(const std::string&path,World&out,std::string&error){
     std::ifstream f(path,std::ios::binary);
     if(!f){error="No scene.bin; using built-in demo";return false;}
     f.seekg(0,std::ios::end);auto length=f.tellg();f.seekg(0);
-    if(length<32||length>512*1024){error="Invalid scene size";return false;}
+    if(length<32||length>8*1024*1024){error="Invalid scene size";return false;}
     std::vector<unsigned char>b((size_t)length);f.read((char*)b.data(),b.size());
     if(!f||std::memcmp(b.data(),"UCL1",4)){error="Invalid scene header";return false;}
     size_t p=4;bool ok=true;
@@ -17,7 +17,7 @@ bool loadWorld(const std::string&path,World&out,std::string&error){
     World w;w.width=read(2);w.height=read(2);w.images=read(2);unsigned count=read(4);
     w.originX=(int32_t)read(4);w.originY=(int32_t)read(4);
     w.startX=read(2);w.startY=read(2);w.startZ=(int16_t)read(2);unsigned reserved=read(2);
-    if(!ok||w.width<1||w.width>32||w.height<1||w.height>32||w.images>512||count>8192||reserved||!w.contains(w.startX,w.startY)){
+    if(!ok||w.width<1||w.width>256||w.height<1||w.height>256||w.images>4096||count>131072||reserved||!w.contains(w.startX,w.startY)){
         error="Scene limits or spawn invalid";return false;
     }
     size_t expected=32+(w.width+1)*(w.height+1)+w.width*w.height*13+count*26;

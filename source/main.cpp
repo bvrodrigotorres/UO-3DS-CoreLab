@@ -10,6 +10,7 @@
 #include <cmath>
 #include <algorithm>
 #include <malloc.h>
+#include <fstream>
 
 namespace {
 void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&stage="",int progress=0){
@@ -33,17 +34,19 @@ int main(){
     C3D_RenderTargetSetOutput(target,GFX_TOP,GFX_LEFT,GX_TRANSFER_FLIP_VERT(0)|GX_TRANSFER_OUT_TILED(0)|GX_TRANSFER_RAW_COPY(0)|GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8)|GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
     startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
-    std::string error;bool available=lab::loadWorld("sdmc:/3ds/UO-3DS-CoreLab/scene.bin",privateWorld,error);
-    if(available)available=lab::loadAtlases(privateWorld.images,error);
+    const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
+    const std::string worldRoot=std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
+    std::string error;bool available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
+    if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);
     const lab::World canonicalPrivate=privateWorld;
     lab::World legacyPrivate=privateWorld;lab::Doors doors;std::string doorError;
-    bool hasDoors=available&&doors.load("sdmc:/3ds/UO-3DS-CoreLab/doors.bin","sdmc:/3ds/UO-3DS-CoreLab/scene.bin",privateWorld,doorError);
+    bool hasDoors=available&&doors.load(worldRoot+"doors.bin",worldRoot+"scene.bin",privateWorld,doorError);
     if(hasDoors){legacyPrivate.objects.resize(doors.baseObjects);legacyPrivate.index();}
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
     lab::TouchPages pages;lab::Journal journal;std::string journalError;
-    bool hasJournal=available&&lab::loadJournal("sdmc:/3ds/UO-3DS-CoreLab/journal.bin","sdmc:/3ds/UO-3DS-CoreLab/scene.bin",journal,journalError);
-    const std::string saveRoot="sdmc:/3ds/UO-3DS-CoreLab/";
+    bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
+    const std::string saveRoot=worldRoot;
     lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
     bool authentic=available,moving=false;int facing=4,actual=0,frames=0,spot=0;
     lab::World*w=authentic?&privateWorld:&demo;
@@ -153,9 +156,9 @@ int main(){
         if(hidKeysUp()&KEY_TOUCH){
             int oldPage=pages.page,dx=pages.lastX-pages.startX,dy=pages.lastY-pages.startY;
             bool changed=pages.end();
-            if(!changed&&oldPage==2&&authentic&&!moving&&dx*dx+dy*dy<144)
+            if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
-            if(!changed&&oldPage==1&&authentic&&!moving&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
+            if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
                 for(int slot=0;slot<3;++slot)if(pages.startY>=68+slot*34&&pages.startY<94+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
             }
             pageChanged=true;
@@ -211,7 +214,7 @@ int main(){
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){
-            lab::HudInfo hud{authentic?"PRIVATE UO SCENE":"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
+            lab::HudInfo hud{authentic?(w->width>32?"BRITAIN 256X256":"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};
             std::snprintf(line,sizeof(line),"XY %d,%d   Z %d | %s",actor.x+w->originX,actor.y+w->originY,actor.z,blocked);add();
@@ -237,6 +240,7 @@ int main(){
             if(!available)hud.lines.push_back(error);
             if(authentic&&!hasDoors)hud.lines.push_back(doorError);
             if(authentic&&!hasNpcs)hud.lines.push_back(npcError);
+            if(lab::rendererTextureError())hud.lines.emplace_back("TEXTURAS: ERROR SD/MEMORIA");
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr);

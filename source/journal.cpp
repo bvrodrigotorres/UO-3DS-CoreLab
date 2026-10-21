@@ -20,7 +20,7 @@ bool loadJournal(const std::string&path,const std::string&scene,Journal&out,std:
        b.size()!=28+size_t(j.width*j.height*3+j.dollWidth*j.dollHeight*4)||hash(b,28)!=n(20,4)){
         error="Invalid journal dimensions/checksum";return false;
     }
-    if(!read(scene,world,512*1024)||hash(world)!=n(16,4)){error="Journal belongs to another scene";return false;}
+    if(!read(scene,world,8*1024*1024)||hash(world)!=n(16,4)){error="Journal belongs to another scene";return false;}
     size_t end=28+j.width*j.height*3;j.map.assign(b.begin()+28,b.begin()+end);j.doll.assign(b.begin()+end,b.end());
     out=std::move(j);error.clear();return true;
 }

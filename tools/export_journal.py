@@ -55,7 +55,7 @@ def main():
     if args.out.exists():raise FileExistsError('Use a new output directory')
     raw=args.scene.read_bytes();h=HEAD.unpack_from(raw)
     if h[0]!=b'UCL1' or h[1]!=1:raise ValueError('Invalid scene')
-    side=128;ox=h[6]+h[2]//2-side//2;oy=h[7]+h[3]//2-side//2
+    side=max(128,h[2],h[3]);ox=h[6]+h[2]//2-side//2;oy=h[7]+h[3]//2-side//2
     radar=find(args.client,'radarcol.mul').read_bytes()
     def color(index):
         if index*2+2>len(radar):raise ValueError('Missing radar color')

@@ -4,6 +4,11 @@
 #include <iostream>
 using namespace lab;
 int main(){
+    assert(equipmentTouchWhileMoving(true,30,75));
+    assert(!equipmentTouchWhileMoving(false,30,75));
+    assert(equipmentTouchWhileMoving(false,25,170));
+    assert(!equipmentTouchWhileMoving(true,180,75));
+    assert(!equipmentTouchWhileMoving(true,180,170));
     Actor a{5,6,40};PositionCheckpoint save;save.baseline(a,0);
     for(uint64_t t=0;t<600000;t+=16)assert(!save.due(a,t)); // no unchanged writes
     a.x=6;save.active(60000);assert(!save.due(a,61999));assert(save.due(a,62000));

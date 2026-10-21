@@ -14,7 +14,7 @@ CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-rtti -fno-exceptions
 LDFLAGS := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lcitro2d -lcitro3d -lctru -lm
 LIBDIRS := $(CTRULIB) $(PORTLIBS)
-APP_TITLE := UO CoreLab v0.13
+APP_TITLE := UO CoreLab v0.14
 APP_DESCRIPTION := Independent scene and walking experiment
 APP_AUTHOR := bvrodrigotorres
 export TOPDIR := $(CURDIR)

@@ -64,6 +64,11 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/performance_tests.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
+    def test_large_region(self):
+        binary=Path(self.temp.name)/'large_world_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/large_world_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/exploration.cpp'),str(ROOT/'source/journal.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
     def test_character_pixel_depth(self):
         binary=Path(self.temp.name)/'character_depth_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/character_depth_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
@@ -95,6 +100,8 @@ class SceneTests(unittest.TestCase):
 
     def test_valid_scene(self):
         self.assertEqual(self.load(self.fixture()),0)
+        raw=exporter.HEAD.pack(b'UCL1',1,256,256,0,0,1408,1536,93,76,20,0)+bytes(257*257)+exporter.LAND.pack(3,65535,0,0)*(256*256)
+        self.assertEqual(self.load(raw),0)
 
     def test_save_map_and_avatar_provenance(self):
         with tempfile.TemporaryDirectory() as folder:

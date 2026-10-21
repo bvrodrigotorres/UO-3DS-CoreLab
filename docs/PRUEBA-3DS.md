@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.13
+# Primera prueba: UO-3DS-CoreLab v0.14
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -51,5 +51,5 @@ Página 2: M/R/B quitan cada pieza y la devuelven a la mochila.
 Al iniciar se muestra el menú. Pad y A o táctil para elegir.
 Nuevo Juego pide confirmar; Continuar conserva el inventario y equipo guardados.
 
-Parche v0.13: probar cambios de equipo y autoguardado durante una pausa.
-Consultar [v0.13.md](v0.13.md) para memoria y frecuencia de guardado.
+Prueba v0.14: mapa privado 256x256 y equipo caminando.
+Consultar [v0.14.md](v0.14.md) para instalación y partidas separadas.

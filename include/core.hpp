@@ -27,6 +27,7 @@ struct World {
     std::vector<Object> objects;
     std::vector<std::vector<size_t>> cells;
     void index();
+    void moved(size_t index,int oldX,int oldY);
     bool contains(int x,int y) const;
     int vertex(int x,int y) const;
 };

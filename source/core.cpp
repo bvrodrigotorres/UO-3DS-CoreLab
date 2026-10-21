@@ -15,6 +15,11 @@ void World::index(){
     for(size_t i=0;i<objects.size();++i)if(contains(objects[i].x,objects[i].y))
         cells[objects[i].y*width+objects[i].x].push_back(i);
 }
+void World::moved(size_t i,int oldX,int oldY){
+    if(i>=objects.size())return;
+    if(contains(oldX,oldY)){auto&v=cells[oldY*width+oldX];v.erase(std::remove(v.begin(),v.end(),i),v.end());}
+    const auto&o=objects[i];if(contains(o.x,o.y)){auto&v=cells[o.y*width+o.x];auto at=std::lower_bound(v.begin(),v.end(),i);v.insert(at,i);}
+}
 Heights heights(const World&w,int x,int y){
     Heights h={w.vertex(x,y),w.vertex(x+1,y),w.vertex(x+1,y+1),w.vertex(x,y+1),0,0,false};
     h.minimum=std::min(std::min(h.top,h.right),std::min(h.bottom,h.left));
@@ -35,14 +40,16 @@ int priority(Kind k,int z,int height,uint64_t flags,int average,bool slope){
     return z-((flags&Background)?1:0)+(height?1:0);
 }
 std::vector<Draw> renderList(const World&w,const Actor&a,bool cutaway){
-    std::vector<Draw> out;out.reserve(w.land.size()+w.objects.size()+1);
+    std::vector<Draw> out;out.reserve(2048);
     // Experimental height ceiling: retain all data; hide only in presentation.
     int ceiling=128;
     if(cutaway&&w.contains(a.x,a.y))for(size_t i:w.cells[a.y*w.width+a.x]){
         const auto&o=w.objects[i];
         if(o.z>a.z+14&&(o.flags&(Roof|Surface)))ceiling=std::min(ceiling,o.z);
     }
-    for(int sum=0;sum<w.width+w.height-1;++sum)for(int x=0;x<w.width;++x){
+    const int left=std::max(0,a.x-12),right=std::min(w.width-1,a.x+12);
+    const int top=std::max(0,a.y-12),bottom=std::min(w.height-1,a.y+12);
+    for(int sum=left+top;sum<=right+bottom;++sum)for(int x=left;x<=right;++x){
         int y=sum-x;if(!w.contains(x,y))continue;
         size_t cell=y*w.width+x;
         if(std::abs(x-a.x)>12||std::abs(y-a.y)>12)continue;
