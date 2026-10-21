@@ -55,9 +55,9 @@ void AppearanceEditor::change(int delta){
 void AppearanceEditor::randomize(uint32_t seed){auto next=[&](unsigned n){seed=seed*1664525+1013904223;return (seed>>8)%n;};draft.female=next(2);draft.skin=next(64);draft.hair=next(10);draft.hairColor=next(48);draft.beard=next(8);draft.beardColor=draft.hairColor;draft.shirt=1+next(2);draft.pants=1+next(2);draft.shoes=1;draft.shirtColor=next(32);draft.pantsColor=next(32);draft.bootsColor=next(32);draft.robeColor=next(32);}
 std::string AppearanceEditor::label(int f)const{const char*labels[]={"NOMBRE","CUERPO","PIEL","PEINADO","COLOR DEL PELO","BARBA","COLOR DE BARBA","CAMISA","COLOR CAMISA","PRENDA INFERIOR","COLOR INFERIOR","CALZADO","COLOR CALZADO","COLOR TUNICA","VISTA DE EQUIPO"};return f>=0&&f<15?labels[f]:"";}
 std::string AppearanceEditor::value(int f)const{
-    const char*mh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","RAYA AL LADO","CORTO RIZADO","TRENZA","DOS COLETAS","CORTO LISO"};
-    const char*fh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","RAYA AL LADO","CORTO RIZADO","TRENZA","CORTO LISO","MONO"};
-    const char*bh[]={"SIN BARBA","CORTA","LARGA","PERILLA","BIGOTE","CORTA Y BIGOTE","LARGA Y BIGOTE","PATILLAS"};
+    const char*mh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","MEDIA MELENA","NUDO ALTO","AFRO","ENTRADAS","DOS COLETAS"};
+    const char*fh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","MEDIA MELENA","NUDO ALTO","AFRO","DOS COLETAS","MONO"};
+    const char*bh[]={"SIN BARBA","CORTA","LARGA","PERILLA","BIGOTE","CORTA Y BIGOTE","LARGA Y BIGOTE","PERILLA Y BIGOTE"};
     auto count=[](int x,int n){return std::to_string(x+1)+" / "+std::to_string(n);};
     switch(f){case 0:return draft.name;case 1:return draft.female?"MUJER HUMANA":"HOMBRE HUMANO";case 2:return count(draft.skin,64);case 3:return (draft.female?fh:mh)[draft.hair];case 4:return count(draft.hairColor,48);case 5:return draft.female?"NO DISPONIBLE":bh[draft.beard];case 6:return draft.female?"NO DISPONIBLE":count(draft.beardColor,48);case 7:return draft.shirt==0?"SIN CAMISA":draft.shirt==1?"CAMISA":"CAMISA ELEGANTE";case 8:return count(draft.shirtColor,32);case 9:return draft.pants==0?"SIN PRENDA":draft.pants==1?"PANTALON":"FALDA";case 10:return count(draft.pantsColor,32);case 11:return draft.shoes?"ZAPATOS":"DESCALZO";case 12:return count(draft.bootsColor,32);case 13:return count(draft.robeColor,32);case 14:return preview==0?"EQUIPO ACTUAL":preview==1?"EQUIPO COMPLETO":"SIN EQUIPO";default:return "";}
 }
