@@ -209,6 +209,11 @@ class SceneTests(unittest.TestCase):
         self.assertEqual(composition_layers(400,0,[(1,11),(2,22),(3,33)],701,44,animation,layer),[(400,0),(101,11),(103,33),(701,44),(102,22)])
         self.assertEqual(composition_layers(400,0,[(1,11)],701,44,animation,layer),[(400,0),(101,11),(701,44)])
 
+    def test_npc_push_and_status(self):
+        binary=Path(self.temp.name)/'npc_push_status_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_push_status_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
     def test_npc_simulation(self):
         binary=Path(self.temp.name)/'npc_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_tests.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)

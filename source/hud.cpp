@@ -50,7 +50,7 @@ void text(uint8_t*fb,int x,int y,const std::string&s,Color color,int scale=1,int
     }
 }
 }
-static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused){
+static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=false){
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     static std::array<uint8_t,320*240*3> paper;
     static bool ready=false;
@@ -70,9 +70,10 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused){
     ready=true;
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
+    if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.18.1",ink,1,13);
+    text(fb,225,20,"C.LAB V0.19",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -85,16 +86,17 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused){
     text(fb,20,219,"START: PAUSA | DESLIZA 1/3",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
-void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status,const Inventory*inv,const EquipmentArt*equipment){
-    drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/3",{}});
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status){
+    drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
-    text(fb,20,53,"MINIMAPA",ink);text(fb,200,53,"PERSONAJE",ink);
-    box(fb,192,53,1,127,gold);
+    (void)message;
+    text(fb,20,21,"MINIMAPA",ink);text(fb,200,21,"PERSONAJE",ink);
+    box(fb,192,34,1,120,gold);
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
     float scale=float(std::max(1,std::min(4,zoom)));
-    for(int y=65;y<169;++y)for(int x=20;x<186;++x){
-        float sx=(x-103.f)/scale,sy=(y-117.f)/scale;
+    for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){
+        float sx=(x-103.f)/scale,sy=(y-float(JournalLayout::MapCenter))/scale;
         int wx=int(std::floor(a.x+w.originX+(sx+sy)*.5f));
         int wy=int(std::floor(a.y+w.originY+(sy-sx)*.5f));
         Color c=dark;
@@ -107,39 +109,48 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         }
         pixel(fb,x,y,c);
     }
-    for(int d=-4;d<=4;++d){pixel(fb,103+d,117,gold);pixel(fb,103,117+d,gold);}
-    box(fb,102,116,3,3,{220,38,28});text(fb,175,67,"N",{244,222,160});
-    text(fb,23,173,"-",ink);text(fb,153,173,"+",ink);
-    text(fb,56,173,"ZOOM "+std::to_string(zoom)+"X",ink);
+    for(int d=-4;d<=4;++d){pixel(fb,103+d,JournalLayout::MapCenter,gold);pixel(fb,103,JournalLayout::MapCenter+d,gold);}
+    box(fb,102,JournalLayout::MapCenter-1,3,3,{220,38,28});text(fb,175,JournalLayout::MapTop+2,"N",{244,222,160});
+    text(fb,23,JournalLayout::ZoomTop,"-",ink);text(fb,153,JournalLayout::ZoomTop,"+",ink);
+    text(fb,56,JournalLayout::ZoomTop,"ZOOM "+std::to_string(zoom)+"X",ink);
     // The private image is the original human paperdoll gump, cropped/resized
     // by the exporter, not an invented equipment state or animated world sprite.
     if(inv&&equipment&&equipment->dolls.size()==8*76*104*4){
         size_t base=inv->equipmentMask()*76*104*4;
         for(int y=0;y<104;++y)for(int x=0;x<76;++x){size_t p=base+(y*76+x)*4;
-            if(equipment->dolls[p+3]>127)pixel(fb,211+x,65+y,{equipment->dolls[p],equipment->dolls[p+1],equipment->dolls[p+2]});}
+            if(equipment->dolls[p+3]>127)pixel(fb,211+x,JournalLayout::MapTop+y,{equipment->dolls[p],equipment->dolls[p+1],equipment->dolls[p+2]});}
     }else if(j){
         int ox=249-j->dollWidth/2;
         for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){size_t p=(y*j->dollWidth+x)*4;
-            if(j->doll[p+3]>127)pixel(fb,ox+x,65+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
-    }else text(fb,205,114,"SIN IMAGEN",ink);
+            if(j->doll[p+3]>127)pixel(fb,ox+x,JournalLayout::MapTop+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
+    }else text(fb,205,86,"SIN IMAGEN",ink);
     const char*labels[]={"M","R","B"};
-    for(int slot=0;slot<3;++slot){int y=72+34*slot;bool worn=inv&&inv->equipment[slot]>=0;
+    for(int slot=0;slot<3;++slot){int y=JournalLayout::EquipmentTop+34*slot;bool worn=inv&&inv->equipment[slot]>=0;
         box(fb,284,y,18,18,ink);box(fb,285,y+1,16,16,worn?gold:Color{161,143,108});
         text(fb,290,y+5,labels[slot],ink);
     }
-    text(fb,198,173,inv&&inv->equipmentMask()?"TOCA PARA QUITAR":"SIN EQUIPO",ink,1,17);
-    // Replace the shared footer without regenerating the paper background.
-    box(fb,18,187,284,41,{218,195,148});
-    char coordinates[64];std::snprintf(coordinates,sizeof(coordinates),"XY %d,%d Z %d",a.x+w.originX,a.y+w.originY,a.z);
-    text(fb,20,189,coordinates,ink);
-    text(fb,20,199,status.empty()?(j?"RADAR UO | VISTA DEL PERSONAJE":"MAPA BASICO | FALTA JOURNAL.BIN"):status,ink);
-    text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
-    text(fb,20,219,"R: PAGINA | DESLIZA 2/3",ink);
+    text(fb,198,JournalLayout::ZoomTop,inv&&inv->equipmentMask()?"TOCA PARA QUITAR":"SIN EQUIPO",ink,1,17);
+    box(fb,17,158,286,1,ink);box(fb,17,160,286,1,gold);
+    const PlayerStatus initial;const auto&stats=status?*status:initial;
+    auto meter=[&](int y,const char*label,int value,int maximum,Color color){
+        text(fb,20,y+2,label,ink);box(fb,62,y,150,12,ink);box(fb,63,y+1,148,10,{84,67,47});
+        int width=PlayerStatus::barWidth(value,maximum,148);
+        if(width){box(fb,63,y+1,width,10,color);box(fb,63,y+1,width,2,{uint8_t(std::min(255,int(color.r)+35)),uint8_t(std::min(255,int(color.g)+35)),uint8_t(std::min(255,int(color.b)+35))});}
+        text(fb,220,y+2,std::to_string(value)+"/"+std::to_string(maximum),ink,1,13);
+    };
+    meter(166,"VIDA",stats.hits,stats.hitsMax,{173,45,37});
+    meter(182,"MANA",stats.mana,stats.manaMax,{49,83,164});
+    meter(198,"RESIST",stats.stamina,stats.staminaMax,{58,124,66});
+    text(fb,20,213,"FUE "+std::to_string(stats.strength)+" DES "+std::to_string(stats.dexterity)+" INT "+std::to_string(stats.intelligence)+" ORO "+std::to_string(PlayerStatus::gold(inv)),ink,1,46);
+    text(fb,20,223,"R: PAGINA | DESLIZA 2/3",ink);
+
 }
 
 void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons){
-    drawHud(fb,{"MOCHILA Y COFRES","PAGINA 3/3",{}});
+    drawHudFrame(fb,{},false,true);
+    text(fb,20,23,"MOCHILA Y COFRES",{55,37,22},2);
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
+    box(fb,17,45,286,1,ink);box(fb,17,181,286,1,ink);
     text(fb,20,53,"MOCHILA "+std::to_string(inv.backpack.size())+"/9",ink);
     text(fb,166,53,inv.opened<0?"COFRE CERRADO":"COFRE "+std::to_string(inv.opened+1),ink);
     box(fb,151,52,1,127,gold);
@@ -188,7 +199,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.18.1";
+    const std::string version="CORELAB V0.19";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }

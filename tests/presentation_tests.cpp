@@ -24,9 +24,9 @@ int main(int argc,char**argv){
     pages.begin(260,110);pages.move(50,112);assert(pages.end()&&pages.page==1);
     assert(!pages.end()); // releasing twice must not change the page
     pages.begin(50,110);pages.move(55,200);assert(!pages.end()&&pages.page==1);
-    pages.begin(30,175);assert(pages.end()&&pages.zoom==1);
-    pages.begin(30,175);assert(!pages.end()&&pages.zoom==1);
-    pages.begin(160,175);assert(pages.end()&&pages.zoom==2);
+    pages.begin(30,150);assert(pages.end()&&pages.zoom==1);
+    pages.begin(30,150);assert(!pages.end()&&pages.zoom==1);
+    pages.begin(160,150);assert(pages.end()&&pages.zoom==2);
     pages.begin(50,110);pages.move(260,112);assert(pages.end()&&pages.page==0);
     pages.begin(250,220);assert(pages.end()&&pages.page==1);
     Object roof;roof.flags=Roof;roof.z=60;

@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include "character_depth.hpp"
 #include "performance.hpp"
+#include "npc_push.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include <3ds.h>
@@ -152,6 +153,7 @@ int main(){
         lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     }
     std::vector<lab::Actor>occupants;occupants.reserve(16);
+    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;
     lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
@@ -186,6 +188,7 @@ int main(){
             GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
             continue;
         }
+        if(down&(KEY_X|KEY_A|KEY_L))npcPush.reset();
         if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
         bool pageChanged=false;
         if(down&KEY_R){pages.page=(pages.page+1)%3;pageChanged=true;}
@@ -197,7 +200,7 @@ int main(){
             if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
-                for(int slot=0;slot<3;++slot)if(pages.startY>=68+slot*34&&pages.startY<94+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
+                for(int slot=0;slot<3;++slot)if(pages.startY>=lab::JournalLayout::EquipmentTop+slot*34&&pages.startY<lab::JournalLayout::EquipmentTop+18+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
             }
             pageChanged=true;
         }
@@ -226,6 +229,7 @@ int main(){
         circlePosition pad;hidCircleRead(&pad);
         int sx=((held&KEY_RIGHT)||pad.dx>35)-((held&KEY_LEFT)||pad.dx< -35);
         int sy=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
+        if(!sx&&!sy)npcPush.reset();
         if(!moving&&(sx||sy)){
             int dx=std::max(-1,std::min(1,sx+sy)),dy=std::max(-1,std::min(1,sy-sx));
             const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};
@@ -233,10 +237,12 @@ int main(){
             // Turning responds to intent even when movement is blocked.
             facing=(direction+1)&7;
             lab::Actor next;
-            if(authentic&&doors.tryOpen(actor,dx,dy)){blocked="OPENING DOOR";}
-            else if(lab::step(*w,actor,direction,next,actual)&&(!authentic||!npcs.occupied(next))){
+            if(authentic&&doors.tryOpen(actor,dx,dy)){npcPush.reset();blocked="OPENING DOOR";}
+            else if(lab::step(*w,actor,direction,next,actual)){
+                if(!npcPush.allow(authentic&&npcs.occupied(next),actor,next,direction,dt)){blocked="NPC: INSISTE PARA PASAR";}else{
                 from=actor;actor=next;moving=true;progress=0;facing=(actual+1)&7;blocked="--";
-            }else blocked="BLOCKED";
+                }
+            }else {npcPush.reset();blocked="BLOCKED";}
         }
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
         if(moving){progress+=dt/(running?.20f:.40f);if(progress>=1){progress=1;moving=false;}
@@ -281,7 +287,7 @@ int main(){
             if(lab::rendererTextureError())hud.lines.emplace_back("TEXTURAS: ERROR SD/MEMORIA");
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
-            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr);
+            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);
