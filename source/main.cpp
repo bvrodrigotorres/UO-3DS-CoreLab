@@ -4,6 +4,7 @@
 #include "character_depth.hpp"
 #include "performance.hpp"
 #include "npc_push.hpp"
+#include "combat.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include <3ds.h>
@@ -49,7 +50,7 @@ int main(){
     bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
     const std::string saveRoot=worldRoot;
     lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
-    bool authentic=available,moving=false;int facing=4,actual=0,frames=0,spot=0;
+    bool authentic=available,moving=false;int facing=4,actual=0,frames=0;
     lab::World*w=authentic?&privateWorld:&demo;
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
     float progress=0,cameraX=actor.x,cameraY=actor.y,foot=actor.z,fps=0,animationPhase=0;
@@ -84,6 +85,8 @@ int main(){
     lab::EquipmentArt equipmentArt;std::string equipmentError;
     bool hasEquipment=equipmentArt.load("sdmc:/3ds/UO-3DS-CoreLab/equipment.bin");
     if(!hasEquipment)equipmentError="FALTA EQUIPMENT.BIN";
+    lab::StatusArt statusArt;statusArt.load(baseRoot+"status.bin");
+    std::string combatArtError;if(hasNpcs&&npcs.hasPopulation())lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);
     startupFrame(nullptr,false,"PREPARADO",5);
     lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");
     lab::Actor probe;std::string probeMessage;
@@ -153,7 +156,10 @@ int main(){
         lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     }
     std::vector<lab::Actor>occupants;occupants.reserve(16);
-    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;
+    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Combat combat;combat.reset(npcs);
+    auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
+    auto persistVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
+    if(!lab::loadVitals(vitalsPath(),playerStatus))saveMessage="ESTADISTICAS: ARCHIVO INVALIDO";
     lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
@@ -180,7 +186,8 @@ int main(){
                 if(positionCheckpoint().dirty(actor)){saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);positionCheckpoint().result(actor,pauseAt,saved);}
                 auto&bag=authentic?inventory:demoInventory;
                 if(saved&&bag.healthy())saved=bag.checkpoint();
-                if(saved){C3D_FrameSync();quit=action==lab::PauseAction::Exit;menu.back();menu.selected=1;canContinue=true;moving=false;break;}
+                if(saved)saved=persistVitals();
+                if(saved){inventory.closeContainer();C3D_FrameSync();quit=action==lab::PauseAction::Exit;menu.back();menu.selected=1;canContinue=true;moving=false;break;}
                 pause.message="ERROR SD: NO SE PUDO GUARDAR";
             }
             last=sample=now;sampleFrames=0;
@@ -198,7 +205,12 @@ int main(){
             int oldPage=pages.page,dx=pages.lastX-pages.startX,dy=pages.lastY-pages.startY;
             bool changed=pages.end();
             if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
-                inventory.tap(*w,actor,pages.startX,pages.startY);
+            {
+                if(pages.startY>=163&&pages.startY<181&&pages.startX>=166&&pages.startX<301){
+                    if(inventory.hasContainer())inventory.closeContainer();
+                    else if(!combat.openCorpse(*w,actor,inventory))inventory.open(*w,actor);
+                }else inventory.tap(*w,actor,pages.startX,pages.startY);
+            }
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
                 for(int slot=0;slot<3;++slot)if(pages.startY>=lab::JournalLayout::EquipmentTop+slot*34&&pages.startY<lab::JournalLayout::EquipmentTop+18+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
             }
@@ -207,20 +219,11 @@ int main(){
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
         if(down&KEY_SELECT){
             if(moving)saveMessage="Stop moving before saving";
-            else {bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);positionCheckpoint().result(actor,now,ok);}
+            else {bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();positionCheckpoint().result(actor,now,ok);}
         }
         if((down&KEY_L)&&!moving&&restorePosition())alignCamera();
-        if((down&KEY_X)&&!moving){
-            if(available)authentic=!authentic;
-            w=authentic?&privateWorld:&demo;actor={w->startX,w->startY,w->startZ};from=actor;
-            cameraX=actor.x;cameraY=actor.y;foot=actor.z;blocked="--";spot=0;
-            if(restorePosition())alignCamera();
-        }
-        if((down&KEY_A)&&!moving){
-            // Deterministic viewpoints. Reset height to original spawn only.
-            if(!authentic){const lab::Actor spots[]={{8,10,0},{7,7,4},{10,6,0},{12,10,2}};actor=spots[(++spot)%4];from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;}
-            else {actor={w->startX,w->startY,w->startZ};from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;}
-        }
+        if(authentic&&(down&KEY_X))combat.select(npcs,actor,true);
+        if(authentic&&(down&KEY_A))combat.toggle(npcs,actor);
         if(authentic){
             occupants.clear();occupants.push_back(actor);if(moving)occupants.push_back(from);npcs.addOccupants(occupants);
             if(doors.update(privateWorld,dt,occupants))lab::invalidateRenderList();
@@ -247,15 +250,22 @@ int main(){
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
         if(moving){progress+=dt/(running?.20f:.40f);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
+        if(authentic&&hasNpcs&&combat.update(*w,npcs,actor,moving,dt,playerStatus,inventory)){
+            actor={w->startX,w->startY,w->startZ};moving=false;alignCamera();npcPush.reset();frames=0;animateThisFrame=false;
+        }
+        if(combat.attacking&&combat.target>=0&&!moving){
+            const auto&enemy=npcs.all()[combat.target];int tx=(enemy.position.x>actor.x)-(enemy.position.x<actor.x),ty=(enemy.position.y>actor.y)-(enemy.position.y<actor.y);
+            const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};for(int d=0;d<8;++d)if(xs[d]==tx&&ys[d]==ty)facing=(d+1)&7;
+        }
         if(animateThisFrame||sx||sy||(held&KEY_TOUCH)||down)positionCheckpoint().active(now);
         if(!moving&&positionCheckpoint().due(actor,now)){
-            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();
             positionCheckpoint().result(actor,now,ok);
         }
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
         if(authentic&&hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
-        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr);
+        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){
             lab::HudInfo hud{authentic?(w->width>32?"BRITAIN 256X256":"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
@@ -279,6 +289,8 @@ int main(){
                 auto greeting=npcs.greeting(actor);
                 hud.lines.push_back(greeting.empty()?"NPC "+std::to_string(npcs.all().size())+" | POBLACION LOCAL":greeting);
             }
+            if(!combatArtError.empty())hud.lines.push_back(combatArtError);
+            if(!combat.message.empty())hud.lines.push_back(combat.message);
             if(!saveMessage.empty())hud.lines.push_back(saveMessage);
             if(authentic&&!equipmentError.empty())hud.lines.push_back(equipmentError);
             if(!available)hud.lines.push_back(error);
@@ -287,14 +299,16 @@ int main(){
             if(lab::rendererTextureError())hud.lines.emplace_back("TEXTURAS: ERROR SD/MEMORIA");
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
-            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus);
+            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);
             gfxScreenSwapBuffers(GFX_BOTTOM,false);
         }
     }
+    inventory.closeContainer();
     if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+    persistVitals();
     }
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
 }

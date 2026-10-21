@@ -77,15 +77,15 @@ void Npcs::reset(const World&w,const Actor&player){
     }
 }
 bool Npcs::occupied(const Actor&a,int except)const{
-    for(size_t i=0;i<people.size();++i)if((int)i!=except&&(same(a,people[i].position)||(people[i].moving&&same(a,people[i].from))))return true;
+    for(size_t i=0;i<people.size();++i)if(people[i].alive&&(int)i!=except&&(same(a,people[i].position)||(people[i].moving&&same(a,people[i].from))))return true;
     return false;
 }
 void Npcs::addOccupants(std::vector<Actor>&out)const{
-    for(const auto&n:people){out.push_back(n.position);if(n.moving)out.push_back(n.from);}
+    for(const auto&n:people)if(n.alive){out.push_back(n.position);if(n.moving)out.push_back(n.from);}
 }
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
-    for(size_t i=0;i<people.size();++i){auto&n=people[i];
+    for(size_t i=0;i<people.size();++i){auto&n=people[i];if(!n.alive)continue;
         int px=player.x-n.position.x,py=player.y-n.position.y;
         bool near=std::abs(player.z-n.position.z)<16&&std::max(std::abs(px),std::abs(py))<=2;
         n.namePresence.update(near,dt);
@@ -94,6 +94,18 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
             n.progress=std::min(1.f,n.progress+dt/.45f);n.animation=std::fmod(n.animation+dt*8,4.f);
             if(n.progress>=1){n.moving=false;n.wait=1.0f+(random%20)/10.f;}
             continue;
+        }
+        if(n.hostile){
+            if(std::max(std::abs(px),std::abs(py))>8||std::max(std::abs(n.position.x-n.home.x),std::abs(n.position.y-n.home.y))>12)n.hostile=false;
+            else if(std::max(std::abs(px),std::abs(py))<=1){n.wait=.2f;continue;}
+            else {
+                int x=(px>0)-(px<0),y=(py>0)-(py<0),d=0;for(int k=0;k<8;++k)if(dx[k]==x&&dy[k]==y)d=k;
+                Actor next;int actual;
+                if(step(w,n.position,d,next,actual)&&!same(next,player)&&!(playerMoving&&same(next,from))&&!occupied(next,(int)i)){
+                    n.from=n.position;n.position=next;n.progress=0;n.moving=true;n.direction=(actual+1)&7;
+                }
+                continue;
+            }
         }
         if(near){
             int x=(px>0)-(px<0),y=(py>0)-(py<0);
@@ -115,7 +127,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
     }
 }
 std::string Npcs::greeting(const Actor&a)const{
-    for(const auto&n:people)if(!n.animal&&std::abs(n.position.z-a.z)<16&&std::abs(n.position.x-a.x)<=2&&std::abs(n.position.y-a.y)<=2)return n.greeting;
+    for(const auto&n:people)if(n.alive&&!n.animal&&std::abs(n.position.z-a.z)<16&&std::abs(n.position.x-a.x)<=2&&std::abs(n.position.y-a.y)<=2)return n.greeting;
     return "";
 }
 bool drawBefore(const Draw&a,const Draw&b){
@@ -131,6 +143,7 @@ std::vector<Draw> Npcs::drawList(const World&w,const Actor&a,bool cutaway)const{
         const auto&o=w.objects[i];if(o.z>a.z+14&&(o.flags&(Roof|Surface)))ceiling=std::min(ceiling,o.z);
     }
     for(size_t i=0;i<people.size();++i){const auto&n=people[i];const auto&p=n.position;
+        if(!n.alive)continue;
         if(std::abs(p.x-a.x)>12||std::abs(p.y-a.y)>12||(cutaway&&p.z>=ceiling))continue;
         out.push_back({Kind::Npc,p.x,p.y,p.z,p.z+1,i,0xffffff00u+(uint32_t)i});
     }

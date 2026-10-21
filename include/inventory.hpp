@@ -17,6 +17,7 @@ class Inventory {
     std::string path;
     bool writable=true;
     void seedGear();
+    Bag*external=nullptr;Actor externalPosition;std::string externalTitle;
     bool persist(std::string&,SaveRename);
 public:
     std::array<int,3>equipment{{-1,-1,-1}};
@@ -30,6 +31,12 @@ public:
     Bag backpack;
     std::vector<Chest> chests;
     int opened=-1;
+    bool hasContainer()const{return opened>=0||(opened==-2&&external);}
+    const Bag&containerItems()const{static const Bag empty;return opened==-2&&external?*external:opened>=0&&size_t(opened)<chests.size()?chests[opened].items:empty;}
+    std::string containerName()const{return opened==-2?externalTitle:"COFRE "+std::to_string(opened+1);}
+    void closeContainer(){opened=-1;external=nullptr;}
+    void closeExternal(const Bag*bag){if(external==bag)closeContainer();}
+    bool openExternal(const World&,const Actor&,Bag&,const Actor&,const std::string&);
     std::string message;
     void init(const World&,const std::string&);
     bool reachable(const World&,const Actor&,size_t)const;

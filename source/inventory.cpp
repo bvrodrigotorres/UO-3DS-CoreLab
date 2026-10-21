@@ -20,7 +20,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;opened=-1;backpack.clear();chests.clear();writable=true;restored=false;equipment.fill(-1);equipMode=false;
+    path=p;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;equipment.fill(-1);equipMode=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -98,6 +98,13 @@ bool Inventory::unequip(size_t slot,SaveRename renameFile){
     if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;return false;}
     message=std::string(itemDefs[type].name)+" A MOCHILA - GUARDADO";return true;
 }
+static bool meleeContainerReach(const World&w,const Actor&a,const Actor&b){
+    if(!w.contains(a.x,a.y)||!w.contains(b.x,b.y)||std::abs(a.z-b.z)>8||std::max(std::abs(a.x-b.x),std::abs(a.y-b.y))>1)return false;
+    if(a.x==b.x&&a.y==b.y)return true;
+    const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};
+    for(int d=0;d<8;++d)if(a.x+xs[d]==b.x&&a.y+ys[d]==b.y){Actor next;int actual;return step(w,a,d,next,actual)&&next.x==b.x&&next.y==b.y&&std::abs(next.z-b.z)<=8;}
+    return false;
+}
 bool Inventory::reachable(const World&w,const Actor&a,size_t n)const{
     if(n>=chests.size()||chests[n].object>=w.objects.size())return false;
     const auto&o=w.objects[chests[n].object];
@@ -110,10 +117,16 @@ bool Inventory::reachable(const World&w,const Actor&a,size_t n)const{
     return true;
 }
 int Inventory::nearest(const World&w,const Actor&a)const{for(size_t n=0;n<chests.size();++n)if(reachable(w,a,n))return int(n);return -1;}
-void Inventory::update(const World&w,const Actor&a){if(opened>=0&&!reachable(w,a,size_t(opened))){opened=-1;message="COFRE FUERA DE ALCANCE";}}
+bool Inventory::openExternal(const World&w,const Actor&a,Bag&bag,const Actor&position,const std::string&title){
+    if(!writable||!meleeContainerReach(w,a,position))return false;
+    external=&bag;externalPosition=position;externalTitle=title;opened=-2;equipMode=false;message="CADAVER ABIERTO - TOCA EL BOTIN";return true;
+}
+void Inventory::update(const World&w,const Actor&a){
+    if((opened>=0&&!reachable(w,a,size_t(opened)))||(opened==-2&&!meleeContainerReach(w,a,externalPosition))){closeContainer();message="CONTENEDOR FUERA DE ALCANCE";}
+}
 void Inventory::open(const World&w,const Actor&a){
     if(!writable){message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
-    if(opened>=0){opened=-1;message="COFRE CERRADO";return;}
+    if(hasContainer()){closeContainer();message="CONTENEDOR CERRADO";return;}
     opened=nearest(w,a);message=opened<0?"ACERCATE AL LADO DE UN COFRE":"COFRE ABIERTO - TOCA UN OBJETO";
 }
 bool Inventory::persist(std::string&error,SaveRename renameFile){
@@ -136,10 +149,12 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
     return true;
 }
 bool Inventory::transfer(const World&w,const Actor&a,bool fromChest,size_t slot,SaveRename renameFile){
-    update(w,a);if(!writable||opened<0){message="ABRE UN COFRE CERCANO";return false;}
-    Bag&source=fromChest?chests[opened].items:backpack;Bag&dest=fromChest?backpack:chests[opened].items;
+    update(w,a);if(!writable||!hasContainer()){message="ABRE UN COFRE CERCANO";return false;}
+    if(opened==-2&&!fromChest){message="CADAVER: SOLO RETIRAR BOTIN";return false;}
+    Bag&container=opened==-2?*external:chests[opened].items;
+    Bag&source=fromChest?container:backpack;Bag&dest=fromChest?backpack:container;
     if(slot>=source.size())return false;
-    auto item=source[slot];auto found=std::find_if(dest.begin(),dest.end(),[&](ItemStack s){return itemDefs[item.type].stackable&&s.type==item.type;});
+    auto item=source[slot];if(item.type>=ItemTypes)return false;auto found=std::find_if(dest.begin(),dest.end(),[&](ItemStack s){return itemDefs[item.type].stackable&&s.type==item.type;});
     if((found==dest.end()&&dest.size()>=BagSlots)||(found!=dest.end()&&unsigned(found->count)+item.count>65535)){message="SIN ESPACIO PARA ESA PILA";return false;}
     Bag oldSource=source,oldDest=dest;
     if(found==dest.end())dest.push_back(item);else found->count+=item.count;

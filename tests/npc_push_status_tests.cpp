@@ -19,10 +19,10 @@ int main(int argc,char**argv){
     assert(PlayerStatus::barWidth(25,50,148)==74);assert(PlayerStatus::barWidth(-1,50,148)==0);
     assert(PlayerStatus::barWidth(90,50,148)==148);assert(PlayerStatus::barWidth(10,0,148)==0);
     Inventory inv;inv.backpack={{0,25},{1,10},{0,75}};inv.chests.push_back({0,{{0,500}}});assert(PlayerStatus::gold(&inv)==100&&PlayerStatus::gold(nullptr)==0);
-    TouchPages pages;pages.page=1;pages.begin(30,150);assert(pages.end()&&pages.zoom==1);pages.begin(160,150);assert(pages.end()&&pages.zoom==2);
+    TouchPages pages;pages.page=1;pages.begin(30,JournalLayout::ZoomTop+4);assert(pages.end()&&pages.zoom==1);pages.begin(160,JournalLayout::ZoomTop+4);assert(pages.end()&&pages.zoom==2);
     pages.begin(160,175);assert(!pages.end()&&pages.zoom==2); // resource panel cannot change map zoom
     pages.begin(250,216);assert(!pages.end()&&pages.page==1);
-    pages.begin(250,225);assert(pages.end()&&pages.page==2);
+    pages.begin(250,225);assert(!pages.end()&&pages.page==1);
     std::vector<uint8_t>fb(320*240*3+32,0xCD);PlayerStatus stats;stats.hits=29;stats.mana=17;stats.stamina=43;
     drawJournal(fb.data()+16,w,from,nullptr,2,"",&inv,nullptr,&stats);
     for(int i=0;i<16;++i)assert(fb[i]==0xCD&&fb[fb.size()-1-i]==0xCD);

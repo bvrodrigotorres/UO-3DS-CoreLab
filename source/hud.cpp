@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
+#include "combat.hpp"
 #include "exploration.hpp"
 #include <cmath>
 #include <cstdio>
@@ -73,7 +74,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.19",ink,1,13);
+    text(fb,225,20,"C.LAB V0.20",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -81,17 +82,17 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     for(const auto&line:info.lines){if(y>174)break;text(fb,20,y,line,ink);y+=spacing;}
     box(fb,17,181,286,1,ink);box(fb,17,183,286,1,gold);
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
-    text(fb,20,199,"Y: ROOFS | A: RESET | X: SCENE",ink);
+    text(fb,20,199,"Y: ROOFS | A: ATACAR | X: OBJ",ink);
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
     text(fb,20,219,"START: PAUSA | DESLIZA 1/3",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
-void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status){
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     (void)message;
-    text(fb,20,21,"MINIMAPA",ink);text(fb,200,21,"PERSONAJE",ink);
-    box(fb,192,34,1,120,gold);
+    text(fb,20,14,"MINIMAPA",ink);text(fb,164,14,"2/3",ink);text(fb,210,14,"PERSONAJE",ink);
+    box(fb,192,25,1,116,gold);
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
     float scale=float(std::max(1,std::min(4,zoom)));
@@ -130,19 +131,23 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         text(fb,290,y+5,labels[slot],ink);
     }
     text(fb,198,JournalLayout::ZoomTop,inv&&inv->equipmentMask()?"TOCA PARA QUITAR":"SIN EQUIPO",ink,1,17);
-    box(fb,17,158,286,1,ink);box(fb,17,160,286,1,gold);
     const PlayerStatus initial;const auto&stats=status?*status:initial;
-    auto meter=[&](int y,const char*label,int value,int maximum,Color color){
-        text(fb,20,y+2,label,ink);box(fb,62,y,150,12,ink);box(fb,63,y+1,148,10,{84,67,47});
-        int width=PlayerStatus::barWidth(value,maximum,148);
-        if(width){box(fb,63,y+1,width,10,color);box(fb,63,y+1,width,2,{uint8_t(std::min(255,int(color.r)+35)),uint8_t(std::min(255,int(color.g)+35)),uint8_t(std::min(255,int(color.b)+35))});}
-        text(fb,220,y+2,std::to_string(value)+"/"+std::to_string(maximum),ink,1,13);
-    };
-    meter(166,"VIDA",stats.hits,stats.hitsMax,{173,45,37});
-    meter(182,"MANA",stats.mana,stats.manaMax,{49,83,164});
-    meter(198,"RESIST",stats.stamina,stats.staminaMax,{58,124,66});
-    text(fb,20,213,"FUE "+std::to_string(stats.strength)+" DES "+std::to_string(stats.dexterity)+" INT "+std::to_string(stats.intelligence)+" ORO "+std::to_string(PlayerStatus::gold(inv)),ink,1,46);
-    text(fb,20,223,"R: PAGINA | DESLIZA 2/3",ink);
+    constexpr int ox=10,oy=146;
+    if(statusArt&&statusArt->rgba.size()==300*82*4){
+        for(int y=0;y<82;++y)for(int x=0;x<300;++x){size_t p=(y*300+x)*4;if(statusArt->rgba[p+3])pixel(fb,ox+x,oy+y,{statusArt->rgba[p],statusArt->rgba[p+1],statusArt->rgba[p+2]});}
+    }else{
+        box(fb,ox,oy,300,82,{185,174,148});text(fb,ox+86,oy+4,"CHARACTER STATUS",ink);
+        const char*icons[]={"F","D","I","V","R","M","C","S","P","A","O","T"};
+        for(int col=0;col<4;++col)for(int row=0;row<3;++row){int x=ox+8+col*60,y=oy+17+row*20;box(fb,x,y,60,20,ink);box(fb,x+1,y+1,58,18,{181,177,162});text(fb,x+3,y+7,icons[col*3+row],ink);}
+        for(int row=0;row<5;++row)text(fb,ox+250,oy+19+row*12,std::string(1,"PFCVE"[row]),ink);
+    }
+    auto value=[&](int col,int row,const std::string&v){text(fb,ox+8+col*60+25,oy+17+row*20+7,v,ink,1,6);};
+    auto pair=[&](int col,int row,int current,int maximum){int x=ox+8+col*60+29,y=oy+17+row*20;text(fb,x,y+1,std::to_string(current),ink,1,5);box(fb,x-2,y+9,29,1,ink);text(fb,x,y+11,std::to_string(maximum),ink,1,5);};
+    value(0,0,std::to_string(stats.strength));value(0,1,std::to_string(stats.dexterity));value(0,2,std::to_string(stats.intelligence));
+    pair(1,0,stats.hits,stats.hitsMax);pair(1,1,stats.stamina,stats.staminaMax);pair(1,2,stats.mana,stats.manaMax);
+    value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.luck));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
+    value(3,0,std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv)));value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers)+"/"+std::to_string(stats.followersMax));
+    for(int row=0;row<5;++row)text(fb,ox+270,oy+18+row*12,std::to_string(stats.resistances[row]),ink,1,3);
 
 }
 
@@ -152,7 +157,7 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
     box(fb,17,45,286,1,ink);box(fb,17,181,286,1,ink);
     text(fb,20,53,"MOCHILA "+std::to_string(inv.backpack.size())+"/9",ink);
-    text(fb,166,53,inv.opened<0?"COFRE CERRADO":"COFRE "+std::to_string(inv.opened+1),ink);
+    text(fb,166,53,!inv.hasContainer()?"CONTENEDOR":inv.containerName(),ink);
     box(fb,151,52,1,127,gold);
     auto bag=[&](const Bag&items,int left){
         for(int n=0;n<9;++n){int x=left+(n%3)*38,y=65+(n/3)*32;
@@ -169,15 +174,15 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     };
     bag(inv.backpack,20);
     static const Bag empty;
-    bag(inv.opened>=0&&size_t(inv.opened)<inv.chests.size()?inv.chests[inv.opened].items:empty,166);
+    bag(inv.hasContainer()?inv.containerItems():empty,166);
     box(fb,20,163,130,17,ink);box(fb,21,164,128,15,gold);
     text(fb,26,168,inv.equipMode?"MODO: EQUIPAR":"MODO: TRANSFERIR",ink);
     box(fb,166,163,134,17,ink);box(fb,167,164,132,15,gold);
-    text(fb,174,168,inv.opened>=0?"CERRAR COFRE":"ABRIR CERCANO",ink);
+    text(fb,174,168,inv.hasContainer()?"CERRAR":"ABRIR CERCANO",ink);
     box(fb,18,187,284,41,{218,195,148});
     text(fb,20,189,inv.message,ink);
     text(fb,20,199,inv.equipMode?"TOCA UN EQUIPABLE DE LA MOCHILA":"TOCA UNA PILA PARA TRANSFERIR",ink);
-    text(fb,20,209,inv.nearest(w,a)>=0?"COFRE AL ALCANCE | AUTOGUARDADO":"ACERCATE A UN COFRE DEL MAPA",ink);
+    text(fb,20,209,inv.opened==-2?"BOTIN DEL CADAVER | GUARDADO":inv.nearest(w,a)>=0?"COFRE AL ALCANCE | AUTOGUARDADO":"COFRE O CADAVER: ABRIR CERCANO",ink);
     text(fb,20,219,"R: PAGINA | DESLIZA 3/3",ink);
 }
 
@@ -199,7 +204,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.19";
+    const std::string version="CORELAB V0.20";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }

@@ -39,6 +39,7 @@ static unsigned outfitMask=99;
 static EquipmentCache<C2D_SpriteSheet>outfitCache;
 static std::vector<C2D_SpriteSheet>npcSheets;
 static size_t npcBytes;
+static C2D_SpriteSheet corpseSheet=nullptr;static std::vector<uint8_t>corpseTypes;static std::array<std::array<int,2>,5>corpsePivots{};static size_t corpseBytes=0;
 static bool runVerified=false;
 static size_t bytes,objects;
 static int used;
@@ -124,7 +125,7 @@ void rendererShutdown(){
     if(avatar)C2D_SpriteSheetFree(avatar);
     for(unsigned i=0;i<8;++i)if(auto cached=outfitCache.remove(i))C2D_SpriteSheetFree(cached);
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
-    npcSheets.clear();
+    npcSheets.clear();if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);corpseSheet=nullptr;corpseBytes=0;
     C3D_TexDelete(&labelFont);C3D_TexDelete(&white);if(buffer)linearFree(buffer);
     shaderProgramFree(&program);if(shader)DVLB_Free(shader);
 }
@@ -162,6 +163,20 @@ bool loadAtlases(int images,std::string&error,const std::string&root){
     }
     C3D_FrameSync();for(auto s:sheets)if(s)C2D_SpriteSheetFree(s);
     sheets=std::move(next);bytes=size;return true;
+}
+bool loadCombatArt(const std::string&root,const std::string&population,std::string&error){
+    std::ifstream f(root+"corpses.bin",std::ios::binary|std::ios::ate);
+    if(!f||f.tellg()<44||f.tellg()>108){error="FALTA CORPSES.BIN";return false;}
+    std::vector<uint8_t>b(size_t(f.tellg()));f.seekg(0);f.read((char*)b.data(),b.size());
+    auto get=[&](size_t i){return uint32_t(b[i])|uint32_t(b[i+1])<<8|uint32_t(b[i+2])<<16|uint32_t(b[i+3])<<24;};
+    unsigned count=b[4]|unsigned(b[5])<<8;uint32_t hash=2166136261;for(size_t i=24;i<b.size();++i)hash=(hash^b[i])*16777619;
+    if(std::memcmp(b.data(),"UCR1",4)||!count||count>64||b[6]!=5||b[7]||b.size()!=44+count||get(20)!=hash||get(12)>512*1024||!equipmentChecksum(population,get(8))||!equipmentChecksum(root+"corpses.t3x",get(16))){error="CADAVERES: ARCHIVO INVALIDO";return false;}
+    for(size_t i=44;i<b.size();++i)if(b[i]!=255&&b[i]>=5){error="CADAVERES: TIPO INVALIDO";return false;}
+    auto sheet=C2D_SpriteSheetLoad((root+"corpses.t3x").c_str());if(!sheet||C2D_SpriteSheetCount(sheet)!=40){if(sheet)C2D_SpriteSheetFree(sheet);error="CADAVERES: ATLAS INVALIDO";return false;}
+    if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);
+    corpseSheet=sheet;corpseTypes.assign(b.begin()+44,b.end());
+    for(int i=0;i<5;++i)for(int xy=0;xy<2;++xy){int at=24+i*4+xy*2;corpsePivots[i][xy]=int16_t(unsigned(b[at])|unsigned(b[at+1])<<8);}
+    corpseBytes=C2D_SpriteSheetGetImage(sheet,0).tex->size;error.clear();return true;
 }
 bool loadNpcAtlases(std::string&error){
     std::vector<C2D_SpriteSheet>next;size_t usedBytes=0;
@@ -250,20 +265,23 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     }
 }
 bool rendererTextureError(){return textureFailure;}
-size_t textureBytes(){return bytes+npcBytes+outfitCache.bytes();}
+size_t textureBytes(){return bytes+npcBytes+corpseBytes+outfitCache.bytes();}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs){
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status){
     used=0;objects=0;overflow=false;batches.clear();
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
     roofCutaway.update(w,actor,roofs);
     bool afterActor=false;
     auto npcList=npcs?npcs->drawList(w,actor,roofs!=RoofMode::Full):std::vector<Draw>{};
+    if(combat){for(size_t i=0;i<combat->corpses.size();++i){const auto&c=combat->corpses[i];
+        if(c.active&&std::abs(c.position.x-actor.x)<=12&&std::abs(c.position.y-actor.y)<=12&&std::abs(c.position.z-actor.z)<16)npcList.push_back({Kind::Corpse,c.position.x,c.position.y,c.position.z,c.position.z,i,0xfffffe00u+(uint32_t)i});
+    }std::stable_sort(npcList.begin(),npcList.end(),drawBefore);}
     mergedDraws.clear();mergedDraws.reserve(list.size()+npcList.size());
     for(size_t wi=0,ni=0;wi<list.size()||ni<npcList.size();){
         bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
@@ -338,6 +356,12 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                     if(alpha>0)quad(p,whiteUV,&white,rug?.18f:roof?.55f:.63f,rug?.3f:roof?.24f:.44f,rug?.8f:roof?.17f:.24f,alpha);
                 }
             }
+        }else if(d.kind==Kind::Corpse){
+            const auto&c=combat->corpses[d.index];auto foot=project(c.position.x,c.position.y,c.position.z);
+            unsigned type=c.style>=0&&size_t(c.style)<corpseTypes.size()?corpseTypes[c.style]:255;
+            if(corpseSheet&&type<5){auto image=C2D_SpriteSheetGetImage(corpseSheet,type*8+(c.direction&7));float left=foot.x-corpsePivots[type][0],top=foot.y-corpsePivots[type][1];
+                Point p[]={{left,top},{left+image.subtex->width,top},{left+image.subtex->width,top+image.subtex->height},{left,top+image.subtex->height}};Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
+            }else rect(foot.x-9,foot.y-3,18,5,.35f,.19f,.12f);
         }else if(d.kind==Kind::Npc){
             const auto&n=npcs->all()[d.index];
             if((size_t)n.style>=npcSheets.size())continue;
@@ -348,7 +372,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             float left=foot.x-width/2,top=foot.y-height+5;
             if(npcs->hasPopulation()){const auto&style=npcs->styles()[n.style];left=foot.x-style.pivotX;top=foot.y-style.pivotY;}
             Point p[]={{left,top},{left+width,top},{left+width,top+height},{left,top+height}};
-            Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
+            Point uv[4];uvFor(image,uv);float tint=combat&&d.index<combat->vitals().size()&&combat->vitals()[d.index].flash>0?.35f:1;quad(p,uv,image.tex,1,tint,tint,1);
         }else{
             afterActor=true;
             Point foot=project(cameraX,cameraY,footZ);
@@ -358,13 +382,13 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 auto image=C2D_SpriteSheetGetImage(player,index);
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};
-                Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
+                Point uv[4];uvFor(image,uv);float tint=status&&status->flash>0?.35f:1;quad(p,uv,image.tex,1,tint,tint,1);
             }else{rect(foot.x-5,foot.y-24,10,24,.2f,.45f,.95f);rect(foot.x-4,foot.y-32,8,8,.95f,.75f,.55f);}
         }
     }
     // Overhead text is a final color-only overlay; it cannot alter floor depth.
     pixelMode=PixelMode::Translucent;
-    for(const auto&d:npcList){const auto&n=npcs->all()[d.index];if(!n.namePresence.visible())continue;float t=n.progress;
+    for(const auto&d:npcList){if(d.kind!=Kind::Npc)continue;const auto&n=npcs->all()[d.index];if(!n.namePresence.visible())continue;float t=n.progress;
         auto foot=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
         float pivot=npcs->hasPopulation()?npcs->styles()[n.style].pivotY:64;
         float head=foot.y-pivot;if(foot.x<0||foot.x>400||head< -8||head>240)continue;
@@ -376,6 +400,16 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         };
         float top=std::max(2.f,head-(n.title.empty()?17:33));
         line(n.name,top);if(!n.title.empty())line(n.title,top+16);
+    }
+    auto healthBar=[&](float x,float y,int current,int maximum,bool selected){
+        x=overheadPixelOrigin(x-23);y=overheadPixelOrigin(y);rect(x,y,46,7,selected?.9f:.1f,selected?.7f:.1f,.1f);
+        rect(x+1,y+1,44,5,.2f,.05f,.04f);rect(x+1,y+1,PlayerStatus::barWidth(current,maximum,44),5,.8f,.12f,.08f);
+    };
+    if(status&&status->healthVisible>0){auto p=project(cameraX,cameraY,footZ);healthBar(p.x,p.y-82,status->hits,status->hitsMax,false);}
+    if(combat&&npcs&&combat->target>=0&&size_t(combat->target)<npcs->all().size()&&size_t(combat->target)<combat->vitals().size()){
+        const auto&n=npcs->all()[combat->target];if(n.alive){float t=n.progress;auto p=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
+            if(p.x>=0&&p.x<400&&p.y>=0&&p.y<260){float pivot=npcs->hasPopulation()?npcs->styles()[n.style].pivotY:64;const auto&v=combat->vitals()[combat->target];healthBar(p.x,p.y-pivot-7,v.hits,v.maximum,true);rect(p.x-10,p.y+3,20,2,.95f,.75f,.1f);}
+        }
     }
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);

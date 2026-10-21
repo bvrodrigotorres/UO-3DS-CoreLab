@@ -6,6 +6,7 @@
 namespace lab {
 struct Npc {
     Actor position,from,home;int direction=4,style=0;float progress=1,wait=1,animation=0;bool moving=false;
+    bool alive=true,hostile=false;
     NamePresence namePresence;std::string name,greeting,title;std::array<uint8_t,3>nameColor{{238,238,0}};uint16_t nameHue=0x35;int roam=3;bool animal=false;
 };
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
@@ -21,6 +22,7 @@ public:
     bool occupied(const Actor&,int except=-1)const;
     void addOccupants(std::vector<Actor>&)const;
     std::string greeting(const Actor&)const;
+    std::vector<Npc>&combatants(){return people;}
     const std::vector<Npc>&all()const{return people;}
     std::vector<Draw> drawList(const World&,const Actor&,bool cutaway)const;
 };

@@ -64,3 +64,8 @@ Actualización v0.17: consultar [v0.17.md](v0.17.md); START ahora abre la pausa.
 ## v0.18: texto y sombreros
 
 Consultar [instalación y cambios](v0.18.md). Probar nombres amarillos/grises sobre madera, hierba y piedra; acercarse dos segundos hasta que se oculten y alejarse para recuperarlos. Comprobar sombreros de Emilio, Verity y bard al caminar y girar. La pausa no debe consumir el tiempo de proximidad.
+
+
+## v0.20: combate y estado original
+
+Consultar [instalación y controles](v0.20.md). A inicia/detiene el ataque y X cambia de criatura; acercarse con el pad. La segunda página muestra el gump de estado original. Desde la tercera página se abre el cadáver cercano con el mismo botón que los cofres. Verificar daño y barra sobre el jugador, botín persistente, reaparición a los 20 segundos, pausa de los temporizadores y retorno al punto inicial al morir.
