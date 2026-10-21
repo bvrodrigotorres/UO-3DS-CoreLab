@@ -4,11 +4,15 @@
 namespace lab {
 struct Npc {
     Actor position,from,home;int direction=4,style=0;float progress=1,wait=1,animation=0;bool moving=false;
-    std::string name,greeting;
+    std::string name,greeting;int roam=3;bool animal=false;
 };
+struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
 class Npcs {
-    std::vector<Npc> people;uint32_t random=12345;
+    std::vector<Npc> people,original;std::vector<NpcStyle>art;uint32_t random=12345;
 public:
+    bool loadPopulation(const std::string&,const std::string&scene,const World&,std::string&);
+    bool hasPopulation()const{return !art.empty();}
+    const std::vector<NpcStyle>&styles()const{return art;}
     void reset(const World&,const Actor&player);
     void update(const World&,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&);
     bool occupied(const Actor&,int except=-1)const;

@@ -30,7 +30,7 @@ static std::vector<std::array<unsigned,2>>imageSizes;
 static std::vector<size_t>sheetCosts;
 static std::vector<uint64_t>sheetUsed;
 static uint64_t textureClock=0;
-static constexpr size_t WorldTextureBudget=14*1024*1024;
+static constexpr size_t WorldTextureBudget=10*1024*1024;
 static C2D_SpriteSheet avatar,outfit;
 static unsigned outfitMask=99;
 static EquipmentCache<C2D_SpriteSheet>outfitCache;
@@ -148,6 +148,23 @@ bool loadNpcAtlases(std::string&error){
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
     npcSheets=std::move(next);npcBytes=usedBytes;error.clear();return true;
 }
+bool loadPopulationAtlases(const Npcs&population,const std::string&root,std::string&error){
+    std::vector<C2D_SpriteSheet>next;size_t used=0;
+    for(size_t i=0;i<population.styles().size();++i){
+        const auto&meta=population.styles()[i];char name[32];std::snprintf(name,sizeof name,"pop_%02u.t3x",unsigned(i));
+        auto path=root+name;
+        auto sheet=equipmentChecksum(path,meta.checksum)?C2D_SpriteSheetLoad(path.c_str()):nullptr;
+        if(!sheet||C2D_SpriteSheetCount(sheet)!=40){
+            if(sheet)C2D_SpriteSheetFree(sheet);
+            for(auto old:next)C2D_SpriteSheetFree(old);
+            error="POBLACION: RECURSOS INVALIDOS";return false;
+        }
+        auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);
+        used+=image.tex->size;next.push_back(sheet);
+    }
+    C3D_FrameSync();for(auto old:npcSheets)C2D_SpriteSheetFree(old);
+    npcSheets=std::move(next);npcBytes=used;error.clear();return true;
+}
 bool prepareEquipment(unsigned mask,const EquipmentArt&art,std::string&error){
     if(mask>7)return false;
     if(auto cached=outfitCache.get(mask)){outfit=cached;outfitMask=mask;error.clear();return true;}
@@ -183,7 +200,7 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     if(!streamed)return;
     ++textureClock;size_t incoming=0;bool cold=false;
     for(size_t i=0;i<sheets.size();++i)if(needed[i]){sheetUsed[i]=textureClock;if(!sheets[i]){cold=true;incoming+=sheetCosts[i];}}
-    if(!cold)return;
+    if(!cold){textureFailure=false;return;}
     C3D_FrameSync();textureFailure=false;
     while(bytes+incoming>WorldTextureBudget){
         int victim=-1;for(size_t i=0;i<sheets.size();++i)if(sheets[i]&&!needed[i]&&(victim<0||sheetUsed[i]<sheetUsed[victim]))victim=int(i);
@@ -193,7 +210,9 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     }
     for(size_t i=0;i<sheets.size();++i)if(needed[i]&&!sheets[i]){
         while(linearSpaceFree()<sheetCosts[i]+2*1024*1024){
-            int victim=outfitCache.victim(outfitMask);if(victim<0)break;
+            int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&(victim<0||sheetUsed[j]<sheetUsed[victim]))victim=int(j);
+            if(victim>=0){auto image=C2D_SpriteSheetGetImage(sheets[victim],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[victim]);sheets[victim]=nullptr;continue;}
+            victim=outfitCache.victim(outfitMask);if(victim<0)break;
             C2D_SpriteSheetFree(outfitCache.remove(unsigned(victim)));
         }
         if(linearSpaceFree()<sheetCosts[i]+2*1024*1024){textureFailure=true;continue;}
@@ -223,7 +242,10 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
         mergedDraws.push_back(takeNpc?npcList[ni++]:list[wi++]);
     }
-    auto visible=[&](const Draw&d){return !streamed||worldVisible(w,d,cameraX,cameraY,footZ,imageSizes);};
+    auto visible=[&](const Draw&d){
+        if(roofs==RoofMode::Hidden&&d.kind==Kind::Static&&w.objects[d.index].z>=footZ+14)return false;
+        return !streamed||worldVisible(w,d,cameraX,cameraY,footZ,imageSizes);
+    };
     if(authentic&&streamed){
         std::vector<unsigned char>needed(sheets.size());
         for(const auto&d:mergedDraws)if(visible(d)){
@@ -296,7 +318,9 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             auto foot=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
             auto image=C2D_SpriteSheetGetImage(npcSheets[n.style],avatarImage(n.direction,n.moving,false,(unsigned)n.animation,40));
             float width=image.subtex->width,height=image.subtex->height;
-            Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};
+            float left=foot.x-width/2,top=foot.y-height+5;
+            if(npcs->hasPopulation()){const auto&style=npcs->styles()[n.style];left=foot.x-style.pivotX;top=foot.y-style.pivotY;}
+            Point p[]={{left,top},{left+width,top},{left+width,top+height},{left,top+height}};
             Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
         }else{
             afterActor=true;

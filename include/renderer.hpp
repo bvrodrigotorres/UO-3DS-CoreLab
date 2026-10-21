@@ -11,6 +11,7 @@ bool rendererInit();
 void rendererShutdown();
 bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
 void warmEquipment(unsigned,const EquipmentArt&);
+bool loadPopulationAtlases(const Npcs&,const std::string&,std::string&);
 bool loadNpcAtlases(std::string&error);
 bool loadAtlases(int images,std::string&error,const std::string&root="sdmc:/3ds/UO-3DS-CoreLab/");
 size_t textureBytes();

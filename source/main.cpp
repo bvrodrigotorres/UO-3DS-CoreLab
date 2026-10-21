@@ -68,7 +68,12 @@ int main(){
     auto alignCamera=[&](){from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;progress=0;};
     startupFrame(nullptr,false,"POBLACION DE BRITANNIA",3);
     lab::Npcs npcs;std::string npcError;
-    bool hasNpcs=available&&lab::loadNpcAtlases(npcError);
+    bool hasNpcs=false;
+    if(available){
+        if(std::ifstream(worldRoot+"population.bin").good())
+            hasNpcs=npcs.loadPopulation(worldRoot+"population.bin",worldRoot+"scene.bin",privateWorld,npcError)&&lab::loadPopulationAtlases(npcs,worldRoot,npcError);
+        else hasNpcs=lab::loadNpcAtlases(npcError);
+    }
     if(hasNpcs)npcs.reset(privateWorld,actor);
     lab::Inventory inventory;inventory.init(canonicalPrivate,saveRoot+savePrefix+"inventory-private.sav");
     lab::Inventory demoInventory;demoInventory.init(demo,saveRoot+savePrefix+"inventory-demo.sav");

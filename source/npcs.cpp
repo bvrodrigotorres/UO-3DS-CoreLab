@@ -2,6 +2,8 @@
 #include "npcs.hpp"
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <cstring>
 namespace lab {
 static bool same(const Actor&a,const Actor&b){return a.x==b.x&&a.y==b.y&&std::abs(a.z-b.z)<16;}
 bool canStand(const World&w,const Actor&a){
@@ -16,8 +18,33 @@ bool canStand(const World&w,const Actor&a){
     }
     return support;
 }
+bool Npcs::loadPopulation(const std::string&path,const std::string&scene,const World&w,std::string&error){
+    auto read=[](const std::string&p,std::vector<unsigned char>&b,size_t limit){std::ifstream f(p,std::ios::binary|std::ios::ate);if(!f||f.tellg()<0||f.tellg()>std::streamoff(limit))return false;b.resize(size_t(f.tellg()));f.seekg(0);return bool(f.read((char*)b.data(),b.size()));};
+    auto hash=[](const unsigned char*p,size_t count){uint32_t h=2166136261;for(size_t i=0;i<count;++i)h=(h^p[i])*16777619;return h;};
+    std::vector<unsigned char>b,raw;
+    if(!read(path,b,65536)||b.size()<16||std::memcmp(b.data(),"UNP1",4)){error="POBLACION: ARCHIVO INVALIDO";return false;}
+    auto n=[&](size_t p,int count){uint32_t value=0;for(int i=0;i<count;++i)value|=uint32_t(b[p+i])<<(8*i);return value;};
+    unsigned count=n(4,2),styles=n(6,2);
+    if(!count||count>1024||!styles||styles>64||b.size()!=16+styles*16+count*44||hash(b.data()+16,b.size()-16)!=n(12,4)||!read(scene,raw,8*1024*1024)||hash(raw.data(),raw.size())!=n(8,4)){error="POBLACION: MAPA O CHECKSUM INVALIDO";return false;}
+    std::vector<NpcStyle>nextArt;std::vector<Npc>next;
+    for(unsigned i=0;i<styles;++i){size_t at=16+i*16;NpcStyle a;a.pivotX=int16_t(n(at,2));a.pivotY=int16_t(n(at+2,2));a.width=n(at+4,2);a.height=n(at+6,2);a.bytes=n(at+8,4);a.checksum=n(at+12,4);
+        if(!a.width||!a.height||a.width>192||a.height>192||std::abs(a.pivotX)>256||std::abs(a.pivotY)>256||!a.bytes||a.bytes>2*1024*1024){error="POBLACION: ATLAS INVALIDO";return false;}nextArt.push_back(a);}
+    for(unsigned i=0;i<count;++i){size_t at=16+styles*16+i*44;Npc npc;npc.position={int(n(at,2)),int(n(at+2,2)),int(int16_t(n(at+4,2)))};npc.home=npc.from=npc.position;npc.style=n(at+6,2);npc.roam=n(at+8,2);npc.animal=n(at+10,2)!=0;
+        if(npc.style>=int(styles)||npc.roam>120||n(at+10,2)>1||!canStand(w,npc.position)||b[at+43]){error="POBLACION: POSICION INVALIDA";return false;}
+        npc.name=std::string((const char*)b.data()+at+12);npc.greeting=npc.animal?"":npc.name+": SALUDOS, VIAJERO";npc.wait=1+(i%10)*.15f;next.push_back(npc);}
+    art=std::move(nextArt);original=std::move(next);error.clear();return true;
+}
 void Npcs::reset(const World&w,const Actor&player){
     people.clear();random=12345;
+    if(hasPopulation()){
+        for(auto n:original){
+            if(!same(n.position,player)&&!occupied(n.position)){people.push_back(n);continue;}
+            bool found=false;
+            for(int r=1;r<=3&&!found;++r)for(int y=-r;y<=r&&!found;++y)for(int x=-r;x<=r&&!found;++x){Actor a{n.home.x+x,n.home.y+y,n.home.z};if(canStand(w,a)&&!same(a,player)&&!occupied(a)){n.position=n.from=n.home=a;people.push_back(n);found=true;}}
+            if(!found)people.push_back(n); // preserve the original count; let the player move clear
+        }
+        return;
+    }
     const int xs[]={1493,1500,1499},ys[]={1616,1612,1619};
     const char*names[]={"POSADERO","VIAJERO AZUL","VIAJERO VERDE"};
     const char*words[]={"POSADERO: BIENVENIDO A LA POSADA","VIAJERO: BUEN VIAJE","VIAJERO: BRITAIN TE DA LA BIENVENIDA"};
@@ -40,6 +67,7 @@ void Npcs::addOccupants(std::vector<Actor>&out)const{
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
     for(size_t i=0;i<people.size();++i){auto&n=people[i];
+        if(std::max(std::abs(n.position.x-player.x),std::abs(n.position.y-player.y))>24)continue;
         if(n.moving){
             n.progress=std::min(1.f,n.progress+dt/.45f);n.animation=std::fmod(n.animation+dt*8,4.f);
             if(n.progress>=1){n.moving=false;n.wait=1.0f+(random%20)/10.f;}
@@ -54,8 +82,9 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
         n.wait-=dt;if(n.wait>0)continue;
         random=random*1664525u+1013904223u;int d=(random>>16)&7;n.wait=.5f;
         Actor next;int actual;
-        if(doors.tryOpen(n.position,dx[d],dy[d]))continue;
-        if(!step(w,n.position,d,next,actual)||next.z!=n.home.z||std::abs(next.x-n.home.x)>3||std::abs(next.y-n.home.y)>3||
+        if(!n.roam)continue;
+        if(!n.animal&&doors.tryOpen(n.position,dx[d],dy[d]))continue;
+        if(!step(w,n.position,d,next,actual)||next.z!=n.home.z||std::abs(next.x-n.home.x)>n.roam||std::abs(next.y-n.home.y)>n.roam||
            same(next,player)||(playerMoving&&same(next,from))||occupied(next,(int)i))continue;
         if(actual&1){
             Actor s1{n.position.x+dx[actual],n.position.y,n.position.z},s2{n.position.x,n.position.y+dy[actual],n.position.z};
@@ -65,7 +94,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
     }
 }
 std::string Npcs::greeting(const Actor&a)const{
-    for(const auto&n:people)if(std::abs(n.position.z-a.z)<16&&std::abs(n.position.x-a.x)<=2&&std::abs(n.position.y-a.y)<=2)return n.greeting;
+    for(const auto&n:people)if(!n.animal&&std::abs(n.position.z-a.z)<16&&std::abs(n.position.x-a.x)<=2&&std::abs(n.position.y-a.y)<=2)return n.greeting;
     return "";
 }
 bool drawBefore(const Draw&a,const Draw&b){

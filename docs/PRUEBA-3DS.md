@@ -53,3 +53,5 @@ Nuevo Juego pide confirmar; Continuar conserva el inventario y equipo guardados.
 
 Prueba v0.14: mapa privado 256x256 y equipo caminando.
 Consultar [v0.14.md](v0.14.md) para instalación y partidas separadas.
+
+Actualización v0.15: consultar [v0.15.md](v0.15.md).

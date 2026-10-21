@@ -241,8 +241,8 @@ def main():
         key = (kind, graphic)
         if key in palette:
             return palette[key]
-        if len(images) >= 4096:
-            raise ValueError('More than 4096 graphics; choose a smaller region')
+        if len(images) >= 2048:
+            raise ValueError('More than 2048 source graphics; choose a smaller region')
         if kind == 'static':
             image = static_image(Art, graphic)
         elif kind == 'land':
@@ -295,8 +295,16 @@ def main():
     # Group similarly sized images before packing. Remap only texture indices;
     # tile art, placement, flags and draw order remain identical.
     permutation=sorted(range(len(images)),key=lambda i:(max(images[i].size),images[i].width*images[i].height,images[i].width))
-    remap={old:new for new,old in enumerate(permutation)}
-    images=[images[old] for old in permutation]
+    # Eight real sprites per GPU page reduce the unrelated pixels needed by
+    # a mixed terrain/building view. Logical slots remain 32 for compatibility.
+    from PIL import Image
+    packed=[];remap={}
+    for group in range(0,len(permutation),8):
+        if packed:
+            while len(packed)%32:packed.append(Image.new('RGBA',(1,1)))
+        for old in permutation[group:group+8]:remap[old]=len(packed);packed.append(images[old])
+    images=packed
+    if len(images)>8192:raise ValueError('Paged image limit exceeded')
     next_cells=[]
     for cell in cells:
         values=list(LAND.unpack(cell));values[1]=remap.get(values[1],NONE);next_cells.append(LAND.pack(*values))
