@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.12
+# Primera prueba: UO-3DS-CoreLab v0.12.1
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -50,3 +50,6 @@ Página 2: M/R/B quitan cada pieza y la devuelven a la mochila.
 
 Al iniciar se muestra el menú. Pad y A o táctil para elegir.
 Nuevo Juego pide confirmar; Continuar conserva el inventario y equipo guardados.
+
+Parche v0.12.1: revisar ropa al subir/bajar escaleras y el descanso 1494,1606,Z40.
+Consultar [v0.12.1.md](v0.12.1.md) para alcance y validación del orden local.

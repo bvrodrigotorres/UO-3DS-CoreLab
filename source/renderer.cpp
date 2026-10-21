@@ -2,6 +2,7 @@
 #include "renderer.hpp"
 #include "avatar.hpp"
 #include "repairs.hpp"
+#include "character_order.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -29,6 +30,8 @@ static int used;
 static bool overflow;
 static std::vector<Batch> batches;
 static RenderCache renderCache;
+static CharacterOrder characterOrder;
+static std::vector<Draw>mergedDraws;
 static constexpr int Capacity=65536;
 static void push(Vertex v,C3D_Tex*texture){
     if(used>=Capacity){overflow=true;return;}
@@ -132,9 +135,13 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
     bool afterActor=false;
     auto npcList=npcs?npcs->drawList(w,actor,roofs!=RoofMode::Full):std::vector<Draw>{};
+    mergedDraws.clear();mergedDraws.reserve(list.size()+npcList.size());
     for(size_t wi=0,ni=0;wi<list.size()||ni<npcList.size();){
         bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
-        const auto&d=takeNpc?npcList[ni++]:list[wi++];
+        mergedDraws.push_back(takeNpc?npcList[ni++]:list[wi++]);
+    }
+    const auto&ordered=characterOrder.build(w,mergedDraws,int(std::ceil(footZ)));
+    for(const auto&d:ordered){
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
         ++objects;
