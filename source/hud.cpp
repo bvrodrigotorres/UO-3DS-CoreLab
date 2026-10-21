@@ -70,7 +70,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"CORELAB V0.11",ink,1,13);
+    text(fb,225,20,"C.LAB V0.11.1",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
