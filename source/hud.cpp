@@ -71,7 +71,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.16",ink,1,13);
+    text(fb,225,20,"C.LAB V0.17",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
@@ -80,7 +80,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: ROOFS | A: RESET | X: SCENE",ink);
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
-    text(fb,20,219,"START: EXIT | DESLIZA 1/3",ink);
+    text(fb,20,219,"START: PAUSA | DESLIZA 1/3",ink);
 }
 void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status,const Inventory*inv,const EquipmentArt*equipment){
     drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/3",{}});
@@ -185,7 +185,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.16";
+    const std::string version="CORELAB V0.17";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -197,6 +197,14 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
     box(fb,30,137,260,16,ink);box(fb,32,139,256,12,{143,112,69});
     box(fb,33,140,254*std::max(0,std::min(5,progress))/5,10,gold);
     box(fb,18,187,284,41,{218,195,148});text(fb,47,205,"ESPERA UN MOMENTO...",ink);
+}
+void drawPause(uint8_t*fb,const PauseMenu&m){
+    drawHud(fb,{"ULTIMA ONLINE 3DS","PAUSA",{}});
+    const Color ink={55,37,22},gold={174,131,64};
+    const char*rows[]={"CONTINUAR","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    for(int i=0;i<3;++i){int y=65+i*38;box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
+    text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }
 void drawStartMenu(uint8_t*fb,const StartMenu&m,bool canContinue){
     bool opts=m.page==MenuPage::Options,confirm=m.page==MenuPage::Confirm;

@@ -74,6 +74,7 @@ int main(){
             hasNpcs=npcs.loadPopulation(worldRoot+"population.bin",worldRoot+"scene.bin",privateWorld,npcError)&&lab::loadPopulationAtlases(npcs,worldRoot,npcError);
         else hasNpcs=lab::loadNpcAtlases(npcError);
     }
+    if(hasNpcs&&npcs.hasPopulation())npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
     if(hasNpcs)npcs.reset(privateWorld,actor);
     lab::Inventory inventory;inventory.init(canonicalPrivate,saveRoot+savePrefix+"inventory-private.sav");
     lab::Inventory demoInventory;demoInventory.init(demo,saveRoot+savePrefix+"inventory-demo.sav");
@@ -115,7 +116,9 @@ int main(){
         if(available)checkpoints[1].baseline({canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},osGetTime());
         saveMessage="NUEVA AVENTURA EN BRITANNIA";return true;
     };
-    bool started=false,quit=false,touching=false;int touchX=0,touchY=0,touchLastX=0,touchLastY=0;
+    bool quit=false;
+    while(!quit){
+    bool started=false,touching=false;int touchX=0,touchY=0,touchLastX=0,touchLastY=0;
     u64 nextPad=0;
     while(aptMainLoop()&&!started&&!quit){
         startupFrame(&menu,canContinue);hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
@@ -137,7 +140,8 @@ int main(){
         if(action==lab::MenuAction::NewGame)started=freshGame();
         if(action==lab::MenuAction::Continue){if(restorePosition())alignCamera();started=true;}
     }
-    if(!started){lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;}
+    if(!started)break;
+    moving=false;alignCamera();
     startupFrame(nullptr,false,"ENTRANDO EN BRITANNIA",5);
     roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;
     if(hasNpcs)npcs.reset(privateWorld,actor);
@@ -148,11 +152,40 @@ int main(){
         lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     }
     std::vector<lab::Actor>occupants;occupants.reserve(16);
+    lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
-        if(down&KEY_START)break;
+        bool wasPaused=pause.active;
+        if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;}
+        else if((down&KEY_START)&&pause.active)pause.active=false;
+        if(pause.active||wasPaused){
+            lab::PauseAction action=lab::PauseAction::None;
+            if(!pause.active||(down&KEY_B))action=lab::PauseAction::Resume;
+            if(pause.active){
+                circlePosition stick;hidCircleRead(&stick);
+                int direction=((held&KEY_DOWN)||stick.dy< -35)-((held&KEY_UP)||stick.dy>35);
+                if(!direction)pausePad=0;
+                else if(now>=pausePad){pause.move(direction);pausePad=now+180;}
+                if(down&KEY_A)action=pause.activate();
+                if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);int row=pause.hit(t.px,t.py);if(row>=0){pause.selected=row;action=pause.activate();}}
+            }
+            if(action==lab::PauseAction::Resume){
+                pause.active=false;positionCheckpoint().suspend(now-pauseAt);pages.active=false;frames=0;
+            }else if(action==lab::PauseAction::MainMenu||action==lab::PauseAction::Exit){
+                bool saved=true;
+                if(positionCheckpoint().dirty(actor)){saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);positionCheckpoint().result(actor,pauseAt,saved);}
+                auto&bag=authentic?inventory:demoInventory;
+                if(saved&&bag.healthy())saved=bag.checkpoint();
+                if(saved){C3D_FrameSync();quit=action==lab::PauseAction::Exit;menu.back();menu.selected=1;canContinue=true;moving=false;break;}
+                pause.message="ERROR SD: NO SE PUDO GUARDAR";
+            }
+            last=sample=now;sampleFrames=0;
+            auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawPause(bottom,pause);
+            GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+            continue;
+        }
         if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
         bool pageChanged=false;
         if(down&KEY_R){pages.page=(pages.page+1)%3;pageChanged=true;}
@@ -244,7 +277,7 @@ int main(){
             if(authentic&&!equipmentError.empty())hud.lines.push_back(equipmentError);
             if(!available)hud.lines.push_back(error);
             if(authentic&&!hasDoors)hud.lines.push_back(doorError);
-            if(authentic&&!hasNpcs)hud.lines.push_back(npcError);
+            if(authentic&&!npcError.empty())hud.lines.push_back(npcError);
             if(lab::rendererTextureError())hud.lines.emplace_back("TEXTURAS: ERROR SD/MEMORIA");
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
@@ -256,5 +289,6 @@ int main(){
         }
     }
     if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+    }
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
 }

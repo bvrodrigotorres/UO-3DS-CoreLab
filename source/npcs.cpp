@@ -34,6 +34,25 @@ bool Npcs::loadPopulation(const std::string&path,const std::string&scene,const W
         npc.name=std::string((const char*)b.data()+at+12);npc.greeting=npc.animal?"":npc.name+": SALUDOS, VIAJERO";npc.wait=1+(i%10)*.15f;next.push_back(npc);}
     art=std::move(nextArt);original=std::move(next);error.clear();return true;
 }
+bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::string&population,std::string&error){
+    auto read=[](const std::string&p,std::vector<unsigned char>&b,size_t limit){std::ifstream f(p,std::ios::binary|std::ios::ate);if(!f||f.tellg()<0||f.tellg()>std::streamoff(limit))return false;b.resize(size_t(f.tellg()));f.seekg(0);return bool(f.read((char*)b.data(),b.size()));};
+    auto hash=[](const unsigned char*p,size_t count){uint32_t h=2166136261;for(size_t i=0;i<count;++i)h=(h^p[i])*16777619;return h;};
+    std::vector<unsigned char>b,sceneRaw,popRaw;
+    auto invalid=[&](){error="NOMBRES: ARCHIVO INVALIDO O AUSENTE";return false;};
+    if(!read(path,b,128*1024)||b.size()<20||std::memcmp(b.data(),"UNL1",4))return invalid();
+    auto n=[&](size_t p,int count){uint32_t v=0;for(int i=0;i<count;++i)v|=uint32_t(b[p+i])<<(8*i);return v;};
+    if(n(4,2)!=original.size()||n(6,2)||b.size()!=20+85*original.size()||hash(b.data()+20,b.size()-20)!=n(16,4)||!read(scene,sceneRaw,8*1024*1024)||hash(sceneRaw.data(),sceneRaw.size())!=n(8,4)||!read(population,popRaw,65536)||hash(popRaw.data(),popRaw.size())!=n(12,4))return invalid();
+    auto next=original;
+    for(size_t i=0;i<next.size();++i){size_t at=20+85*i;
+        if(!b[at]||b[at+31]||b[at+79])return invalid();
+        for(size_t j=0;j<80;++j)if(b[at+j]&&(b[at+j]<32||b[at+j]>126))return invalid();
+        unsigned hue=n(at+80,2);if(hue!=0x35&&hue!=0x3B2&&hue!=0x59)return invalid();
+        next[i].name=(const char*)b.data()+at;next[i].title=(const char*)b.data()+at+32;next[i].nameHue=hue;
+        next[i].nameColor={{b[at+82],b[at+83],b[at+84]}};
+        next[i].greeting=next[i].animal?"":next[i].name+": SALUDOS, VIAJERO";
+    }
+    original=std::move(next);error.clear();return true;
+}
 void Npcs::reset(const World&w,const Actor&player){
     people.clear();random=12345;
     if(hasPopulation()){

@@ -13,6 +13,7 @@ class PositionCheckpoint {
     uint64_t attempted=0,activity=0;
 public:
     void baseline(const Actor&a,uint64_t now){saved=a;known=true;attempted=activity=now;}
+    void suspend(uint64_t elapsed){attempted+=elapsed;activity+=elapsed;}
     void active(uint64_t now){activity=now;}
     bool dirty(const Actor&a)const{return !known||a.x!=saved.x||a.y!=saved.y||a.z!=saved.z;}
     bool due(const Actor&a,uint64_t now)const{return dirty(a)&&now-attempted>=60000&&now-activity>=2000;}

@@ -57,3 +57,5 @@ Consultar [v0.14.md](v0.14.md) para instalación y partidas separadas.
 Actualización v0.15: consultar [v0.15.md](v0.15.md).
 
 Actualización v0.16: consultar [v0.16.md](v0.16.md).
+
+Actualización v0.17: consultar [v0.17.md](v0.17.md); START ahora abre la pausa.

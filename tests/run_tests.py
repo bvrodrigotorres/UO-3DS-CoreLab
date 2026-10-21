@@ -156,6 +156,33 @@ class SceneTests(unittest.TestCase):
             self.assertEqual(z,0)
             self.assertNotEqual((x,y),(1,1))
 
+    def test_roof_pause_and_overhead_names(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_journal import fnv
+        binary=Path(self.temp.name)/'presentation_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/overhead_pause_roof_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);scene=root/'scene.bin';population=root/'population.bin';names=root/'names.bin'
+            raw=self.fixture();scene.write_bytes(raw)
+            body=struct.pack('<hhHHII',4,7,5,7,64,1234)+struct.pack('<HHhHHH32s',1,1,0,0,3,0,b'MAGE')
+            pop=struct.pack('<4sHHII',b'UNP1',1,1,fnv(raw),fnv(body))+body;population.write_bytes(pop)
+            label=struct.pack('<32s48sH3B',b'Alice',b'the mage',0x35,238,238,0)
+            names.write_bytes(struct.pack('<4sHHIII',b'UNL1',1,0,fnv(raw),fnv(pop),fnv(label))+label)
+            subprocess.run([str(binary),str(scene),str(population),str(names)],check=True)
+
+    def test_npc_names_source_properties(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_npc_names import describe
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'BaseVendor.cs').write_text('class BaseVendor : BaseCreature { public override bool IsInvulnerable { get { return true; } } }')
+            (root/'Mage.cs').write_text('class Mage : BaseVendor { Mage() : base("the mage") { packKey.Name = "a ship key"; } }')
+            self.assertEqual(describe('Mage',root),(None,'the mage',True))
+            (root/'Healer.cs').write_text('class Healer : BaseVendor { public override bool IsInvulnerable { get { return false; } } Title = "the healer"; }')
+            self.assertEqual(describe('Healer',root),(None,'the healer',False))
+
     def test_npc_simulation(self):
         binary=Path(self.temp.name)/'npc_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_tests.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
