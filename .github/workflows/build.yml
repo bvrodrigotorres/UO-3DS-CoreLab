@@ -1,0 +1,35 @@
+name: CoreLab tests and original 3DS build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Differential tests against pinned CrossUO functions
+        run: python3 tests/run_tests.py
+  build-3ds:
+    runs-on: ubuntu-latest
+    needs: core-tests
+    container:
+      image: devkitpro/devkitarm:20260610
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile ARMv6K homebrew
+        run: make -j2
+      - name: Prepare standalone test package
+        run: |
+          mkdir -p dist/UO-3DS-CoreLab
+          cp UO-3DS-CoreLab.3dsx UO-3DS-CoreLab.smdh dist/UO-3DS-CoreLab/
+          cp docs/PRUEBA-3DS.md dist/LEEME.md
+          sha256sum UO-3DS-CoreLab.3dsx > dist/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UO-3DS-CoreLab-v0.1
+          path: dist/
+          if-no-files-found: error

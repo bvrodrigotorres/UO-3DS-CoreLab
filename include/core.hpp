@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: MIT
+#pragma once
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace lab {
+constexpr uint64_t Background=1, Wall=0x10, Impassable=0x40, Wet=0x80;
+constexpr uint64_t Surface=0x200, Bridge=0x400, Roof=0x10000000, Door=0x20000000;
+constexpr uint16_t NoImage=65535;
+struct Land {
+    uint16_t art=3, image=NoImage;
+    uint64_t flags=0;
+    bool texture=false;
+};
+struct Object {
+    uint16_t art=0, hue=0, image=NoImage;
+    int x=0,y=0,z=0,height=0;
+    uint64_t flags=0;
+    uint32_t order=0;
+};
+struct World {
+    int width=0,height=0,originX=0,originY=0;
+    int startX=0,startY=0,startZ=0,images=0;
+    std::vector<int> vertices;
+    std::vector<Land> land;
+    std::vector<Object> objects;
+    std::vector<std::vector<size_t>> cells;
+    void index();
+    bool contains(int x,int y) const;
+    int vertex(int x,int y) const;
+};
+struct Heights { int top,right,bottom,left,minimum,average; bool slope; };
+Heights heights(const World&,int x,int y);
+int directionalHeight(const Heights&,int direction);
+enum class Kind { Land,Static,Actor };
+struct Draw { Kind kind; int x,y,z,priority; size_t index; uint32_t order; };
+struct Actor {int x=0,y=0,z=0;};
+int priority(Kind kind,int z,int height,uint64_t flags,int average,bool slope);
+std::vector<Draw> renderList(const World&,const Actor&,bool cutaway);
+struct Candidate {unsigned flags;int z,average,height;bool terrain=false;};
+// Normal walking subset of CrossUO CalculateNewZ, isolated from player/network/UI.
+bool solveCandidates(std::vector<Candidate> list,int currentZ,int minZ,int maxZ,int& nextZ);
+bool step(const World&,const Actor&,int direction,Actor& result,int& actualDirection);
+bool loadWorld(const std::string&,World&,std::string& error);
+World demoWorld();
+}

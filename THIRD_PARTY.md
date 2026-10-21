@@ -1,0 +1,44 @@
+# Procedencia y alcance
+
+El núcleo adapta un subconjunto de archivos marcados MIT de
+[CrossUO, revisión 79d0f94a3645154dc1795045d9d89df554d6cd2a](https://github.com/crossuo/crossuo/tree/79d0f94a3645154dc1795045d9d89df554d6cd2a).
+Autores originales identificados en esos archivos: Copyright (c) 2016 Hotride.
+La licencia MIT está incluida en LICENSE.
+
+| Origen | Adaptación |
+|---|---|
+| [MapBlock.cpp: AddRender](https://github.com/crossuo/crossuo/blob/79d0f94a3645154dc1795045d9d89df554d6cd2a/src/GameObjects/MapBlock.cpp) | `priority` y orden estable por casilla. Solo terreno, estáticos normales y actor. |
+| [LandObject.cpp](https://github.com/crossuo/crossuo/blob/79d0f94a3645154dc1795045d9d89df554d6cd2a/src/GameObjects/LandObject.cpp) | Cuatro alturas, media por diagonal y altura según dirección. |
+| [PathFinder.cpp](https://github.com/crossuo/crossuo/blob/79d0f94a3645154dc1795045d9d89df554d6cd2a/src/Walker/PathFinder.cpp) | Candidatos de apoyo, puentes, límites de altura, hueco de 16 unidades, paso diagonal y deslizamiento lateral. |
+| [GameScreen.cpp](https://github.com/crossuo/crossuo/blob/79d0f94a3645154dc1795045d9d89df554d6cd2a/src/ScreenStages/GameScreen.cpp) | Recorrido diagonal de casillas; no se importa la clase de escritorio. |
+
+`tests/upstream/*.inc` contienen dos funciones originales sin cambios de cuerpo.
+`tests/reference.cpp` aporta objetos simulados y entradas de prueba, sin SDL,
+jugador conectado ni UI. Se suprime el destructor virtual de CPathObject en el
+adaptador para poder ejecutar el qsort original sobre un registro trivial.
+No se usa ese adaptador en la consola.
+
+Las comparaciones comprueban `AddRender` en columnas con un terreno, estáticos
+y un actor, y `CalculateNewZ` con candidatos y límites ya suministrados.
+No demuestran equivalencia de la construcción completa del mundo, de todos los
+estados del jugador, de movimiento interpolado ni de la GPU.
+
+Cambios deliberados: registros compactos; vectores en lugar de listas enlazadas;
+desempates estables; enteros con signo explícito; exclusión de monturas, vuelo,
+muerte, GM, casas personalizadas, red, efectos y búsqueda automática de rutas.
+Las puertas conservan sus flags, pero no tienen interacción en v0.1.
+El recorte de techos es nuevo y experimental: no reproduce todavía la búsqueda
+de continuidad de techos de CrossUO.
+
+MobileUO/ClassicUO se consultó como segunda referencia. No se incorpora su código
+ni Unity en esta entrega. El conversor aplica parches de archivos por orden de
+lista, con la última entrada para un bloque prevaleciendo. Se aplican todos los
+parches locales disponibles; un servidor podría anunciar otro número de parches.
+
+Dependencias externas (no se incluyen sus fuentes): devkitARM, libctru,
+citro2d, citro3d y tex3ds de devkitPro; Python y compilador C++ para tests;
+Pillow y Ultima SDK Python para conversión privada y previsualización.
+Cada dependencia conserva su propia licencia.
+
+No se distribuyen mapas, arte, sonidos o animaciones originales de Ultima Online.
+El usuario aporta los datos locales. Este proyecto no está afiliado a sus titulares.
