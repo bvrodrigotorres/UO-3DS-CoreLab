@@ -2,7 +2,6 @@
 #include "visibility.hpp"
 #include "repairs.hpp"
 #include "hud.hpp"
-#include "floor_pass.hpp"
 #include <cassert>
 #include <fstream>
 #include <iostream>
@@ -21,19 +20,6 @@ int main(int argc,char**argv){
     assert(!floorUnderWall(repair,repair.objects[0])); // never duplicate an existing floor
     repair.objects.pop_back();repair.index();repair.originX=0;
     assert(!floorUnderWall(repair,repair.objects[0])); // no global hole-filling heuristic
-    // Clothing can extend across the next floor tile. All supporting flat
-    // tiles must precede sprites, while upper floors/obstacles still occlude.
-    World floorWorld=demoWorld();Object tile;tile.x=5;tile.y=5;tile.z=40;tile.flags=Surface|Background;tile.height=0;
-    floorWorld.objects={tile};floorWorld.index();Draw floorDraw{Kind::Static,5,5,40,40,0,0};
-    assert(groundPass(floorWorld,floorDraw,40));assert(!groundPass(floorWorld,floorDraw,20));
-    assert(coveredByGround(floorWorld,{5,5,20},40));assert(!coveredByGround(floorWorld,{5,5,40},40));
-    assert(!coveredByGround(floorWorld,{5,5,20},20));
-    for(auto flag:{Wall,Roof,Bridge,Door,Impassable}){floorWorld.objects[0].flags=Surface|flag;assert(!groundPass(floorWorld,floorDraw,40));}
-    floorWorld.objects[0].flags=Surface;floorWorld.objects[0].height=5;assert(!groundPass(floorWorld,floorDraw,40));
-    floorWorld.objects[0]=tile;
-    Object lower=tile;lower.z=20;lower.height=20;lower.flags=Wall;
-    assert(objectCoveredByGround(floorWorld,lower,40));lower.z=40;assert(!objectCoveredByGround(floorWorld,lower,40));
-    Draw sprite{Kind::Actor,5,5,40,41,0,0};assert(!groundPass(floorWorld,sprite,40));
     TouchPages pages;
     pages.begin(260,110);pages.move(50,112);assert(pages.end()&&pages.page==1);
     assert(!pages.end()); // releasing twice must not change the page

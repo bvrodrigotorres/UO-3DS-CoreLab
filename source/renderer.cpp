@@ -2,7 +2,6 @@
 #include "renderer.hpp"
 #include "avatar.hpp"
 #include "repairs.hpp"
-#include "floor_pass.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -133,13 +132,9 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
     bool afterActor=false;
     auto npcList=npcs?npcs->drawList(w,actor,roofs!=RoofMode::Full):std::vector<Draw>{};
-    for(int pass=0;pass<2;++pass){
-    size_t npcCount=pass==1?npcList.size():0;
-    for(size_t wi=0,ni=0;wi<list.size()||ni<npcCount;){
-        bool takeNpc=ni<npcCount&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
+    for(size_t wi=0,ni=0;wi<list.size()||ni<npcList.size();){
+        bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
         const auto&d=takeNpc?npcList[ni++]:list[wi++];
-        if(groundPass(w,d,footZ)!=(pass==0))continue;
-        if(pass==1&&d.kind==Kind::Static&&objectCoveredByGround(w,w.objects[d.index],footZ))continue;
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
         ++objects;
@@ -192,7 +187,6 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             }
         }else if(d.kind==Kind::Npc){
             const auto&n=npcs->all()[d.index];
-            if(coveredByGround(w,n.position,footZ)&&(!n.moving||coveredByGround(w,n.from,footZ)))continue;
             if((size_t)n.style>=npcSheets.size())continue;
             float t=n.progress;
             auto foot=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
@@ -213,7 +207,6 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             }else{rect(foot.x-5,foot.y-24,10,24,.2f,.45f,.95f);rect(foot.x-4,foot.y-32,8,8,.95f,.75f,.55f);}
         }
     }
-    } // Both passes preserve the original order of their entries.
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);
     auto buffers=C3D_GetBufInfo();BufInfo_Init(buffers);BufInfo_Add(buffers,buffer,sizeof(Vertex),3,0x210);
