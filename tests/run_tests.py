@@ -183,6 +183,32 @@ class SceneTests(unittest.TestCase):
             (root/'Healer.cs').write_text('class Healer : BaseVendor { public override bool IsInvulnerable { get { return false; } } Title = "the healer"; }')
             self.assertEqual(describe('Healer',root),(None,'the healer',False))
 
+    def test_name_legibility_and_proximity(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_overhead_font import export
+        raw=bytearray()
+        for font in range(10):
+            raw+=b'\0'
+            for char in range(32,256):
+                if font==9 and char==65:raw+=bytes([3,3,0])+struct.pack('<9H',0,0x7fff,0,0x7fff,0,0x7fff,0x7fff,0x7fff,0x7fff)
+                else:raw+=bytes(3)
+        data=export(raw)
+        with self.assertRaises(ValueError):export(raw[:-2])
+        binary=Path(self.temp.name)/'name_legibility_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/name_legibility_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:
+            font=Path(folder)/'npc_font.bin';font.write_bytes(data);subprocess.run([str(binary),str(font)],check=True)
+
+    def test_headgear_covers_hair(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_population import composition_layers
+        animation=lambda art:100+art
+        layer=lambda art:6 if art==2 else 5
+        self.assertEqual(composition_layers(400,0,[(1,11),(2,22),(3,33)],701,44,animation,layer),[(400,0),(101,11),(103,33),(701,44),(102,22)])
+        self.assertEqual(composition_layers(400,0,[(1,11)],701,44,animation,layer),[(400,0),(101,11),(701,44)])
+
     def test_npc_simulation(self):
         binary=Path(self.temp.name)/'npc_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_tests.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)

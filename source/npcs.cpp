@@ -86,14 +86,16 @@ void Npcs::addOccupants(std::vector<Actor>&out)const{
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
     for(size_t i=0;i<people.size();++i){auto&n=people[i];
-        if(std::max(std::abs(n.position.x-player.x),std::abs(n.position.y-player.y))>24)continue;
+        int px=player.x-n.position.x,py=player.y-n.position.y;
+        bool near=std::abs(player.z-n.position.z)<16&&std::max(std::abs(px),std::abs(py))<=2;
+        n.namePresence.update(near,dt);
+        if(std::max(std::abs(px),std::abs(py))>24)continue;
         if(n.moving){
             n.progress=std::min(1.f,n.progress+dt/.45f);n.animation=std::fmod(n.animation+dt*8,4.f);
             if(n.progress>=1){n.moving=false;n.wait=1.0f+(random%20)/10.f;}
             continue;
         }
-        int px=player.x-n.position.x,py=player.y-n.position.y;
-        if(std::abs(player.z-n.position.z)<16&&std::max(std::abs(px),std::abs(py))<=2){
+        if(near){
             int x=(px>0)-(px<0),y=(py>0)-(py<0);
             for(int d=0;d<8;++d)if(dx[d]==x&&dy[d]==y)n.direction=(d+1)&7;
             n.wait=1;continue;

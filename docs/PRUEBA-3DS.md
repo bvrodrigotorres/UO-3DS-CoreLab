@@ -59,3 +59,8 @@ Actualización v0.15: consultar [v0.15.md](v0.15.md).
 Actualización v0.16: consultar [v0.16.md](v0.16.md).
 
 Actualización v0.17: consultar [v0.17.md](v0.17.md); START ahora abre la pausa.
+
+
+## v0.18: texto y sombreros
+
+Consultar [instalación y cambios](v0.18.md). Probar nombres amarillos/grises sobre madera, hierba y piedra; acercarse dos segundos hasta que se oculten y alejarse para recuperarlos. Comprobar sombreros de Emilio, Verity y bard al caminar y girar. La pausa no debe consumir el tiempo de proximidad.

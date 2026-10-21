@@ -70,6 +70,12 @@ def spawn_requests(path,origin,side):
             rows.append(dict(type=kind,x=max(left,min(right,x))-origin[0],y=max(top,min(bottom,y))-origin[1],z=z,roam=max(0,min(120,int(node.findtext('Range')))),animal=animal,profile=profile(kind),source=node.findtext('Name'),spawner=uid,source_center=[x,y,z],bounds=[left-origin[0],top-origin[1],right-origin[0],bottom-origin[1]],original_bounds=[ax,ay,ax+width,ay+height],max_count=int(node.findtext('MaxCount')),min_delay=node.findtext('MinDelay'),max_delay=node.findtext('MaxDelay'),relative_home=node.findtext('IsHomeRangeRelative','True')=='True'))
     return rows,excluded,duplicates
 
+def composition_layers(body,skin,clothes,hair,hair_hue,animation,item_layer):
+    # Hair remains above normal clothes; headgear must cover the scalp last.
+    ordinary=[(animation(art),hue) for art,hue in clothes if item_layer(art)!=6]
+    headgear=[(animation(art),hue) for art,hue in clothes if item_layer(art)==6]
+    return [(body,skin)]+ordinary+([(hair,hair_hue)] if hair else [])+headgear
+
 def read_layer(client,body,action,direction):
     entry=(body*110 if body<200 else 22000+(body-200)*65 if body<400 else 35000+(body-400)*175)+action*5+direction
     with (client/'anim.idx').open('rb') as f:f.seek(entry*12);raw=f.read(12)
@@ -98,12 +104,13 @@ def main():
     names=sorted(set(r['profile'] for r in rows));a.out.mkdir(parents=True)
     tile=(a.client/'tiledata.mul').read_bytes();n=8;start=512*(4+32*(n+22));stride=4+32*(n+33)
     def anim(art):return struct.unpack_from('<H',tile,start+(art//32)*stride+4+(art%32)*(n+33)+n+6)[0]
+    def item_layer(art):return tile[start+(art//32)*stride+4+(art%32)*(n+33)+n+1]
     hues=(a.client/'hues.mul').read_bytes();cache={};styles=[]
     for style,name in enumerate(names):
         animal=name in ANIMALS
         if animal:body,skin,clothes,hair,hairhue=ANIMALS[name],0,[],None,0
         else:body,skin,clothes,hair,hairhue=PROFILES[name]
-        layers=[(body,skin)]+[(anim(art),hue) for art,hue in clothes]+([(hair,hairhue)] if hair else [])
+        layers=composition_layers(body,skin,clothes,hair,hairhue,anim,item_layer)
         idle=1 if body<200 else 2 if body<400 else 4;frames=[]
         for direction,mirror in DIRECTION_MAP:
             for phase in range(5):

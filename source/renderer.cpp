@@ -6,7 +6,7 @@
 #include "performance.hpp"
 #include "view.hpp"
 #include "roof_cutaway.hpp"
-#include "label_font.hpp"
+#include "overhead_font.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -25,6 +25,7 @@ static shaderProgram_s program;
 static C3D_Mtx projection;
 static int uniformProjection;
 static C3D_Tex white,labelFont;
+static OverheadFont overheadFont;
 static std::vector<C2D_SpriteSheet> sheets;
 static bool streamed=false,textureFailure=false;
 static std::string atlasRoot;
@@ -81,17 +82,18 @@ static const Point whiteUV[]={{0,1},{1,1},{1,0},{0,0}};
 static void rect(float x,float y,float w,float h,float r,float g,float b,float a=1){
     Point p[]={{x,y},{x+w,y},{x+w,y+h},{x,y+h}};quad(p,whiteUV,&white,r,g,b,a);
 }
-static void labelText(float x,float y,const std::string&text,float r,float g,float b){
-    for(unsigned char c:text.substr(0,30)){
-        if(c>=128)c='?';
-        if(c!=' '){float u=float(c%16)*8/128,v=1-float(c/16)*8/64;
-            Point p[]={{x,y},{x+6,y},{x+6,y+8},{x,y+8}};
-            Point uv[]={{u,v},{u+6.f/128,v},{u+6.f/128,v-8.f/64},{u,v-8.f/64}};
+static void labelText(float x,float y,const std::string&text,bool outline,float r,float g,float b){
+    unsigned width=0;
+    for(size_t i=0;i<text.size()&&i<30;++i){unsigned char c=text[i];if(c>=128)c='?';unsigned advance=overheadFont.step(c);if(width+advance>360)break;
+        if(c!=' '){float u=float((c%16)*16+(outline?256:0))/512,v=1-float(c/16)*16/128;
+            Point p[]={{x,y},{x+16,y},{x+16,y+16},{x,y+16}};
+            Point uv[]={{u,v},{u+16.f/512,v},{u+16.f/512,v-16.f/128},{u,v-16.f/128}};
             quad(p,uv,&labelFont,r,g,b,1);
         }
-        x+=6;
+        width+=advance;x+=advance;
     }
 }
+
 bool rendererInit(){
     buffer=(Vertex*)linearAlloc(sizeof(Vertex)*Capacity);if(!buffer)return false;
     shader=DVLB_ParseFile((u32*)world_shbin,world_shbin_size);if(!shader){linearFree(buffer);buffer=nullptr;return false;}
@@ -101,10 +103,15 @@ bool rendererInit(){
     if(!C3D_TexInit(&white,8,8,GPU_RGBA8))return false;
     std::memset(white.data,255,white.size);C3D_TexFlush(&white);
     C3D_TexSetFilter(&white,GPU_NEAREST,GPU_NEAREST);
-    if(!C3D_TexInit(&labelFont,128,64,GPU_A8))return false;
+    overheadFont.load("sdmc:/3ds/UO-3DS-CoreLab/npc_font.bin");
+    // Explicit white RGB plus alpha; A8 supplies no usable RGB on this path.
+    if(!C3D_TexInit(&labelFont,512,128,GPU_RGBA5551))return false;
     std::memset(labelFont.data,0,labelFont.size);
-    for(unsigned c=0;c<128;++c)for(unsigned y=0;y<7;++y)for(unsigned x=0;x<5;++x)
-        if(labelPixel(c,x,y))static_cast<uint8_t*>(labelFont.data)[labelPixelOffset((c%16)*8+x,(c/16)*8+y)]=255;
+    for(unsigned c=0;c<128;++c)for(unsigned y=0;y<16;++y)for(unsigned x=0;x<16;++x){
+        unsigned xx=(c%16)*16+x,yy=(c/16)*16+y;
+        if(overheadFont.pixel(c,x,y))static_cast<uint16_t*>(labelFont.data)[overheadPixelOffset(xx,yy)]=0xFFFF;
+        if(overheadFont.outline(c,x,y))static_cast<uint16_t*>(labelFont.data)[overheadPixelOffset(xx+256,yy)]=0xFFFF;
+    }
     C3D_TexFlush(&labelFont);C3D_TexSetFilter(&labelFont,GPU_NEAREST,GPU_NEAREST);
     avatar=C2D_SpriteSheetLoad("sdmc:/3ds/UO-3DS-CoreLab/player_anim.t3x");
     if(avatar&&C2D_SpriteSheetCount(avatar)<40){C2D_SpriteSheetFree(avatar);avatar=nullptr;}
@@ -357,18 +364,18 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     }
     // Overhead text is a final color-only overlay; it cannot alter floor depth.
     pixelMode=PixelMode::Translucent;
-    for(const auto&d:npcList){const auto&n=npcs->all()[d.index];float t=n.progress;
+    for(const auto&d:npcList){const auto&n=npcs->all()[d.index];if(!n.namePresence.visible())continue;float t=n.progress;
         auto foot=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
         float pivot=npcs->hasPopulation()?npcs->styles()[n.style].pivotY:64;
         float head=foot.y-pivot;if(foot.x<0||foot.x>400||head< -8||head>240)continue;
         size_t characters=std::min(size_t(30),n.name.size())+std::min(size_t(30),n.title.size());
-        if(used+int(characters*12)>=Capacity)break;
-        auto line=[&](const std::string&text,float y){float width=std::min(size_t(30),text.size())*6.f;
+        if(used+int(characters*18)>=Capacity)break;
+        auto line=[&](const std::string&text,float y){float width=overheadFont.width(text);
             float x=std::max(2.f,std::min(398-width,foot.x-width/2));y=std::max(2.f,y);
-            labelText(x+1,y+1,text,0,0,0);labelText(x,y,text,n.nameColor[0]/255.f,n.nameColor[1]/255.f,n.nameColor[2]/255.f);
+            labelText(x+1,y+2,text,false,0,0,0);labelText(x,y,text,true,1,1,1);labelText(x,y,text,false,n.nameColor[0]/255.f,n.nameColor[1]/255.f,n.nameColor[2]/255.f);
         };
-        float top=std::max(2.f,head-(n.title.empty()?10:19));
-        line(n.name,top);if(!n.title.empty())line(n.title,top+9);
+        float top=std::max(2.f,head-(n.title.empty()?17:33));
+        line(n.name,top);if(!n.title.empty())line(n.title,top+16);
     }
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);

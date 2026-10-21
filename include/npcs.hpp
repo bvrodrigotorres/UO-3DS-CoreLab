@@ -2,10 +2,11 @@
 #pragma once
 #include "doors.hpp"
 #include <array>
+#include "overhead_font.hpp"
 namespace lab {
 struct Npc {
     Actor position,from,home;int direction=4,style=0;float progress=1,wait=1,animation=0;bool moving=false;
-    std::string name,greeting,title;std::array<uint8_t,3>nameColor{{238,238,0}};uint16_t nameHue=0x35;int roam=3;bool animal=false;
+    NamePresence namePresence;std::string name,greeting,title;std::array<uint8_t,3>nameColor{{238,238,0}};uint16_t nameHue=0x35;int roam=3;bool animal=false;
 };
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
 class Npcs {
