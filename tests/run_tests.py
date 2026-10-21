@@ -59,9 +59,9 @@ class SceneTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             subprocess.run([str(binary),folder],check=True)
 
-    def test_character_neighbor_order(self):
-        binary=Path(self.temp.name)/'character_order_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/character_order_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
+    def test_character_pixel_depth(self):
+        binary=Path(self.temp.name)/'character_depth_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/character_depth_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
     def test_decoration_parser(self):

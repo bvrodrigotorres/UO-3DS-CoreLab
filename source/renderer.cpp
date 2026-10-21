@@ -2,7 +2,7 @@
 #include "renderer.hpp"
 #include "avatar.hpp"
 #include "repairs.hpp"
-#include "character_order.hpp"
+#include "character_depth.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -11,7 +11,9 @@
 #include <cmath>
 namespace lab {
 struct Vertex {float x,y,z,u,v,r,g,b,a;};
-struct Batch {C3D_Tex*texture;int first,count;};
+enum class PixelMode { World,Support,Character,Translucent };
+struct Batch {C3D_Tex*texture;int first,count;PixelMode mode;};
+static PixelMode pixelMode=PixelMode::World;
 static Vertex*buffer;
 static DVLB_s* shader;
 static shaderProgram_s program;
@@ -30,18 +32,17 @@ static int used;
 static bool overflow;
 static std::vector<Batch> batches;
 static RenderCache renderCache;
-static CharacterOrder characterOrder;
 static std::vector<Draw>mergedDraws;
 static constexpr int Capacity=65536;
 static void push(Vertex v,C3D_Tex*texture){
     if(used>=Capacity){overflow=true;return;}
-    if(batches.empty()||batches.back().texture!=texture)batches.push_back({texture,used,0});
+    if(batches.empty()||batches.back().texture!=texture||batches.back().mode!=pixelMode)batches.push_back({texture,used,0,pixelMode});
     buffer[used++]=v;++batches.back().count;
 }
 struct Point {float x,y;};
 static void quad(const Point*p,const Point*uv,C3D_Tex*texture,float r,float g,float b,float a){
     const int indices[]={0,1,2,2,3,0};
-    for(int i:indices)push({p[i].x,p[i].y,0.f,uv[i].x,uv[i].y,r,g,b,a},texture);
+    for(int i:indices)push({p[i].x,p[i].y,pixelMode==PixelMode::Character?CharacterDepthZ:WorldDepthZ,uv[i].x,uv[i].y,r,g,b,a},texture);
 }
 static void uvFor(C2D_Image image,Point*uv){
     Tex3DS_SubTextureTopLeft(image.subtex,&uv[0].x,&uv[0].y);
@@ -129,7 +130,7 @@ unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
                RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs){
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0);
+    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0xffffffff);
     C3D_FrameDrawOn(target);used=0;objects=0;overflow=false;batches.clear();
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
@@ -140,8 +141,9 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
         mergedDraws.push_back(takeNpc?npcList[ni++]:list[wi++]);
     }
-    const auto&ordered=characterOrder.build(w,mergedDraws,int(std::ceil(footZ)));
-    for(const auto&d:ordered){
+    for(const auto&d:mergedDraws){
+        pixelMode=d.kind==Kind::Actor?PixelMode::Character:
+            supportingFragment(w,d,actor,footZ)?PixelMode::Support:PixelMode::World;
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
         ++objects;
@@ -168,6 +170,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 Point p[]={{center.x-width/2,center.y+22-height},{center.x+width/2,center.y+22-height},{center.x+width/2,center.y+22},{center.x-width/2,center.y+22}};
                 float alpha=objectOpacity(o,footZ,roofs,afterActor,{p[0].x,p[0].y,p[2].x,p[2].y});
                 if(alpha==0)continue;
+                if(alpha<1)pixelMode=PixelMode::Translucent;
                 // Fill only the reported exposed wall footprint, before drawing
                 // the wall. Hidden upper levels suppress both pieces together.
                 if(const auto*floor=floorUnderWall(w,o)){
@@ -217,11 +220,19 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);
     auto buffers=C3D_GetBufInfo();BufInfo_Init(buffers);BufInfo_Add(buffers,buffer,sizeof(Vertex),3,0x210);
-    C3D_CullFace(GPU_CULL_NONE);C3D_DepthTest(false,GPU_ALWAYS,GPU_WRITE_COLOR);
+    C3D_CullFace(GPU_CULL_NONE);
+    C3D_DepthMap(true,-1.f,0.f);C3D_EarlyDepthTest(false,GPU_EARLYDEPTH_GEQUAL,0);
     C3D_AlphaTest(true,GPU_GREATER,0);C3D_AlphaBlend(GPU_BLEND_ADD,GPU_BLEND_ADD,GPU_SRC_ALPHA,GPU_ONE_MINUS_SRC_ALPHA,GPU_ONE,GPU_ZERO);
     auto env=C3D_GetTexEnv(0);C3D_TexEnvInit(env);C3D_TexEnvSrc(env,C3D_Both,GPU_TEXTURE0,GPU_PRIMARY_COLOR,GPU_PRIMARY_COLOR);C3D_TexEnvFunc(env,C3D_Both,GPU_MODULATE);
     GSPGPU_FlushDataCache(buffer,used*sizeof(Vertex));
-    for(const auto&batch:batches){C3D_TexBind(0,batch.texture);C3D_DrawArrays(GPU_TRIANGLES,batch.first,batch.count);}
+    for(const auto&batch:batches){
+        // Alpha rejection precedes depth writes, so transparent sprite texels
+        // never protect an empty rectangle. Foreground walls/items/NPC reset
+        // the marker at their own opaque pixels, retaining normal occlusion.
+        C3D_DepthTest(true,batch.mode==PixelMode::Support?GPU_LEQUAL:GPU_ALWAYS,
+            batch.mode==PixelMode::Translucent?GPU_WRITE_COLOR:GPU_WRITE_ALL);
+        C3D_TexBind(0,batch.texture);C3D_DrawArrays(GPU_TRIANGLES,batch.first,batch.count);
+    }
     C3D_FrameEnd(0);
 }
 }
