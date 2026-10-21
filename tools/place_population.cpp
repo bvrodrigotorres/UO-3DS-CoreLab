@@ -14,19 +14,23 @@ int main(int argc,char**argv){
     std::vector<Actor>placed;uint32_t seed=1947;
     auto taken=[&](const Actor&a){for(const auto&p:placed)if(p.x==a.x&&p.y==a.y&&std::abs(p.z-a.z)<16)return true;return false;};
     for(size_t at=0;at<b.size();at+=52){
-        Actor home{int(n(at)),int(n(at+2)),int(int16_t(n(at+4)))},chosen;unsigned range=n(at+8);bool animal=n(at+10)!=0,found=false;
+        Actor home{int(n(at)),int(n(at+2)),int(int16_t(n(at+4)))},chosen;unsigned range=n(at+8);bool animal=n(at+10)!=0,found=false;int permitted=255;
         auto tryCell=[&](int x,int y){
             if(!w.contains(x,y))return false;
             auto h=heights(w,x,y);std::vector<int>zs{h.average};
             if(!animal){zs.push_back(home.z);for(auto i:w.cells[y*w.width+x]){const auto&o=w.objects[i];if(o.flags&Surface)zs.push_back(o.z+((o.flags&Bridge)?o.height/2:o.height));}
                 std::stable_sort(zs.begin(),zs.end(),[&](int a,int b){return std::abs(a-home.z)<std::abs(b-home.z);});}
-            for(int z:zs){Actor a{x,y,z};if(canStand(w,a)&&!taken(a)){chosen=a;return true;}}
+            for(int z:zs){if(!animal&&std::abs(z-home.z)>permitted)continue;Actor a{x,y,z};if(canStand(w,a)&&!taken(a)){chosen=a;return true;}}
             return false;
         };
         int minX=n(at+44),minY=n(at+46),maxX=n(at+48),maxY=n(at+50);
         if(minX>maxX||minY>maxY||maxX>=w.width||maxY>=w.height)return 2;
+        for(int tolerance:{0,2,8,16,32,64,128,255}){
+        permitted=animal?255:tolerance;
         if(minX!=maxX||minY!=maxY){for(int attempt=0;attempt<4096&&!found;++attempt){seed=seed*1664525+1013904223;int x=minX+int(seed%unsigned(maxX-minX+1));seed=seed*1664525+1013904223;int y=minY+int(seed%unsigned(maxY-minY+1));found=tryCell(x,y);}}
         if(!found)for(int r=0;r<=int(std::max(3u,range))&&!found;++r)for(int y=-r;y<=r&&!found;++y)for(int x=-r;x<=r&&!found;++x){if(std::max(std::abs(x),std::abs(y))!=r)continue;if(minX!=maxX||minY!=maxY){if(home.x+x<minX||home.x+x>maxX||home.y+y<minY||home.y+y>maxY)continue;}found=tryCell(home.x+x,home.y+y);}
+        if(found)break;
+        }
         if(!found){std::cerr<<"No valid placement for "<<(const char*)&b[at+12]<<" at "<<home.x<<","<<home.y<<","<<home.z<<"\n";return 1;}
         placed.push_back(chosen);put(at,chosen.x);put(at+2,chosen.y);put(at+4,chosen.z);
     }

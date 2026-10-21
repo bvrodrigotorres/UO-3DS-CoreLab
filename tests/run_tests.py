@@ -141,6 +141,21 @@ class SceneTests(unittest.TestCase):
             rows,_,duplicates=spawn_requests(path,(10,10),16)
             self.assertEqual((len(rows),duplicates),(3,1))
 
+    def test_spawn_placement_prefers_source_floor(self):
+        binary=Path(self.temp.name)/'place_population'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-I'+str(ROOT/'include'),str(ROOT/'tools/place_population.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);scene=root/'place.bin';request=root/'request.bin';placed=root/'placed.bin'
+            wall=exporter.OBJECT.pack(1,1,0,20,4,0,65535,0x40,0,0)
+            roof=exporter.OBJECT.pack(1,1,60,0,5,0,65535,0x200,1,0)
+            raw=bytearray(self.fixture());struct.pack_into('<I',raw,12,2)
+            scene.write_bytes(raw+wall+roof)
+            request.write_bytes(struct.pack('<HHhHHH32s4H',1,1,0,0,3,0,b'MAGE',1,1,1,1))
+            subprocess.run([str(binary),str(scene),str(request),str(placed)],check=True)
+            x,y,z=struct.unpack_from('<HHh',placed.read_bytes())
+            self.assertEqual(z,0)
+            self.assertNotEqual((x,y),(1,1))
+
     def test_npc_simulation(self):
         binary=Path(self.temp.name)/'npc_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_tests.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
