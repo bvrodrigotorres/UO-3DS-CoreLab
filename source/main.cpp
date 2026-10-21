@@ -47,6 +47,9 @@ int main(){
     lab::Npcs npcs;std::string npcError;
     bool hasNpcs=available&&lab::loadNpcAtlases(npcError);
     if(hasNpcs)npcs.reset(privateWorld,actor);
+    lab::Inventory inventory;inventory.init(canonicalPrivate,"sdmc:/3ds/UO-3DS-CoreLab/inventory-private.sav");
+    lab::Inventory demoInventory;demoInventory.init(demo,"sdmc:/3ds/UO-3DS-CoreLab/inventory-demo.sav");
+    lab::ItemIcons itemIcons;itemIcons.load("sdmc:/3ds/UO-3DS-CoreLab/items.bin");
     std::vector<lab::Actor>occupants;occupants.reserve(16);
     u64 last=osGetTime(),sample=last;int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
@@ -55,10 +58,17 @@ int main(){
         if(down&KEY_START)break;
         if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
         bool pageChanged=false;
-        if(down&KEY_R){pages.page=1-pages.page;pageChanged=true;}
+        if(down&KEY_R){pages.page=(pages.page+1)%3;pageChanged=true;}
         touchPosition touch;
         if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH)pages.begin(touch.px,touch.py);else pages.move(touch.px,touch.py);}
-        if(hidKeysUp()&KEY_TOUCH)pageChanged=pages.end()||pageChanged;
+        if(hidKeysUp()&KEY_TOUCH){
+            int oldPage=pages.page,dx=pages.lastX-pages.startX,dy=pages.lastY-pages.startY;
+            bool changed=pages.end();
+            if(!changed&&oldPage==2&&authentic&&!moving&&dx*dx+dy*dy<144)
+                inventory.tap(*w,actor,pages.startX,pages.startY);
+            pageChanged=true;
+        }
+        if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
         if(down&KEY_SELECT){
             if(moving)saveMessage="Stop moving before saving";
             else lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
@@ -131,6 +141,7 @@ int main(){
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,saveMessage);
+            else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);
             gfxScreenSwapBuffers(GFX_BOTTOM,false);

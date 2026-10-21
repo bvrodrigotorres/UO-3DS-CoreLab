@@ -70,7 +70,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"CORELAB V0.9.1",ink,1,13);
+    text(fb,225,20,"CORELAB V0.10",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
@@ -79,10 +79,10 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: ROOFS | A: RESET | X: SCENE",ink);
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
-    text(fb,20,219,"START: EXIT | DESLIZA 1/2",ink);
+    text(fb,20,219,"START: EXIT | DESLIZA 1/3",ink);
 }
 void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status){
-    drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/2",{}});
+    drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/3",{}});
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     text(fb,20,53,"MINIMAPA",ink);text(fb,200,53,"PERSONAJE",ink);
     box(fb,192,53,1,127,gold);
@@ -126,7 +126,39 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     text(fb,20,189,coordinates,ink);
     text(fb,20,199,status.empty()?(j?"RADAR UO | VISTA DEL PERSONAJE":"MAPA BASICO | FALTA JOURNAL.BIN"):status,ink);
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
-    text(fb,20,219,"R: PAGINA | DESLIZA 2/2",ink);
+    text(fb,20,219,"R: PAGINA | DESLIZA 2/3",ink);
+}
+
+void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons){
+    drawHud(fb,{"MOCHILA Y COFRES","PAGINA 3/3",{}});
+    const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
+    text(fb,20,53,"MOCHILA",ink);
+    text(fb,166,53,inv.opened<0?"COFRE CERRADO":"COFRE "+std::to_string(inv.opened+1),ink);
+    box(fb,151,52,1,127,gold);
+    auto bag=[&](const Bag&items,int left){
+        for(int n=0;n<9;++n){int x=left+(n%3)*38,y=65+(n/3)*32;
+            box(fb,x,y,35,30,ink);box(fb,x+1,y+1,33,28,slotColor);
+            if(size_t(n)>=items.size())continue;
+            auto item=items[n];if(item.type>=ItemTypes)continue;
+            if(icons&&icons->rgba.size()==ItemTypes*24*24*4){
+                for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t p=(item.type*24*24+iy*24+ix)*4;
+                    if(icons->rgba[p+3]>127)pixel(fb,x+5+ix,y+1+iy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
+            }else text(fb,x+2,y+5,itemDefs[item.type].name,{244,222,160},1,5);
+            std::string count=std::to_string(item.count);box(fb,x+34-int(count.size())*6,y+21,int(count.size())*6,8,ink);
+            text(fb,x+34-int(count.size())*6,y+22,count,{244,222,160},1,5);
+        }
+    };
+    bag(inv.backpack,20);
+    static const Bag empty;
+    bag(inv.opened>=0&&size_t(inv.opened)<inv.chests.size()?inv.chests[inv.opened].items:empty,166);
+    text(fb,20,168,std::to_string(inv.backpack.size())+"/9 PILAS",ink);
+    box(fb,166,163,134,17,ink);box(fb,167,164,132,15,gold);
+    text(fb,174,168,inv.opened>=0?"CERRAR COFRE":"ABRIR CERCANO",ink);
+    box(fb,18,187,284,41,{218,195,148});
+    text(fb,20,189,inv.message,ink);
+    text(fb,20,199,"TOCA UNA PILA PARA TRANSFERIR",ink);
+    text(fb,20,209,inv.nearest(w,a)>=0?"COFRE AL ALCANCE | AUTOGUARDADO":"ACERCATE A UN COFRE DEL MAPA",ink);
+    text(fb,20,219,"R: PAGINA | DESLIZA 3/3",ink);
 }
 
 }

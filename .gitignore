@@ -18,4 +18,5 @@ __pycache__/
 *.zip
 *.sav
 *.sav.tmp
+*.sav.bak
 .DS_Store

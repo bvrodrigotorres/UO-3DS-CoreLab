@@ -30,7 +30,7 @@ class SceneTests(unittest.TestCase):
 
     def test_exterior_visibility_and_hud(self):
         binary=Path(self.temp.name)/'presentation_tests'
-        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/presentation_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/presentation_tests.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
     def test_journal_validation(self):
@@ -41,6 +41,11 @@ class SceneTests(unittest.TestCase):
     def test_doors_and_collision(self):
         binary=Path(self.temp.name)/'door_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/door_tests.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_inventory_transactions(self):
+        binary=Path(self.temp.name)/'inventory_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/inventory_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
 
     def test_decoration_parser(self):

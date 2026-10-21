@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.9.1
+# Primera prueba: UO-3DS-CoreLab v0.10
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -42,4 +42,5 @@ La demo y la escena privada no son un juego terminado. Un fallo de oclusión
 se registra con coordenadas, Z, modo de techo y una foto de ambas pantallas;
 no debe corregirse inventando datos en el exportador.
 
-Para el parche v0.9.1 y sus controles nuevos, consulta [v0.9.1.md](v0.9.1.md).
+Para el parche v0.10 y sus controles nuevos, consulta [v0.10.md](v0.10.md).
+La página 3 permite abrir un cofre cercano y transferir pilas con el táctil.

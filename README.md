@@ -1,14 +1,15 @@
-# UO-3DS-CoreLab v0.9.1
+# UO-3DS-CoreLab v0.10
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
 ejecutable y carpeta de SD propios; no depende del repositorio UO-3DS-Offline.
 
 **Primera prueba técnica, no un juego completo.** Caminar, alturas, orden de
-dibujo, geometría del terreno y diagnóstico de rendimiento. No incluye combate,
-inventario, NPC, servidor ni recursos originales de Ultima Online.
+dibujo, geometría del terreno y diagnóstico de rendimiento. Incluye NPC locales y una primera mochila con cofres persistentes. No incluye
+combate, servidor ni recursos originales de Ultima Online.
 
-[Novedades e instalación de v0.9.1](docs/v0.9.1.md): puertas con actualización clásica, opacidad estable y giro aunque el paso esté bloqueado.
+[Novedades e instalación de v0.10](docs/v0.10.md): tercera página táctil con mochila,
+cofres del mapa y transferencias guardadas automáticamente.
 
 ## Qué cambia respecto al prototipo anterior
 
@@ -24,7 +25,7 @@ inventario, NPC, servidor ni recursos originales de Ultima Online.
 
 ## Probar sin archivos de UO
 
-Descarga el artefacto **UO-3DS-CoreLab-v0.9.1** de un run verde en
+Descarga el artefacto **UO-3DS-CoreLab-v0.10** de un run verde en
 [Actions](https://github.com/bvrodrigotorres/UO-3DS-CoreLab/actions).
 También se puede compilar localmente con devkitPro y `make -j2`.
 
@@ -40,7 +41,7 @@ pisos, muros, techos, escalones, dos superficies superpuestas y una pendiente.
 | Y | Techos: AUTO (transparencia) / HIDDEN (quitar plantas superiores) / FULL (mostrar todo) |
 | A | Siguiente punto de prueba en demo; volver al inicio en escena privada |
 | X | Alternar demo y escena privada, si esta se cargó correctamente |
-| R / deslizar horizontalmente | Cambiar entre diagnóstico y minimapa/personaje |
+| R / deslizar horizontalmente | Recorrer diagnóstico, minimapa/personaje y mochila/cofre |
 | SELECT / L | Guardar / restaurar posición, detenido |
 | START | Salir |
 
