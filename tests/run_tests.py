@@ -38,6 +38,22 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/journal_tests.cpp'),str(ROOT/'source/journal.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
 
+    def test_doors_and_collision(self):
+        binary=Path(self.temp.name)/'door_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/door_tests.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_decoration_parser(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from import_britain import placements
+        rows=placements('Static 0x04B7\n1501 1611 40\n# ignored\nDrawer 0x0A2C (Hue=0x25)\n1503 1610 40\n2000 2000 0\n',1488,1596,32)
+        self.assertEqual(len(rows),2)
+        self.assertEqual((rows[0]['x'],rows[0]['y'],rows[0]['art']),(13,15,1207))
+        self.assertEqual(rows[1]['hue'],37)
+        with self.assertRaises(ValueError):placements('SomeAddon 0x123\n1501 1611 40\n',1488,1596,32)
+        with self.assertRaises(ValueError):placements('malformed',1488,1596,32)
+
     def fixture(self):
         return exporter.HEAD.pack(b'UCL1',1,2,2,0,0,0,0,0,0,0,0)+bytes(9)+exporter.LAND.pack(3,65535,0,0)*4
 

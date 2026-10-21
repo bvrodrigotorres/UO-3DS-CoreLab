@@ -93,8 +93,9 @@ size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
+void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running){
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Doors*doors){
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0);
     C3D_FrameDrawOn(target);used=0;objects=0;overflow=false;batches.clear();
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
@@ -122,7 +123,9 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             }
         }else if(d.kind==Kind::Static){
             const auto&o=w.objects[d.index];C2D_Image image;
-            if(authentic&&imageFor(o.image,image)){
+            unsigned imageId=o.image;DoorVisual doorView;
+            if(doors&&doors->visual(d.index,doorView)){center=project(doorView.x,doorView.y,o.z);imageId=doorView.image;}
+            if(authentic&&imageFor(imageId,image)){
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{center.x-width/2,center.y+22-height},{center.x+width/2,center.y+22-height},{center.x+width/2,center.y+22},{center.x-width/2,center.y+22}};
                 float alpha=objectOpacity(o,footZ,roofs,afterActor,{p[0].x,p[0].y,p[2].x,p[2].y});

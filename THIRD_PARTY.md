@@ -48,3 +48,11 @@ El conversor tools/export_avatar.py procede del trabajo previo del usuario en UO
 El formato RLE de los gumps en tools/export_journal.py se contrastó con
 [ClassicUO GumpsLoader.Decode](https://github.com/ClassicUO/ClassicUO/blob/main/src/ClassicUO.Assets/GumpsLoader.cs): offsets DWORD relativos al inicio de la tabla y pares color/longitud.
 El conversor es propio; no incorpora arte del cliente al repositorio.
+
+Para v0.8 se consultan los datos y convenciones de ServUO pub57
+(commit d76bf4443cf76d081ddaf8f57c87ff33749256af): decoración de Britain,
+carteles, marcos y estados de puertas. ServUO conserva su licencia GPL-2.0.
+No se incorporan sus archivos de configuración ni sus fuentes C# al repositorio;
+el importador propio acepta referencias aportadas localmente y registra sus hashes.
+Las posiciones y gráficos exportados permanecen en el paquete privado del usuario.
+Ver [procedencia y límites](docs/v0.8.md).

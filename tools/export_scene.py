@@ -195,6 +195,7 @@ def static_image(art, graphic):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--decorations', type=Path, help='Private audited ServUO region manifest')
     p.add_argument('--client', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--x', type=int, default=1488)
@@ -221,6 +222,13 @@ def main():
     finally:
         reader.close()
     rows = statics(client, args.x, args.y, args.side)
+    base_count=len(rows);decoration=None
+    if args.decorations:
+        decoration=json.loads(args.decorations.read_text())
+        if decoration['origin']!=[args.x,args.y] or decoration['side']!=args.side or decoration['base_objects']!=base_count:
+            raise ValueError('Decoration manifest belongs to another region')
+        for obj in decoration['placements']+decoration['doors']:
+            rows.append(tuple(obj[k] for k in ('x','y','z','art','hue')))
     if len(rows) > 8192:
         raise ValueError('Scene exceeds 8192 objects; choose a smaller region')
     from ultima_sdk import Files, Art
@@ -275,7 +283,15 @@ def main():
             raise ValueError(f'Tiledata missing static {art}')
         flags, height = data[art]
         objects.append(OBJECT.pack(x, y, z, height, art, hue, picture('static', art), flags, order, 0))
-    # No filtering, inferred placements, art replacement, or sprite trimming.
+    door_records=[]
+    if decoration:
+        for n,door in enumerate(decoration['doors']):
+            index=base_count+len(decoration['placements'])+n
+            opened=picture('static',door['open_art'])
+            pair=door['pair'] if door['pair'] is not None else 65535
+            door_records.append(struct.pack('<IHHbbH',index,door['open_art'],opened,door['dx'],door['dy'],pair))
+    # Base data is preserved; audited server additions follow it.
+
     vertices = bytes(z & 255 for row in grid for art, z in row)
     raw = HEAD.pack(b'UCL1', 1, args.side, args.side, len(images), len(rows), args.x, args.y, args.spawn_x-args.x, args.spawn_y-args.y, args.spawn_z, 0)+vertices+b''.join(cells)+b''.join(objects)
     tex3ds = shutil.which('tex3ds') or '/opt/devkitpro/tools/bin/tex3ds'
@@ -293,7 +309,17 @@ def main():
         (folder/'page.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(len(group))))
         subprocess.run([tex3ds, '-i', 'page.t3s', '-o', str(out/f'atlas_{page:02d}.t3x')], cwd=folder, check=True)
     (out/'scene.bin').write_bytes(raw)
+    if decoration:
+        scene_hash=2166136261
+        for byte in raw:scene_hash=((scene_hash^byte)*16777619)&0xffffffff
+        (out/'doors.bin').write_bytes(struct.pack('<4sHHII',b'UOD1',1,len(door_records),base_count,scene_hash)+b''.join(door_records))
+        (out/'decoration_manifest.json').write_text(json.dumps(decoration,indent=2)+'\n')
     report = dict(origin=[args.x, args.y], side=args.side, spawn=[args.spawn_x, args.spawn_y, args.spawn_z], objects=len(rows), images=len(images), roofs=sum(bool(data[r[3]][0] & 0x10000000) for r in rows), hued_objects=sum(r[4] != 0 for r in rows), sha256=hashlib.sha256(raw).hexdigest(), limitations=['Hues retained but not rendered in v0.1', 'Dynamic objects and multis not included', 'Experimental height ceiling, not full CrossUO roof connectivity'], source_files={name:hashlib.sha256(find(client,name).read_bytes()).hexdigest() for name in ['tiledata.mul','staidx0.mul']})
+    if decoration:
+        report['base_objects']=base_count
+        report['server_decoration']=len(decoration['placements'])
+        report['interactive_doors']=len(door_records)
+        report['limitations']=['Only the audited ServUO region additions; no NPC population, container contents or running server', 'Hues retained but not rendered', 'Experimental height ceiling, not full roof connectivity']
     (out/'report.json').write_text(json.dumps(report, indent=2)+'\n')
     (out/'placements.json').write_text(json.dumps([dict(x=x+args.x,y=y+args.y,z=z,art=art,hue=hue,order=i) for i,(x,y,z,art,hue) in enumerate(rows)], indent=2)+'\n')
     print(json.dumps(report, indent=2))
