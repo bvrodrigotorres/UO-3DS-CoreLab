@@ -56,3 +56,8 @@ No se incorporan sus archivos de configuración ni sus fuentes C# al repositorio
 el importador propio acepta referencias aportadas localmente y registra sus hashes.
 Las posiciones y gráficos exportados permanecen en el paquete privado del usuario.
 Ver [procedencia y límites](docs/v0.8.md).
+
+Para v0.9 se consulta el punto innkeeper (1493,1616,20) de Spawns/felucca.xml
+de la misma revisión de ServUO. Los dos viajeros son población ambiental local,
+no entradas del servidor. Las capas de personaje y los colores se convierten
+exclusivamente desde el cliente privado del usuario; no se distribuyen en Git.

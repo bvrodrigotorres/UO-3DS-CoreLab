@@ -54,6 +54,11 @@ class SceneTests(unittest.TestCase):
         with self.assertRaises(ValueError):placements('SomeAddon 0x123\n1501 1611 40\n',1488,1596,32)
         with self.assertRaises(ValueError):placements('malformed',1488,1596,32)
 
+    def test_npc_simulation(self):
+        binary=Path(self.temp.name)/'npc_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/npc_tests.cpp'),str(ROOT/'source/npcs.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
     def fixture(self):
         return exporter.HEAD.pack(b'UCL1',1,2,2,0,0,0,0,0,0,0,0)+bytes(9)+exporter.LAND.pack(3,65535,0,0)*4
 

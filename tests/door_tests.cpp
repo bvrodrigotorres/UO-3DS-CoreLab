@@ -38,11 +38,25 @@ int main(int argc,char**argv){
     assert(d.update(w,.11f));assert(w.objects[0].x==2&&w.objects[0].y==4&&w.objects[0].art==1702);
     assert(step(w,a,4,next,actual)&&next.x==3&&next.y==3);
     assert(!d.tryOpen(a,0,1)&&!d.update(w,1));assert(w.cells[3*8+3].empty());
+    // Closing waits for both current and reserved crossing cells.
+    assert(!d.update(w,3.f,{{3,3,0},{3,2,0}}));
+    assert(w.objects[0].art==1702);
+    assert(!d.update(w,2.4f,{{3,2,0}}));
+    assert(!d.update(w,.11f,{{3,2,0}}));
+    assert(d.visual(0,v)&&v.x>2&&v.x<3);
+    assert(!d.update(w,.1f,{{3,3,0}})); // someone enters during closing: reopen
+    assert(w.objects[0].art==1702);
+    assert(d.update(w,3.f,{{3,2,0}}));
+    assert(w.objects[0].art==1701&&!step(w,a,4,next,actual));
+    assert(d.tryOpen(a,0,1)&&d.update(w,.2f)); // repeatable opening
     auto invalid=[&](std::vector<uint8_t>bad){write(file,bad);Doors other;assert(!other.load(file,scene,w,error));};
     invalid(std::vector<uint8_t>(b.begin(),b.end()-1));auto bad=b;put(bad,16,90,4);invalid(bad);bad=b;put(bad,22,30,2);invalid(bad);bad=b;put(bad,26,0,2);invalid(bad);bad=b;put(bad,12,123,4);invalid(bad);
     // Linked double leaves open together and leave both original cells free.
     w.objects={door,door};w.objects[1].x=4;w.index();b.resize(40);put(b,6,2,2);put(b,26,1,2);
     put(b,28,1,4);put(b,32,1704,2);put(b,34,1,2);b[36]=1;b[37]=1;put(b,38,0,2);write(file,b);
     Doors pair;assert(pair.load(file,scene,w,error));assert(pair.tryOpen(a,0,1));assert(pair.update(w,.2f));assert(w.objects[0].x==2&&w.objects[1].x==5);
-    std::cout<<"Door opening delay, collision, original frames, pairs and invalid data passed\n";
+    assert(!pair.update(w,3.f,{{4,3,0}})); // second leaf protects the whole pair
+    assert(w.objects[0].x==2&&w.objects[1].x==5);
+    assert(pair.update(w,3.f));assert(w.objects[0].x==3&&w.objects[1].x==4);
+    std::cout<<"Door opening delay, closing safety, collision, original frames, pairs and invalid data passed\n";
 }

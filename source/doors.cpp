@@ -33,25 +33,47 @@ bool Doors::load(const std::string&path,const std::string&scene,const World&w,st
 bool Doors::tryOpen(const Actor&a,int dx,int dy){
     bool pending=false;
     for(auto&d:entries){
-        if(d.open||std::abs(d.closed.z-a.z)>=16)continue;
+        if(std::abs(d.closed.z-a.z)>=16)continue;
         int x=d.closed.x-a.x,y=d.closed.y-a.y;
         bool target=x==dx&&y==dy;
         if(dx&&dy)target=target||(x==dx&&y==0)||(x==0&&y==dy);
         if(!target)continue;
+        if(d.open){
+            d.closing=false;d.progress=1;d.elapsed=0;
+            if(d.pair!=65535){auto&other=entries[d.pair];other.closing=false;other.progress=1;other.elapsed=0;}
+            continue;
+        }
         d.opening=true;pending=true;
         if(d.pair!=65535&&!entries[d.pair].open)entries[d.pair].opening=true;
     }
     return pending;
 }
-bool Doors::update(World&w,float dt){
+bool Doors::update(World&w,float dt,const std::vector<Actor>&occupants){
     bool changed=false;
-    for(auto&d:entries)if(d.opening&&!d.open){
-        d.progress=std::min(1.f,d.progress+std::max(0.f,dt)/.18f);
-        if(d.progress>=1){
-            auto&o=w.objects[d.index];o.x=d.closed.x+d.dx;o.y=d.closed.y+d.dy;o.art=d.openArt;o.image=d.openImage;
-            // The original impassable leaf moves to its open position, leaving
-            // its old tile free. It is not deleted or made globally passable.
-            d.open=true;d.opening=false;changed=true;
+    dt=std::max(0.f,dt);
+    auto occupied=[&](const DoorState&d){
+        for(const auto&a:occupants)if(std::abs(a.z-d.closed.z)<16&&
+           a.x>=std::min(d.closed.x,d.closed.x+d.dx)&&a.x<=std::max(d.closed.x,d.closed.x+d.dx)&&
+           a.y>=std::min(d.closed.y,d.closed.y+d.dy)&&a.y<=std::max(d.closed.y,d.closed.y+d.dy))return true;
+        return false;
+    };
+    for(auto&d:entries){
+        if(d.opening&&!d.open){
+            d.progress=std::min(1.f,d.progress+dt/.18f);
+            if(d.progress>=1){
+                auto&o=w.objects[d.index];o.x=d.closed.x+d.dx;o.y=d.closed.y+d.dy;o.art=d.openArt;o.image=d.openImage;
+                d.open=true;d.opening=false;d.elapsed=0;changed=true;
+            }
+        }else if(d.open){
+            if(occupied(d)||(d.pair!=65535&&occupied(entries[d.pair]))){
+                d.elapsed=0;d.closing=false;d.progress=1;continue;
+            }
+            d.elapsed+=dt;
+            if(d.elapsed>=2.5f)d.closing=true;
+            if(d.closing){
+                d.progress=std::max(0.f,d.progress-dt/.18f);
+                if(d.progress<=0){w.objects[d.index]=d.closed;d.open=false;d.closing=false;d.elapsed=0;changed=true;}
+            }
         }
     }
     if(changed)w.index();

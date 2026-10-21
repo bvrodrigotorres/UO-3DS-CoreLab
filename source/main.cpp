@@ -44,6 +44,10 @@ int main(){
     };
     auto alignCamera=[&](){from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;progress=0;};
     if(restorePosition())alignCamera();
+    lab::Npcs npcs;std::string npcError;
+    bool hasNpcs=available&&lab::loadNpcAtlases(npcError);
+    if(hasNpcs)npcs.reset(privateWorld,actor);
+    std::vector<lab::Actor>occupants;occupants.reserve(16);
     u64 last=osGetTime(),sample=last;int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
@@ -71,7 +75,11 @@ int main(){
             if(!authentic){const lab::Actor spots[]={{8,10,0},{7,7,4},{10,6,0},{12,10,2}};actor=spots[(++spot)%4];from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;}
             else {actor={w->startX,w->startY,w->startZ};from=actor;cameraX=actor.x;cameraY=actor.y;foot=actor.z;}
         }
-        if(authentic&&doors.update(privateWorld,dt))lab::invalidateRenderList();
+        if(authentic){
+            occupants.clear();occupants.push_back(actor);if(moving)occupants.push_back(from);npcs.addOccupants(occupants);
+            if(doors.update(privateWorld,dt,occupants))lab::invalidateRenderList();
+            if(hasNpcs)npcs.update(privateWorld,actor,from,moving,dt,doors);
+        }
         circlePosition pad;hidCircleRead(&pad);
         int sx=((held&KEY_RIGHT)||pad.dx>35)-((held&KEY_LEFT)||pad.dx< -35);
         int sy=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
@@ -81,7 +89,7 @@ int main(){
             int direction=0;for(int i=0;i<8;++i)if(xs[i]==dx&&ys[i]==dy)direction=i;
             lab::Actor next;
             if(authentic&&doors.tryOpen(actor,dx,dy)){facing=(direction+1)&7;blocked="OPENING DOOR";}
-            else if(lab::step(*w,actor,direction,next,actual)){
+            else if(lab::step(*w,actor,direction,next,actual)&&(!authentic||!npcs.occupied(next))){
                 from=actor;actor=next;moving=true;progress=0;facing=(actual+1)&7;blocked="--";
             }else blocked="BLOCKED";
         }
@@ -90,7 +98,7 @@ int main(){
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
-        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasDoors?&doors:nullptr);
+        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasDoors?&doors:nullptr,authentic&&hasNpcs?&npcs:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){
             lab::HudInfo hud{authentic?"PRIVATE UO SCENE":"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
@@ -110,9 +118,14 @@ int main(){
                 else hud.lines.emplace_back("");
 
             }
+            if(authentic&&hasNpcs){
+                auto greeting=npcs.greeting(actor);
+                hud.lines.push_back(greeting.empty()?"NPC "+std::to_string(npcs.all().size())+" | POBLACION LOCAL":greeting);
+            }
             if(!saveMessage.empty())hud.lines.push_back(saveMessage);
             if(!available)hud.lines.push_back(error);
             if(authentic&&!hasDoors)hud.lines.push_back(doorError);
+            if(authentic&&!hasNpcs)hud.lines.push_back(npcError);
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,saveMessage);

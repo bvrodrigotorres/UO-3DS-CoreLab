@@ -19,6 +19,8 @@ static int uniformProjection;
 static C3D_Tex white;
 static std::vector<C2D_SpriteSheet> sheets;
 static C2D_SpriteSheet avatar;
+static std::vector<C2D_SpriteSheet>npcSheets;
+static size_t npcBytes;
 static bool runVerified=false;
 static size_t bytes,objects;
 static int used;
@@ -69,6 +71,8 @@ bool rendererInit(){
 void rendererShutdown(){
     C3D_FrameSync();for(auto s:sheets)C2D_SpriteSheetFree(s);sheets.clear();
     if(avatar)C2D_SpriteSheetFree(avatar);
+    for(auto s:npcSheets)C2D_SpriteSheetFree(s);
+    npcSheets.clear();
     C3D_TexDelete(&white);if(buffer)linearFree(buffer);
     shaderProgramFree(&program);if(shader)DVLB_Free(shader);
 }
@@ -88,20 +92,34 @@ bool loadAtlases(int images,std::string&error){
     C3D_FrameSync();for(auto s:sheets)C2D_SpriteSheetFree(s);
     sheets=std::move(next);bytes=size;return true;
 }
-size_t textureBytes(){return bytes;}
+bool loadNpcAtlases(std::string&error){
+    std::vector<C2D_SpriteSheet>next;size_t usedBytes=0;
+    for(int i=0;i<3;++i){
+        char path[128];std::snprintf(path,sizeof(path),"sdmc:/3ds/UO-3DS-CoreLab/npc_%02d.t3x",i);
+        auto s=C2D_SpriteSheetLoad(path);
+        if(!s||C2D_SpriteSheetCount(s)!=40){if(s)C2D_SpriteSheetFree(s);for(auto t:next)C2D_SpriteSheetFree(t);error="Missing/invalid NPC atlas";return false;}
+        auto image=C2D_SpriteSheetGetImage(s,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);usedBytes+=image.tex->size;next.push_back(s);
+    }
+    for(auto s:npcSheets)C2D_SpriteSheetFree(s);
+    npcSheets=std::move(next);npcBytes=usedBytes;error.clear();return true;
+}
+size_t textureBytes(){return bytes+npcBytes;}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Doors*doors){
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Doors*doors,const Npcs*npcs){
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0);
     C3D_FrameDrawOn(target);used=0;objects=0;overflow=false;batches.clear();
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
     bool afterActor=false;
-    for(const auto&d:list){
+    auto npcList=npcs?npcs->drawList(w,actor,roofs!=RoofMode::Full):std::vector<Draw>{};
+    for(size_t wi=0,ni=0;wi<list.size()||ni<npcList.size();){
+        bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
+        const auto&d=takeNpc?npcList[ni++]:list[wi++];
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
         ++objects;
@@ -154,6 +172,15 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                     if(alpha>0)quad(p,whiteUV,&white,rug?.18f:roof?.55f:.63f,rug?.3f:roof?.24f:.44f,rug?.8f:roof?.17f:.24f,alpha);
                 }
             }
+        }else if(d.kind==Kind::Npc){
+            const auto&n=npcs->all()[d.index];
+            if((size_t)n.style>=npcSheets.size())continue;
+            float t=n.progress;
+            auto foot=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
+            auto image=C2D_SpriteSheetGetImage(npcSheets[n.style],avatarImage(n.direction,n.moving,false,(unsigned)n.animation,40));
+            float width=image.subtex->width,height=image.subtex->height;
+            Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};
+            Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
         }else{
             afterActor=true;
             Point foot=project(cameraX,cameraY,footZ);

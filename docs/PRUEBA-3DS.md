@@ -1,4 +1,4 @@
-# Primera prueba: UO-3DS-CoreLab v0.8
+# Primera prueba: UO-3DS-CoreLab v0.9
 
 Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
@@ -6,7 +6,7 @@ Esta es una aplicación distinta a UO-3DS-Offline. Mantén ambas carpetas.
 
 1. Copia la carpeta `UO-3DS-CoreLab` a `SD:/3ds/`.
 2. Abre `UO-3DS-CoreLab.3dsx` desde Homebrew Launcher.
-3. El título inferior debe decir `BRITANNIA` y `CORELAB V0.8`.
+3. El título inferior debe decir `BRITANNIA` y `CORELAB V0.9`.
 
 El paquete público contiene la demo incorporada. Si el paquete fue preparado
 localmente con los recursos privados, también incluye `scene.bin`, ocho o más
@@ -42,4 +42,4 @@ La demo y la escena privada no son un juego terminado. Un fallo de oclusión
 se registra con coordenadas, Z, modo de techo y una foto de ambas pantallas;
 no debe corregirse inventando datos en el exportador.
 
-Para el parche v0.8 y sus controles nuevos, consulta [v0.8.md](v0.8.md).
+Para el parche v0.9 y sus controles nuevos, consulta [v0.9.md](v0.9.md).
