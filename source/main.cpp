@@ -21,7 +21,9 @@ int main(){
     std::string error;bool available=lab::loadWorld("sdmc:/3ds/UO-3DS-CoreLab/scene.bin",privateWorld,error);
     if(available)available=lab::loadAtlases(privateWorld.images,error);
     lab::RoofMode roofs=lab::RoofMode::Auto;
-    bool authentic=available,moving=false,showMap=false;int facing=4,actual=0,frames=0,spot=0;
+    lab::TouchPages pages;lab::Journal journal;std::string journalError;
+    bool hasJournal=available&&lab::loadJournal("sdmc:/3ds/UO-3DS-CoreLab/journal.bin","sdmc:/3ds/UO-3DS-CoreLab/scene.bin",journal,journalError);
+    bool authentic=available,moving=false;int facing=4,actual=0,frames=0,spot=0;
     lab::World*w=authentic?&privateWorld:&demo;
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
     float progress=0,cameraX=actor.x,cameraY=actor.y,foot=actor.z,fps=0,animationPhase=0;
@@ -35,7 +37,11 @@ int main(){
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
         if(down&KEY_START)break;
         if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
-        if(down&KEY_R)showMap=!showMap;
+        bool pageChanged=false;
+        if(down&KEY_R){pages.page=1-pages.page;pageChanged=true;}
+        touchPosition touch;
+        if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH)pages.begin(touch.px,touch.py);else pages.move(touch.px,touch.py);}
+        if(hidKeysUp()&KEY_TOUCH)pageChanged=pages.end()||pageChanged;
         if(down&KEY_SELECT){
             if(moving)saveMessage="Stop moving before saving";
             else lab::savePosition(positionPath(),*w,actor,saveMessage);
@@ -71,22 +77,14 @@ int main(){
         int animation=(int)animationPhase;
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
-        if(frames==1||frames%12==0||down){
+        if(frames==1||frames%12==0||down||pageChanged){
             lab::HudInfo hud{authentic?"PRIVATE UO SCENE":"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};
             std::snprintf(line,sizeof(line),"XY %d,%d   Z %d | %s",actor.x+w->originX,actor.y+w->originY,actor.z,blocked);add();
             std::snprintf(line,sizeof(line),"FPS %.1f | DRAW %lu",fps,(unsigned long)lab::drawnObjects());add();
             std::snprintf(line,sizeof(line),"CPU %.2fMS | GPU %.2fMS",C3D_GetProcessingTime(),C3D_GetDrawingTime());add();
-            if(showMap){
-                hud.lines.emplace_back("MAP: WORLD X RIGHT / Y DOWN");
-                for(int y=actor.y-4;y<=actor.y+4;++y){
-                    std::string row="           ";
-                    for(int x=actor.x-7;x<=actor.x+7;++x)row+=lab::mapCell(*w,actor,x,y);
-                    hud.lines.push_back(row);
-                }
-                hud.lines.emplace_back("@ YOU # BLOCK + FLOOR ~ WATER");
-            }else{
+            {
                 auto heap=mallinfo();
                 std::snprintf(line,sizeof(line),"ATLAS %.2F MIB | LISTS %u",lab::textureBytes()/1048576.f,lab::renderListBuilds());add();
                 std::snprintf(line,sizeof(line),"LINEAR FREE %.2F MIB",linearSpaceFree()/1048576.f);add();
@@ -100,7 +98,8 @@ int main(){
             if(!available)hud.lines.push_back(error);
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
-            lab::drawHud(bottom,hud);
+            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,saveMessage);
+            else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);
         }
     }

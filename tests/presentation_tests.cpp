@@ -6,6 +6,15 @@
 #include <iostream>
 using namespace lab;
 int main(int argc,char**argv){
+    TouchPages pages;
+    pages.begin(260,110);pages.move(50,112);assert(pages.end()&&pages.page==1);
+    assert(!pages.end()); // releasing twice must not change the page
+    pages.begin(50,110);pages.move(55,200);assert(!pages.end()&&pages.page==1);
+    pages.begin(30,175);assert(pages.end()&&pages.zoom==1);
+    pages.begin(30,175);assert(!pages.end()&&pages.zoom==1);
+    pages.begin(160,175);assert(pages.end()&&pages.zoom==2);
+    pages.begin(50,110);pages.move(260,112);assert(pages.end()&&pages.page==0);
+    pages.begin(250,220);assert(pages.end()&&pages.page==1);
     Object roof;roof.flags=Roof;roof.z=60;
     ScreenRect covering{100,20,260,140},away{230,20,270,70};
     assert(objectOpacity(roof,18,RoofMode::Auto,true,covering)==.18f);
@@ -47,6 +56,9 @@ int main(int argc,char**argv){
         std::ofstream f(argv[1],std::ios::binary);f<<"P6\n320 240\n255\n";
         for(int y=0;y<240;++y)for(int x=0;x<320;++x){auto p=pixels.data()+16+3*(x*240+239-y);char rgb[]={char(p[2]),char(p[1]),char(p[0])};f.write(rgb,3);}
     }
+    World demo=demoWorld();
+    for(int zoom=1;zoom<=4;++zoom)drawJournal(pixels.data()+16,demo,{0,0,0},nullptr,zoom);
+    for(int i=0;i<16;++i){assert(pixels[i]==0xAA);assert(pixels[pixels.size()-1-i]==0xAA);}
     info.lines.assign(16,std::string(300,'W'));drawHud(pixels.data()+16,info);
     for(int i=0;i<16;++i){assert(pixels[i]==0xAA);assert(pixels[pixels.size()-1-i]==0xAA);}
     std::cout<<"Exterior occlusion, roof modes, support floors and HUD bounds passed\n";

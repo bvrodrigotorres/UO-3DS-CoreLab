@@ -44,3 +44,7 @@ No se distribuyen mapas, arte, sonidos o animaciones originales de Ultima Online
 El usuario aporta los datos locales. Este proyecto no está afiliado a sus titulares.
 
 El conversor tools/export_avatar.py procede del trabajo previo del usuario en UO-3DS-Offline, adaptado aquí con acción 2 correcta y metadata. No se modifica el conversor ni los recursos del repositorio anterior.
+
+El formato RLE de los gumps en tools/export_journal.py se contrastó con
+[ClassicUO GumpsLoader.Decode](https://github.com/ClassicUO/ClassicUO/blob/main/src/ClassicUO.Assets/GumpsLoader.cs): offsets DWORD relativos al inicio de la tabla y pares color/longitud.
+El conversor es propio; no incorpora arte del cliente al repositorio.

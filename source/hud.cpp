@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
+#include "exploration.hpp"
+#include <cmath>
+#include <cstdio>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -67,15 +70,63 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"CORELAB V0.5",ink,1,13);
+    text(fb,225,20,"CORELAB V0.6",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
     for(const auto&line:info.lines){if(y>174)break;text(fb,20,y,line,ink);y+=spacing;}
     box(fb,17,181,286,1,ink);box(fb,17,183,286,1,gold);
-    text(fb,20,189,"PAD: WALK | B: RUN | R: MAP",ink);
+    text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: ROOFS | A: RESET | X: SCENE",ink);
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
-    text(fb,20,219,"START: EXIT",ink);
+    text(fb,20,219,"START: EXIT | DESLIZA 1/2",ink);
 }
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status){
+    drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/2",{}});
+    const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
+    text(fb,20,53,"MINIMAPA",ink);text(fb,200,53,"PERSONAJE",ink);
+    box(fb,192,53,1,127,gold);
+    // Inverse isometric projection: same world axes as the top screen.
+    // Sampling is bounded to the exported radar area; black outside it.
+    float scale=float(std::max(1,std::min(4,zoom)));
+    for(int y=65;y<169;++y)for(int x=20;x<186;++x){
+        float sx=(x-103.f)/scale,sy=(y-117.f)/scale;
+        int wx=int(std::floor(a.x+w.originX+(sx+sy)*.5f));
+        int wy=int(std::floor(a.y+w.originY+(sy-sx)*.5f));
+        Color c=dark;
+        if(j){
+            int mx=wx-j->originX,my=wy-j->originY;
+            if(mx>=0&&my>=0&&mx<j->width&&my<j->height){size_t p=(my*j->width+mx)*3;c={j->map[p],j->map[p+1],j->map[p+2]};}
+        }else if(w.contains(wx-w.originX,wy-w.originY)){
+            char tile=mapCell(w,a,wx-w.originX,wy-w.originY);
+            c=tile=='~'?Color{45,83,126}:tile=='#'?Color{108,100,89}:tile=='+'?Color{156,119,72}:Color{83,113,63};
+        }
+        pixel(fb,x,y,c);
+    }
+    for(int d=-4;d<=4;++d){pixel(fb,103+d,117,gold);pixel(fb,103,117+d,gold);}
+    box(fb,102,116,3,3,{220,38,28});text(fb,175,67,"N",{244,222,160});
+    text(fb,23,173,"-",ink);text(fb,153,173,"+",ink);
+    text(fb,56,173,"ZOOM "+std::to_string(zoom)+"X",ink);
+    // The private image is the original human paperdoll gump, cropped/resized
+    // by the exporter, not an invented equipment state or animated world sprite.
+    if(j){
+        int ox=249-j->dollWidth/2;
+        for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){
+            size_t p=(y*j->dollWidth+x)*4;
+            if(j->doll[p+3]>127)pixel(fb,ox+x,65+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});
+        }
+    }else{text(fb,205,114,"SIN IMAGEN",ink);}
+    for(int x:{198,290})for(int y:{74,105,136}){
+        box(fb,x,y,10,10,ink);box(fb,x+1,y+1,8,8,gold);
+    }
+    text(fb,216,173,"SIN EQUIPO",ink);
+    // Replace the shared footer without regenerating the paper background.
+    box(fb,18,187,284,41,{218,195,148});
+    char coordinates[64];std::snprintf(coordinates,sizeof(coordinates),"XY %d,%d Z %d",a.x+w.originX,a.y+w.originY,a.z);
+    text(fb,20,189,coordinates,ink);
+    text(fb,20,199,status.empty()?(j?"RADAR UO | VISTA DEL PERSONAJE":"MAPA BASICO | FALTA JOURNAL.BIN"):status,ink);
+    text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
+    text(fb,20,219,"R: PAGINA | DESLIZA 2/2",ink);
+}
+
 }
