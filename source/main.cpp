@@ -2,6 +2,7 @@
 #include "core.hpp"
 #include "renderer.hpp"
 #include "character_depth.hpp"
+#include "performance.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include <3ds.h>
@@ -49,13 +50,15 @@ int main(){
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
     float progress=0,cameraX=actor.x,cameraY=actor.y,foot=actor.z,fps=0,animationPhase=0;
     std::string saveMessage;
+    lab::PositionCheckpoint checkpoints[2];
+    auto positionCheckpoint=[&]()->lab::PositionCheckpoint&{return checkpoints[authentic?1:0];};
     auto positionPath=[&](){return saveRoot+savePrefix+(authentic?"position-private.sav":"position-demo.sav");};
     auto savedWorld=[&]()->const lab::World&{return authentic?canonicalPrivate:demo;};
     auto restorePosition=[&](){
-        if(lab::loadPosition(positionPath(),savedWorld(),actor,saveMessage))return true;
+        if(lab::loadPosition(positionPath(),savedWorld(),actor,saveMessage)){positionCheckpoint().baseline(actor,osGetTime());return true;}
         if(authentic&&hasDoors&&lab::loadPosition(positionPath(),legacyPrivate,actor,saveMessage)){
             if(lab::savePosition(positionPath(),canonicalPrivate,actor,saveMessage))saveMessage="Position migrated to decorated world";
-            return true;
+            positionCheckpoint().baseline(actor,osGetTime());return true;
         }
         return false;
     };
@@ -100,6 +103,8 @@ int main(){
         privateWorld=canonicalPrivate;
         if(available)hasDoors=doors.load(saveRoot+"doors.bin",saveRoot+"scene.bin",privateWorld,doorError);
         actor={w->startX,w->startY,w->startZ};alignCamera();lab::invalidateRenderList();
+        checkpoints[0].baseline({demo.startX,demo.startY,demo.startZ},osGetTime());
+        if(available)checkpoints[1].baseline({canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},osGetTime());
         saveMessage="NUEVA AVENTURA EN BRITANNIA";return true;
     };
     bool started=false,quit=false,touching=false;int touchX=0,touchY=0,touchLastX=0,touchLastY=0;
@@ -129,9 +134,13 @@ int main(){
     roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;
     if(hasNpcs)npcs.reset(privateWorld,actor);
     inventory.prepareEquipment=[&](unsigned mask){return lab::prepareEquipment(mask,equipmentArt,equipmentError);};
-    if(hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
+    if(hasEquipment){
+        startupFrame(nullptr,false,"PREPARANDO EQUIPAMIENTO",5);
+        lab::warmEquipment(inventory.equipmentMask(),equipmentArt);
+        lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
+    }
     std::vector<lab::Actor>occupants;occupants.reserve(16);
-    u64 last=osGetTime(),sample=last,lastAutoSave=last;int sampleFrames=0;const char*blocked="--";
+    u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
@@ -154,7 +163,7 @@ int main(){
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
         if(down&KEY_SELECT){
             if(moving)saveMessage="Stop moving before saving";
-            else lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+            else {bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);positionCheckpoint().result(actor,now,ok);}
         }
         if((down&KEY_L)&&!moving&&restorePosition())alignCamera();
         if((down&KEY_X)&&!moving){
@@ -191,7 +200,11 @@ int main(){
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
         if(moving){progress+=dt/(running?.20f:.40f);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
-        if(!moving&&now-lastAutoSave>=10000){lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);lastAutoSave=now;}
+        if(animateThisFrame||sx||sy||(held&KEY_TOUCH)||down)positionCheckpoint().active(now);
+        if(!moving&&positionCheckpoint().due(actor,now)){
+            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+            positionCheckpoint().result(actor,now,ok);
+        }
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
         if(authentic&&hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
@@ -233,6 +246,6 @@ int main(){
             gfxScreenSwapBuffers(GFX_BOTTOM,false);
         }
     }
-    lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+    if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
 }

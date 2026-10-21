@@ -10,6 +10,7 @@ namespace lab {
 bool rendererInit();
 void rendererShutdown();
 bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
+void warmEquipment(unsigned,const EquipmentArt&);
 bool loadNpcAtlases(std::string&error);
 bool loadAtlases(int images,std::string&error);
 size_t textureBytes();

@@ -3,6 +3,7 @@
 #include "avatar.hpp"
 #include "repairs.hpp"
 #include "character_depth.hpp"
+#include "performance.hpp"
 #include "world_shbin.h"
 #include <3ds.h>
 #include <algorithm>
@@ -23,7 +24,7 @@ static C3D_Tex white;
 static std::vector<C2D_SpriteSheet> sheets;
 static C2D_SpriteSheet avatar,outfit;
 static unsigned outfitMask=99;
-static size_t outfitBytes=0;
+static EquipmentCache<C2D_SpriteSheet>outfitCache;
 static std::vector<C2D_SpriteSheet>npcSheets;
 static size_t npcBytes;
 static bool runVerified=false;
@@ -86,7 +87,7 @@ bool rendererInit(){
 void rendererShutdown(){
     C3D_FrameSync();for(auto s:sheets)C2D_SpriteSheetFree(s);sheets.clear();
     if(avatar)C2D_SpriteSheetFree(avatar);
-    if(outfit)C2D_SpriteSheetFree(outfit);
+    for(unsigned i=0;i<8;++i)if(auto cached=outfitCache.remove(i))C2D_SpriteSheetFree(cached);
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
     npcSheets.clear();
     C3D_TexDelete(&white);if(buffer)linearFree(buffer);
@@ -121,17 +122,36 @@ bool loadNpcAtlases(std::string&error){
 }
 bool prepareEquipment(unsigned mask,const EquipmentArt&art,std::string&error){
     if(mask>7)return false;
-    if(outfit&&mask==outfitMask)return true;
+    if(auto cached=outfitCache.get(mask)){outfit=cached;outfitMask=mask;error.clear();return true;}
     if(art.dolls.empty()){error="FALTAN RECURSOS DE EQUIPO";return mask==0;}
     char path[128];std::snprintf(path,sizeof path,"sdmc:/3ds/UO-3DS-CoreLab/equip_%02u.t3x",mask);
     if(!equipmentChecksum(path,art.checksums[mask])){error="EQUIPO: ATLAS INVALIDO";return false;}
-    C3D_FrameSync();auto next=C2D_SpriteSheetLoad(path);
+    // Keep the current outfit intact if a new load fails. Leave at least 2 MiB
+    // of linear memory for gameplay; cold misses evict only inactive outfits.
+    C3D_FrameSync();
+    constexpr size_t required=2*1024*1024,reserve=2*1024*1024;
+    while(linearSpaceFree()<required+reserve){
+        int victim=outfitCache.victim(outfitMask);if(victim<0)break;
+        C2D_SpriteSheetFree(outfitCache.remove(unsigned(victim)));
+    }
+    if(linearSpaceFree()<required+reserve){error="EQUIPO: MEMORIA RESERVADA";return false;}
+    auto next=C2D_SpriteSheetLoad(path);
     if(!next||C2D_SpriteSheetCount(next)!=72){if(next)C2D_SpriteSheetFree(next);error="EQUIPO: SIN MEMORIA O ATLAS INVALIDO";return false;}
     auto image=C2D_SpriteSheetGetImage(next,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);
-    if(outfit)C2D_SpriteSheetFree(outfit);
-    outfit=next;outfitMask=mask;outfitBytes=image.tex->size;error.clear();return true;
+    outfitCache.insert(mask,next,image.tex->size);
+    outfit=next;outfitMask=mask;error.clear();return true;
 }
-size_t textureBytes(){return bytes+npcBytes+outfitBytes;}
+void warmEquipment(unsigned current,const EquipmentArt&art){
+    std::string ignored;
+    if(!prepareEquipment(current,art,ignored))return;
+    const unsigned order[]={current^1u,current^2u,current^4u,current^3u,current^5u,current^6u,current^7u};
+    for(unsigned mask:order){
+        if(linearSpaceFree()<4*1024*1024)break;
+        prepareEquipment(mask,art,ignored);
+    }
+    prepareEquipment(current,art,ignored);
+}
+size_t textureBytes(){return bytes+npcBytes+outfitCache.bytes();}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
