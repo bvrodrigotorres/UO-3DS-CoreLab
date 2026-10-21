@@ -191,7 +191,7 @@ int main(){
         if(down&KEY_R){pages.page=(pages.page+1)%3;pageChanged=true;}
         touchPosition touch;
         if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH)pages.begin(touch.px,touch.py);else pages.move(touch.px,touch.py);}
-        if(hidKeysUp()&KEY_TOUCH){
+        if((hidKeysUp()&KEY_TOUCH)&&pages.active){
             int oldPage=pages.page,dx=pages.lastX-pages.startX,dy=pages.lastY-pages.startY;
             bool changed=pages.end();
             if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
