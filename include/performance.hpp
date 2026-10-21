@@ -22,15 +22,14 @@ public:
 };
 // GPU-independent residency policy; texture ownership stays in the renderer.
 template<class T>class EquipmentCache {
-    struct Entry {T value{};size_t bytes=0;uint64_t used=0;};
+    struct Entry {T value{};size_t bytes=0;uint64_t used=0;unsigned key=0;};
     std::array<Entry,8>entries{};uint64_t clock=0;
 public:
-    T get(unsigned mask){if(mask>=8)return T{};auto&e=entries[mask];if(e.value)e.used=++clock;return e.value;}
-    void insert(unsigned mask,T value,size_t bytes){entries[mask]={value,bytes,++clock};}
-    int victim(unsigned protectedMask)const{
-        int best=-1;for(unsigned i=0;i<8;++i)if(i!=protectedMask&&entries[i].value&&(best<0||entries[i].used<entries[best].used))best=int(i);return best;
-    }
-    T remove(unsigned mask){auto value=entries[mask].value;entries[mask]={};return value;}
+    T get(unsigned key){for(auto&e:entries)if(e.value&&e.key==key){e.used=++clock;return e.value;}return T{};}
+    void insert(unsigned key,T value,size_t bytes){for(auto&e:entries)if(!e.value||e.key==key){e={value,bytes,++clock,key};return;}}
+    int victim(unsigned protectedKey)const{const Entry*best=nullptr;for(const auto&e:entries)if(e.key!=protectedKey&&e.value&&(!best||e.used<best->used))best=&e;return best?int(best->key):-1;}
+    T remove(unsigned key){for(auto&e:entries)if(e.value&&e.key==key){auto value=e.value;e={};return value;}return T{};}
+    bool full()const{for(const auto&e:entries)if(!e.value)return false;return true;}
     size_t bytes()const{size_t n=0;for(const auto&e:entries)n+=e.bytes;return n;}
 };
 }

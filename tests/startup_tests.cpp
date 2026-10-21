@@ -17,9 +17,9 @@ int main(int argc,char**argv){
     std::string error;options.roofs=2;options.zoom=4;options.page=2;assert(options.save(root+"options.sav",error));
     GameOptions loaded;assert(loaded.load(root+"options.sav")&&loaded.roofs==2&&loaded.zoom==4&&loaded.page==2);
     options.zoom=1;assert(!options.save(root+"options.sav",error,fail));assert(loaded.load(root+"options.sav")&&loaded.zoom==4);
-    StartMenu menu;assert(menu.activate(false)==MenuAction::NewGame&&menu.page==MenuPage::Main);
+    StartMenu menu;assert(menu.activate(false)==MenuAction::None&&menu.page==MenuPage::Confirm);assert(menu.activate(false)==MenuAction::None&&menu.page==MenuPage::Main);
     menu.selected=1;assert(menu.activate(false)==MenuAction::None);assert(menu.activate(true)==MenuAction::Continue);
-    menu.selected=0;assert(menu.activate(true)==MenuAction::NewGame);
+    menu.selected=0;assert(menu.activate(true)==MenuAction::None);menu.move(1);assert(menu.activate(true)==MenuAction::NewGame);
     menu.back();menu.selected=2;menu.activate(true);assert(menu.page==MenuPage::Options);
     menu.selected=0;menu.activate(true);assert(menu.options.roofs==1);
     menu.selected=1;menu.activate(true);assert(menu.options.zoom==3);
@@ -27,7 +27,7 @@ int main(int argc,char**argv){
     assert(menu.hit(100,60)==0&&menu.hit(100,90)==1&&menu.hit(5,60)==-1&&menu.hit(100,200)==-1);
     menu.back();menu.move(-1);assert(menu.selected==3);assert(menu.activate(true)==MenuAction::Exit);menu.move(1);assert(menu.selected==0);
     World w=demoWorld();Object chest;chest.art=0xE42;chest.x=5;chest.y=5;w.objects={chest};w.index();
-    Inventory old;old.init(w,root+"inventory-private.sav");old.backpack={{5,1},{0,30}};old.equipment={{-1,6,7}};old.chests[0].items.clear();assert(old.checkpoint());
+    Inventory old;old.init(w,root+"inventory-private.sav");old.backpack={{5,1},{0,30}};old.equipment={{-1,6,7,-1,-1,-1,-1,-1}};old.chests[0].items.clear();assert(old.checkpoint());
     Actor location{6,5,0};assert(savePosition(root+"position-private.sav",w,location,error));auto bytes=read(root+"inventory-private.sav");
     Campaign campaign(root);assert(campaign.load()&&campaign.generation==0&&campaign.prefix().empty());
     uint32_t next=campaign.unusedGeneration();assert(next==1);auto prefix=campaign.prefix(next);

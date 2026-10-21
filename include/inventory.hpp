@@ -5,7 +5,7 @@
 #include <array>
 #include <functional>
 namespace lab {
-constexpr size_t ItemTypes=8, BagSlots=24, ChestSlots=12, BagPageSlots=12;
+constexpr size_t ItemTypes=16, BagSlots=24, ChestSlots=12, BagPageSlots=12;
 struct InventoryLayout {
     static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
     static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
@@ -27,8 +27,11 @@ class Inventory {
     Bag*external=nullptr;Actor externalPosition;std::string externalTitle;
     bool persist(std::string&,SaveRename);
 public:
-    std::array<int,3>equipment{{-1,-1,-1}};
-    bool equipMode=false,restored=false;
+    std::array<int,8>equipment{{-1,-1,-1,-1,-1,-1,-1,-1}};
+    bool equipMode=false,restored=false,dressed=false,accessories=false;
+    void initialDress(int shirt,int pants,bool shoes);
+    void addAccessories();
+    unsigned prospectiveKey(size_t slot,int type)const;
     bool healthy()const{return writable;}
     bool checkpoint(){if(!writable)return false;return persist(message,std::rename);}
     std::function<bool(unsigned)>prepareEquipment;

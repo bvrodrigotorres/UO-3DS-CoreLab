@@ -16,7 +16,7 @@ struct PlayerStatus {
     static unsigned weight(const Inventory*bag){
         if(!bag)return 0;
         unsigned units=0,coins=0;
-        const unsigned weights[]={0,1,1,1,1,1,3,2};
+        const unsigned weights[]={0,1,1,1,1,1,3,2,2,2,2,2,1,1,1,1};
         for(const auto&s:bag->backpack){if(s.type==0)coins+=s.count;else if(s.type<ItemTypes)units+=weights[s.type]*s.count;}
         for(int t:bag->equipment)if(t>=0&&t<int(ItemTypes))units+=weights[t];
         return units+(coins+49)/50;

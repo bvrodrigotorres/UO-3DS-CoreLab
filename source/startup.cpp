@@ -78,7 +78,7 @@ MenuAction StartMenu::activate(bool canContinue){
         if(selected==3)back();
         return MenuAction::None;
     }
-    if(selected==0)return MenuAction::NewGame;
+    if(selected==0){page=MenuPage::Confirm;selected=0;message="INICIAR DESDE CERO?";}
     else if(selected==1){if(canContinue)return MenuAction::Continue;message="NO HAY UNA PARTIDA PARA CONTINUAR";}
     else if(selected==3)return MenuAction::Exit;
     else {page=MenuPage::Options;selected=0;message.clear();}

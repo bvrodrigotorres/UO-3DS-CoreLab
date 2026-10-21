@@ -82,3 +82,12 @@ crear/cancelar, teclado para nombre, ambos cuerpos, pelo/barba y colores, giro,
 las tres vistas de equipo, guardar desde pausa y Continuar tras reiniciar.
 Verificar que el mundo siga detenido al editar y que no cambien mochila ni
 equipo. Probar Salir del juego desde el menú principal.
+
+## v0.23: vestimenta real
+
+Consultar [v0.23.md](v0.23.md). Comprobar confirmación de nuevo juego, cancelar
+sin reiniciar, vistas previas y nombre medieval. Continuar una partida de v0.22,
+quitar camisa/pantalón/zapatos y volver a equiparlos desde la mochila. Buscar
+gorros, gorjales y guantes en los cofres; verificar las ocho ranuras y el pelo
+bajo el gorro. Personalizar desde pausa permite colores pero bloquea cambiar
+los tipos de prendas, incluso usando Y. Reiniciar y verificar todo el equipo.

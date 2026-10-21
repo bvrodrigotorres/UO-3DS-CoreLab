@@ -33,9 +33,9 @@ void syntheticAssets(const std::string&root){
 int main(int argc,char**argv){
     assert(argc>=2);std::string root=std::string(argv[1])+"/",path=root+"appearance.sav",error;
     Appearance old;assert(old.load(path)&&!old.enabled&&old.name=="Avatar");
-    Appearance a;a.enabled=true;a.name="Lady Rowan";a.female=1;a.skin=63;a.hair=9;a.hairColor=47;a.beard=7;a.beardColor=46;a.shirt=2;a.shirtColor=31;a.pants=2;a.pantsColor=30;a.shoes=0;a.bootsColor=29;a.robeColor=28;
+    Appearance a;a.realClothes=true;a.hatColor=10;a.neckColor=11;a.glovesColor=12;a.enabled=true;a.name="Lady Rowan";a.female=1;a.skin=63;a.hair=9;a.hairColor=47;a.beard=7;a.beardColor=46;a.shirt=2;a.shirtColor=31;a.pants=2;a.pantsColor=30;a.shoes=0;a.bootsColor=29;a.robeColor=28;
     assert(a.valid()&&a.save(path,error));auto original=read(path);
-    Appearance b;assert(b.load(path)&&b.enabled&&b.name==a.name&&b.female==1&&b.skin==63&&b.hair==9&&b.hairColor==47&&b.beard==7&&b.beardColor==46&&b.shirt==2&&b.shirtColor==31&&b.pants==2&&b.pantsColor==30&&b.shoes==0&&b.bootsColor==29&&b.robeColor==28);
+    Appearance b;assert(b.load(path)&&b.enabled&&b.realClothes&&b.hatColor==10&&b.neckColor==11&&b.glovesColor==12&&b.name==a.name&&b.female==1&&b.skin==63&&b.hair==9&&b.hairColor==47&&b.beard==7&&b.beardColor==46&&b.shirt==2&&b.shirtColor==31&&b.pants==2&&b.pantsColor==30&&b.shoes==0&&b.bootsColor==29&&b.robeColor==28);
     b.name="Other";assert(!b.save(path,error,fail)&&read(path)==original);
     assert(b.load(path)&&b.name==a.name);
     for(const auto&name:{""," leading","trailing ","0123","abcdefghijklmnopq","Bad\nName","Jos\xC3\xA9"})assert(!Appearance::validName(name));
@@ -46,7 +46,7 @@ int main(int argc,char**argv){
     editor.page=1;editor.row=0;editor.change(1);assert(editor.draft.beard==7);editor.page=0;editor.row=2;editor.change(1);assert(editor.draft.skin==0);
     editor.page=2;editor.row=4;editor.change(-1);assert(editor.preview==2);
     for(unsigned seed=0;seed<1000;++seed){editor.randomize(seed);assert(editor.draft.valid());}
-    assert(editor.hit(20,28)==10&&editor.hit(120,28)==11&&editor.hit(220,28)==12&&editor.hit(10,28)==-1);
+    assert(editor.hit(20,28)==10&&editor.hit(120,28)==11&&editor.hit(220,28)==12&&editor.hit(300,28)==13&&editor.hit(10,28)==-1);
     for(int row=0;row<5;++row)assert(editor.hit(160,58+25*row)==row);
     assert(editor.hit(20,210)==20&&editor.hit(200,210)==21&&editor.hit(200,204)==-1);
     std::set<size_t>offsets;for(unsigned y=0;y<1024;++y)for(unsigned x=0;x<1024;++x){auto offset=characterTexel(x,y,1024);assert(offset<1024*1024);assert(offsets.insert(offset).second);}
@@ -61,10 +61,12 @@ int main(int argc,char**argv){
             for(unsigned hair=0;hair<10;++hair){a.hair=hair;assert(assets.compose(a,0,pixels,true)&&pixels.size()==106*174);assert(assets.compose(a,0,pixels,false,0));}
             for(unsigned beard=0;beard<8;++beard){a.beard=beard;assert(assets.compose(a,7,pixels,true));}
             for(unsigned mask=0;mask<8;++mask){assert(assets.compose(a,mask,pixels)&&pixels.size()==72*96*112);assert(std::count_if(pixels.begin(),pixels.end(),[](uint16_t p){return p&1;})>10000);}
+            assert(assets.compose(a,255,pixels)&&pixels.size()==72*96*112);assert(assets.compose(a,2047,pixels)&&pixels.size()==72*96*112);
             std::vector<uint8_t>dolls;assert(assets.dolls(a,dolls)&&dolls.size()==8*76*104*4);
         }
         editor=AppearanceEditor(a);editor.draft.name="Lady Rowan";editor.page=0;editor.row=3;
-        assert(assets.compose(editor.draft,0,doll,true)&&assets.compose(editor.draft,0,sprite,false,20));
+        Inventory starter;starter.initialDress(editor.draft.shirt,editor.draft.pants,editor.draft.shoes);unsigned starterKey=starter.equipmentMask();
+        assert(assets.compose(editor.draft,starterKey,doll,true)&&assets.compose(editor.draft,starterKey,sprite,false,20));
         drawAppearance(top.data()+16,bottom.data()+16,editor,doll,sprite,true);ppm(root+"character-top.ppm",top.data()+16,400);ppm(root+"character-bottom.ppm",bottom.data()+16,320);
         editor.page=1;drawAppearance(top.data()+16,bottom.data()+16,editor,doll,sprite,false);ppm(root+"character-aspect.ppm",bottom.data()+16,320);
     }

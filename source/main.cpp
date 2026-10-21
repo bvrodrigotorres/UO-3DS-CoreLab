@@ -26,10 +26,12 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
 }
 bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,std::string&)>&commit){
     if(!assets.ready())return false;
-    C3D_FrameSync();lab::AppearanceEditor editor(initial);std::vector<uint16_t>doll,sprite;
+    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
     while(aptMainLoop()){
-        if(changed){unsigned mask=editor.preview==0?equipment:editor.preview==1?7:0;
+        if(changed){
+            if(fresh&&editor.draft.realClothes){lab::Inventory initial;initial.initialDress(editor.draft.shirt,editor.draft.pants,editor.draft.shoes);equipment=initial.equipmentMask();}
+            unsigned mask=editor.preview==0?equipment:editor.preview==1?255:0;
             valid=assets.compose(editor.draft,mask,doll,true)&&assets.compose(editor.draft,mask,sprite,false,editor.direction*5);
             if(!valid)editor.message="FALTAN ARCHIVOS CHARACTER";
             changed=false;
@@ -40,8 +42,8 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
         gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();
         if(down&KEY_B)return false;
-        if(down&KEY_L){editor.page=(editor.page+2)%3;editor.row=0;}
-        if(down&KEY_R){editor.page=(editor.page+1)%3;editor.row=0;}
+        if(down&KEY_L){editor.page=(editor.page+3)%4;editor.row=0;}
+        if(down&KEY_R){editor.page=(editor.page+1)%4;editor.row=0;}
         if(down&KEY_X){editor.direction=(editor.direction+1)%8;changed=true;}
         if(down&KEY_Y){editor.randomize(now);changed=true;}
         circlePosition stick;hidCircleRead(&stick);
@@ -54,7 +56,7 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
         if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);int hit=editor.hit(t.px,t.py);
             if(hit==20)return false;
             if(hit==21)confirm=true;
-            if(hit>=10&&hit<=12){editor.page=hit-10;editor.row=0;}
+            if(hit>=10&&hit<=13){editor.page=hit-10;editor.row=0;}
             if(hit>=0&&hit<5){editor.row=hit;if(editor.page==0&&hit==0)editName=true;else{editor.change(t.px<145?-1:1);changed=true;}}
         }
         if(editName){
@@ -157,11 +159,13 @@ int main(){
         std::string prefix=campaign.prefix(generation),error;
         lab::Inventory freshPrivate,freshDemo;
         freshDemo.init(demo,saveRoot+prefix+"inventory-demo.sav");
+        freshDemo.initialDress(created.shirt,created.pants,created.shoes);freshDemo.addAccessories();
         if(!freshDemo.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-demo.sav",demo,{demo.startX,demo.startY,demo.startZ},error)){
             menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
         }
         if(available){
             freshPrivate.init(canonicalPrivate,saveRoot+prefix+"inventory-private.sav");
+            freshPrivate.initialDress(created.shirt,created.pants,created.shoes);freshPrivate.addAccessories();
             if(!freshPrivate.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-private.sav",canonicalPrivate,{canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},error)){
                 menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
             }
@@ -203,7 +207,7 @@ int main(){
                 if(!available){lab::Appearance diagnostic;started=freshGame(diagnostic);continue;}
                 menu.message="FALTA LA CARPETA CHARACTER";continue;
             }
-            lab::Appearance created;created.enabled=true;
+            lab::Appearance created;created.enabled=true;created.realClothes=true;
             started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,std::string&message){
                 std::vector<uint8_t>dolls;std::vector<uint16_t>frames;
                 if(!characterAssets.dolls(a,dolls)||!characterAssets.compose(a,7,frames)){message="FALTAN CAPAS DE EQUIPAMIENTO";return false;}
@@ -219,6 +223,15 @@ int main(){
     roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;
     if(hasNpcs)npcs.reset(privateWorld,actor);
     inventory.prepareEquipment=[&](unsigned mask){return lab::prepareEquipment(mask,equipmentArt,equipmentError);};
+    if(appearance.enabled&&characterAssets.ready()){
+        auto&bag=authentic?inventory:demoInventory;
+        if(!bag.dressed||!bag.accessories){
+            auto oldBag=bag;bag.initialDress(appearance.shirt,appearance.pants,appearance.shoes);bag.addAccessories();
+            if(!bag.checkpoint()){bag=oldBag;menu.back();menu.message="ERROR AL MIGRAR VESTIMENTA";continue;}
+        }
+        if(!appearance.realClothes){auto updated=appearance;updated.realClothes=true;std::string migrationError;
+            if(!updated.save(saveRoot+savePrefix+"appearance.sav",migrationError)){menu.back();menu.message=migrationError;continue;}appearance=updated;}
+    }
     if(appearance.enabled){
         if(!lab::applyAppearance(characterAssets,appearance,equipmentArt,inventory.equipmentMask(),equipmentError)){
             menu.back();menu.message=equipmentError;continue;
@@ -296,8 +309,8 @@ int main(){
             bool changed=pages.end();
             if(!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
-            if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
-                for(int slot=0;slot<3;++slot)if(pages.startY>=lab::JournalLayout::EquipmentTop+slot*34&&pages.startY<lab::JournalLayout::EquipmentTop+18+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
+            if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
+                int slot=lab::equipmentHit(pages.startX,pages.startY);if(slot>=0){inventory.unequip(slot);saveMessage=inventory.message;}
             }
             pageChanged=true;
         }

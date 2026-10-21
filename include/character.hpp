@@ -8,9 +8,10 @@
 #include <string>
 namespace lab {
 struct Appearance {
-    bool enabled=false;
+    bool enabled=false,realClothes=false;
     std::string name="Avatar";
     uint8_t female=0,skin=1,hair=2,hairColor=1,beard=0,beardColor=1;
+    uint8_t hatColor=0,neckColor=0,glovesColor=0;
     uint8_t shirt=1,shirtColor=9,pants=1,pantsColor=3,shoes=1,bootsColor=0,robeColor=9;
     bool valid()const;
     bool load(const std::string&);
@@ -19,10 +20,10 @@ struct Appearance {
 };
 struct AppearanceEditor {
     Appearance draft;
-    int page=0,row=0,direction=4,preview=0;
+    int page=0,row=0,direction=4,preview=0;bool creation=true;
     std::string message;
-    explicit AppearanceEditor(const Appearance&a):draft(a){draft.enabled=true;}
-    void move(int delta){row=(row+delta+5)%5;}
+    explicit AppearanceEditor(const Appearance&a,bool fresh=true):draft(a),creation(fresh){draft.enabled=true;}
+    void move(int delta){int n=page==3?3:5;row=(row+delta+n)%n;}
     void change(int delta);
     void randomize(uint32_t seed);
     std::string label(int field)const;
@@ -40,6 +41,7 @@ public:
     // Fixed original anchor and dimensions, shared by every outfit and layer.
     bool compose(const Appearance&,unsigned mask,std::vector<uint16_t>&frames,bool doll=false,int onlyFrame=-1)const;
     bool dolls(const Appearance&,std::vector<uint8_t>&)const;
+    bool portrait(const Appearance&,unsigned,std::vector<uint8_t>&)const;
     uint16_t color(const Appearance&,int field)const;
 };
 // RGB5551 pixels are row-major; GPU storage uses 8x8 Morton tiles.

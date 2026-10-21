@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
 #include "character.hpp"
+#include "overhead_font.hpp"
 #include "combat.hpp"
 #include "exploration.hpp"
 #include <cmath>
@@ -75,7 +76,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.22",ink,1,13);
+    text(fb,225,20,"C.LAB V0.23",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -117,20 +118,20 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     text(fb,56,JournalLayout::ZoomTop,"ZOOM "+std::to_string(zoom)+"X",ink);
     // The private image is the original human paperdoll gump, cropped/resized
     // by the exporter, not an invented equipment state or animated world sprite.
-    if(inv&&equipment&&equipment->dolls.size()==8*76*104*4){
-        size_t base=inv->equipmentMask()*76*104*4;
+    if(inv&&equipment&&((equipment->currentKey==inv->equipmentMask()&&equipment->currentDoll.size()==76*104*4)||equipment->dolls.size()==8*76*104*4)){
+        bool current=equipment->currentKey==inv->equipmentMask()&&equipment->currentDoll.size()==76*104*4;
+        const auto&rgba=current?equipment->currentDoll:equipment->dolls;size_t base=current?0:(inv->equipmentMask()&7)*76*104*4;
         for(int y=0;y<104;++y)for(int x=0;x<76;++x){size_t p=base+(y*76+x)*4;
-            if(equipment->dolls[p+3]>127)pixel(fb,211+x,JournalLayout::MapTop+y,{equipment->dolls[p],equipment->dolls[p+1],equipment->dolls[p+2]});}
+            if(rgba[p+3]>127)pixel(fb,211+x,JournalLayout::MapTop+y,{rgba[p],rgba[p+1],rgba[p+2]});}
     }else if(j){
         int ox=249-j->dollWidth/2;
         for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){size_t p=(y*j->dollWidth+x)*4;
             if(j->doll[p+3]>127)pixel(fb,ox+x,JournalLayout::MapTop+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
     }else text(fb,205,86,"SIN IMAGEN",ink);
-    const char*labels[]={"M","R","B"};
-    for(int slot=0;slot<3;++slot){int y=JournalLayout::EquipmentTop+34*slot;bool worn=inv&&inv->equipment[slot]>=0;
-        box(fb,284,y,18,18,ink);box(fb,285,y+1,16,16,worn?gold:Color{161,143,108});
-        text(fb,290,y+5,labels[slot],ink);
-    }
+    const char*labels[]={"AR","TU","BO","GO","CU","PE","GU","PA"};
+    const int positions[8][2]={{284,30},{284,54},{284,102},{198,30},{198,54},{284,78},{198,78},{198,102}};
+    for(int slot=0;slot<8;++slot){int x=positions[slot][0],y=positions[slot][1];bool worn=inv&&inv->equipment[slot]>=0;
+        box(fb,x,y,20,20,ink);box(fb,x+1,y+1,18,18,worn?gold:Color{161,143,108});text(fb,x+4,y+6,labels[slot],ink);}
     text(fb,198,JournalLayout::ZoomTop,inv&&inv->equipmentMask()?"TOCA PARA QUITAR":"SIN EQUIPO",ink,1,17);
     const PlayerStatus initial;const auto&stats=status?*status:initial;
     constexpr int ox=10,oy=146;
@@ -199,7 +200,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.22";
+    const std::string version="CORELAB V0.23";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -248,18 +249,20 @@ void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&e,const st
     canvasWidth=400;
     for(int y=0;y<240;++y)for(int x=0;x<400;++x)pixel(top,x,y,{uint8_t(21+(x+y)%4),uint8_t(31+(x+y)%4),uint8_t(38+(x+y)%4)});
     box(top,8,8,384,228,ink);box(top,10,10,380,224,light);
-    text(top,30,19,"PERSONALIZA TU PERSONAJE",ink,2);
-    box(top,22,43,178,174,{191,169,132});box(top,210,43,168,174,{176,160,127});
-    image(top,doll,106,174,56,42,1);image(top,sprite,96,112,245,72,1);
-    text(top,226,57,"VISTA EN EL MUNDO",ink);
+    text(top,122,17,"PERSONALIZA TU PERSONAJE",ink,1);
+    static OverheadFont medieval;static bool tried=false;if(!tried){medieval.load("sdmc:/3ds/UO-3DS-CoreLab/npc_font.bin");tried=true;}
+    int nameX=(400-int(medieval.width(e.draft.name))*2)/2;for(unsigned char c:e.draft.name){for(int y=0;y<16;++y)for(int x=0;x<16;++x)if(medieval.pixel(c,x,y))box(top,nameX+x*2,31+y*2,2,2,ink);nameX+=medieval.step(c)*2;}
+    box(top,22,66,178,160,{191,169,132});box(top,210,66,168,160,{176,160,127});
+    std::vector<uint16_t>smallDoll(95*156);if(doll.size()==106*174){for(int y=0;y<156;++y)for(int x=0;x<95;++x)smallDoll[y*95+x]=doll[(y*174/156)*106+x*106/95];}image(top,smallDoll,95,156,62,68,1);image(top,sprite,96,112,246,55,1);
+    text(top,226,78,"VISTA EN EL MUNDO",ink);
     text(top,222,181,"X: GIRAR",ink);text(top,222,193,"HUMANO - CLASICO",ink);
-    text(top,(400-int(e.draft.name.size())*12)/2,218,e.draft.name,ink,2);
+
     canvasWidth=320;
     drawHudFrame(bottom,{},false,true);
     text(bottom,18,13,fresh?"CREAR PERSONAJE":"PERSONALIZACION",ink,1,40);
-    const char*tabs[]={"IDENTIDAD","ASPECTO","VESTIMENTA"};
-    for(int i=0;i<3;++i){box(bottom,12+i*99,27,97,22,ink);box(bottom,14+i*99,29,93,18,i==e.page?gold:light);text(bottom,19+i*99,35,tabs[i],ink);}
-    for(int r=0;r<5;++r){int f=e.page*5+r,y=57+r*25;
+    const char*tabs[]={"IDENTIDAD","ASPECTO","ROPA","COLORES"};
+    for(int i=0;i<4;++i){box(bottom,12+i*74,27,72,22,ink);box(bottom,14+i*74,29,68,18,i==e.page?gold:light);text(bottom,19+i*74,35,tabs[i],ink);}
+    for(int r=0;r<(e.page==3?3:5);++r){int f=e.page*5+r,y=57+r*25;
         box(bottom,12,y,296,23,r==e.row?gold:Color{218,195,148});text(bottom,18,y+3,e.label(f),ink,1,22);
         text(bottom,151,y+12,e.value(f),ink,1,25);text(bottom,18,y+13,"<",ink);text(bottom,295,y+13,">",ink);
     }

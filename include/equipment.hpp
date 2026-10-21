@@ -8,6 +8,7 @@ namespace lab {
 struct EquipmentArt {
     std::vector<uint8_t>dolls;
     std::string playerName;
+    mutable std::vector<uint8_t>currentDoll;mutable unsigned currentKey=~0u;
     std::array<uint32_t,8>checksums{};
     bool load(const std::string&);
 };
