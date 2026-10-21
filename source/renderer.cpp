@@ -18,7 +18,9 @@ static C3D_Mtx projection;
 static int uniformProjection;
 static C3D_Tex white;
 static std::vector<C2D_SpriteSheet> sheets;
-static C2D_SpriteSheet avatar;
+static C2D_SpriteSheet avatar,outfit;
+static unsigned outfitMask=99;
+static size_t outfitBytes=0;
 static std::vector<C2D_SpriteSheet>npcSheets;
 static size_t npcBytes;
 static bool runVerified=false;
@@ -71,6 +73,7 @@ bool rendererInit(){
 void rendererShutdown(){
     C3D_FrameSync();for(auto s:sheets)C2D_SpriteSheetFree(s);sheets.clear();
     if(avatar)C2D_SpriteSheetFree(avatar);
+    if(outfit)C2D_SpriteSheetFree(outfit);
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
     npcSheets.clear();
     C3D_TexDelete(&white);if(buffer)linearFree(buffer);
@@ -103,7 +106,19 @@ bool loadNpcAtlases(std::string&error){
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
     npcSheets=std::move(next);npcBytes=usedBytes;error.clear();return true;
 }
-size_t textureBytes(){return bytes+npcBytes;}
+bool prepareEquipment(unsigned mask,const EquipmentArt&art,std::string&error){
+    if(mask>7)return false;
+    if(outfit&&mask==outfitMask)return true;
+    if(art.dolls.empty()){error="FALTAN RECURSOS DE EQUIPO";return mask==0;}
+    char path[128];std::snprintf(path,sizeof path,"sdmc:/3ds/UO-3DS-CoreLab/equip_%02u.t3x",mask);
+    if(!equipmentChecksum(path,art.checksums[mask])){error="EQUIPO: ATLAS INVALIDO";return false;}
+    C3D_FrameSync();auto next=C2D_SpriteSheetLoad(path);
+    if(!next||C2D_SpriteSheetCount(next)!=72){if(next)C2D_SpriteSheetFree(next);error="EQUIPO: SIN MEMORIA O ATLAS INVALIDO";return false;}
+    auto image=C2D_SpriteSheetGetImage(next,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);
+    if(outfit)C2D_SpriteSheetFree(outfit);
+    outfit=next;outfitMask=mask;outfitBytes=image.tex->size;error.clear();return true;
+}
+size_t textureBytes(){return bytes+npcBytes+outfitBytes;}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
@@ -182,9 +197,10 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }else{
             afterActor=true;
             Point foot=project(cameraX,cameraY,footZ);
-            if(avatar){
-                unsigned index=avatarImage(direction,moving,running&&runVerified,frame,C2D_SpriteSheetCount(avatar));
-                auto image=C2D_SpriteSheetGetImage(avatar,index);
+            auto player=authentic&&outfit?outfit:avatar;
+            if(player){
+                unsigned index=avatarImage(direction,moving,running&&(authentic&&outfit?true:runVerified),frame,C2D_SpriteSheetCount(player));
+                auto image=C2D_SpriteSheetGetImage(player,index);
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};
                 Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);

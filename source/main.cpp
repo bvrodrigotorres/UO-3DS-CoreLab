@@ -50,6 +50,11 @@ int main(){
     lab::Inventory inventory;inventory.init(canonicalPrivate,"sdmc:/3ds/UO-3DS-CoreLab/inventory-private.sav");
     lab::Inventory demoInventory;demoInventory.init(demo,"sdmc:/3ds/UO-3DS-CoreLab/inventory-demo.sav");
     lab::ItemIcons itemIcons;itemIcons.load("sdmc:/3ds/UO-3DS-CoreLab/items.bin");
+    lab::EquipmentArt equipmentArt;std::string equipmentError;
+    bool hasEquipment=equipmentArt.load("sdmc:/3ds/UO-3DS-CoreLab/equipment.bin");
+    if(!hasEquipment)equipmentError="FALTA EQUIPMENT.BIN";
+    inventory.prepareEquipment=[&](unsigned mask){return lab::prepareEquipment(mask,equipmentArt,equipmentError);};
+    if(hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     std::vector<lab::Actor>occupants;occupants.reserve(16);
     u64 last=osGetTime(),sample=last;int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
@@ -66,6 +71,9 @@ int main(){
             bool changed=pages.end();
             if(!changed&&oldPage==2&&authentic&&!moving&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
+            if(!changed&&oldPage==1&&authentic&&!moving&&dx*dx+dy*dy<144&&pages.startX>=280&&pages.startX<=304){
+                for(int slot=0;slot<3;++slot)if(pages.startY>=68+slot*34&&pages.startY<94+slot*34){inventory.unequip(slot);saveMessage=inventory.message;}
+            }
             pageChanged=true;
         }
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
@@ -110,6 +118,7 @@ int main(){
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
+        if(authentic&&hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){
@@ -135,12 +144,13 @@ int main(){
                 hud.lines.push_back(greeting.empty()?"NPC "+std::to_string(npcs.all().size())+" | POBLACION LOCAL":greeting);
             }
             if(!saveMessage.empty())hud.lines.push_back(saveMessage);
+            if(authentic&&!equipmentError.empty())hud.lines.push_back(equipmentError);
             if(!available)hud.lines.push_back(error);
             if(authentic&&!hasDoors)hud.lines.push_back(doorError);
             if(authentic&&!hasNpcs)hud.lines.push_back(npcError);
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
-            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,saveMessage);
+            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);

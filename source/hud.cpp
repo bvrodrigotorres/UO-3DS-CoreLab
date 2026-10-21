@@ -70,7 +70,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     }
     std::memcpy(output,paper.data(),paper.size());fb=output;
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"CORELAB V0.10",ink,1,13);
+    text(fb,225,20,"CORELAB V0.11",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
     int y=53,spacing=info.lines.size()>14?8:9;
@@ -81,7 +81,7 @@ void drawHud(uint8_t*fb,const HudInfo&info){
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
     text(fb,20,219,"START: EXIT | DESLIZA 1/3",ink);
 }
-void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status){
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&status,const Inventory*inv,const EquipmentArt*equipment){
     drawHud(fb,{"MAPA Y PERSONAJE","PAGINA 2/3",{}});
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     text(fb,20,53,"MINIMAPA",ink);text(fb,200,53,"PERSONAJE",ink);
@@ -109,17 +109,21 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     text(fb,56,173,"ZOOM "+std::to_string(zoom)+"X",ink);
     // The private image is the original human paperdoll gump, cropped/resized
     // by the exporter, not an invented equipment state or animated world sprite.
-    if(j){
+    if(inv&&equipment&&equipment->dolls.size()==8*76*104*4){
+        size_t base=inv->equipmentMask()*76*104*4;
+        for(int y=0;y<104;++y)for(int x=0;x<76;++x){size_t p=base+(y*76+x)*4;
+            if(equipment->dolls[p+3]>127)pixel(fb,211+x,65+y,{equipment->dolls[p],equipment->dolls[p+1],equipment->dolls[p+2]});}
+    }else if(j){
         int ox=249-j->dollWidth/2;
-        for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){
-            size_t p=(y*j->dollWidth+x)*4;
-            if(j->doll[p+3]>127)pixel(fb,ox+x,65+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});
-        }
-    }else{text(fb,205,114,"SIN IMAGEN",ink);}
-    for(int x:{198,290})for(int y:{74,105,136}){
-        box(fb,x,y,10,10,ink);box(fb,x+1,y+1,8,8,gold);
+        for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){size_t p=(y*j->dollWidth+x)*4;
+            if(j->doll[p+3]>127)pixel(fb,ox+x,65+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
+    }else text(fb,205,114,"SIN IMAGEN",ink);
+    const char*labels[]={"M","R","B"};
+    for(int slot=0;slot<3;++slot){int y=72+34*slot;bool worn=inv&&inv->equipment[slot]>=0;
+        box(fb,284,y,18,18,ink);box(fb,285,y+1,16,16,worn?gold:Color{161,143,108});
+        text(fb,290,y+5,labels[slot],ink);
     }
-    text(fb,216,173,"SIN EQUIPO",ink);
+    text(fb,198,173,inv&&inv->equipmentMask()?"TOCA PARA QUITAR":"SIN EQUIPO",ink,1,17);
     // Replace the shared footer without regenerating the paper background.
     box(fb,18,187,284,41,{218,195,148});
     char coordinates[64];std::snprintf(coordinates,sizeof(coordinates),"XY %d,%d Z %d",a.x+w.originX,a.y+w.originY,a.z);
@@ -132,7 +136,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
 void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons){
     drawHud(fb,{"MOCHILA Y COFRES","PAGINA 3/3",{}});
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
-    text(fb,20,53,"MOCHILA",ink);
+    text(fb,20,53,"MOCHILA "+std::to_string(inv.backpack.size())+"/9",ink);
     text(fb,166,53,inv.opened<0?"COFRE CERRADO":"COFRE "+std::to_string(inv.opened+1),ink);
     box(fb,151,52,1,127,gold);
     auto bag=[&](const Bag&items,int left){
@@ -151,12 +155,13 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     bag(inv.backpack,20);
     static const Bag empty;
     bag(inv.opened>=0&&size_t(inv.opened)<inv.chests.size()?inv.chests[inv.opened].items:empty,166);
-    text(fb,20,168,std::to_string(inv.backpack.size())+"/9 PILAS",ink);
+    box(fb,20,163,130,17,ink);box(fb,21,164,128,15,gold);
+    text(fb,26,168,inv.equipMode?"MODO: EQUIPAR":"MODO: TRANSFERIR",ink);
     box(fb,166,163,134,17,ink);box(fb,167,164,132,15,gold);
     text(fb,174,168,inv.opened>=0?"CERRAR COFRE":"ABRIR CERCANO",ink);
     box(fb,18,187,284,41,{218,195,148});
     text(fb,20,189,inv.message,ink);
-    text(fb,20,199,"TOCA UNA PILA PARA TRANSFERIR",ink);
+    text(fb,20,199,inv.equipMode?"TOCA UN EQUIPABLE DE LA MOCHILA":"TOCA UNA PILA PARA TRANSFERIR",ink);
     text(fb,20,209,inv.nearest(w,a)>=0?"COFRE AL ALCANCE | AUTOGUARDADO":"ACERCATE A UN COFRE DEL MAPA",ink);
     text(fb,20,219,"R: PAGINA | DESLIZA 3/3",ink);
 }

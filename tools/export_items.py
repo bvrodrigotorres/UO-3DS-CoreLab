@@ -6,7 +6,7 @@ from pathlib import Path
 import struct
 from export_scene import static_image
 
-ARTS=(0xEED,0x9F1,0x9D0,0xE21,0xF0E,0xF51)
+ARTS=(0xEED,0x9F1,0x9D0,0xE21,0xF0E,0xF51,0x1F03,0x170B)
 
 def main():
     from PIL import Image
@@ -21,6 +21,9 @@ def main():
     for graphic in ARTS:
         image=static_image(Art,graphic)
         if image is None or image.getbbox() is None:raise ValueError(f'Missing art {graphic:04X}')
+        if graphic in (0x1F03,0x170B):
+            from export_npcs import hue_image
+            image=hue_image(image,(args.client/'hues.mul').read_bytes(),0x59 if graphic==0x1F03 else 0x455)
         image=image.crop(image.getbbox());image.thumbnail((24,22),Image.Resampling.LANCZOS)
         canvas=Image.new('RGBA',(24,24));canvas.alpha_composite(image,((24-image.width)//2,(24-image.height)//2))
         data.extend(canvas.tobytes())

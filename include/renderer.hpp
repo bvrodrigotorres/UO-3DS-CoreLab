@@ -4,10 +4,12 @@
 #include "visibility.hpp"
 #include "doors.hpp"
 #include "npcs.hpp"
+#include "equipment.hpp"
 #include <citro2d.h>
 namespace lab {
 bool rendererInit();
 void rendererShutdown();
+bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
 bool loadNpcAtlases(std::string&error);
 bool loadAtlases(int images,std::string&error);
 size_t textureBytes();
