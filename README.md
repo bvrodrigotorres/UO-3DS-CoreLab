@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.3
+# UO-3DS-CoreLab v0.4
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -7,6 +7,8 @@ ejecutable y carpeta de SD propios; no depende del repositorio UO-3DS-Offline.
 **Primera prueba técnica, no un juego completo.** Caminar, alturas, orden de
 dibujo, geometría del terreno y diagnóstico de rendimiento. No incluye combate,
 inventario, NPC, servidor ni recursos originales de Ultima Online.
+
+[Novedades e instalación de v0.4](docs/v0.4.md): transparencia exterior, modo manual de techos y pantalla inferior de pergamino.
 
 ## Qué cambia respecto al prototipo anterior
 
@@ -22,7 +24,7 @@ inventario, NPC, servidor ni recursos originales de Ultima Online.
 
 ## Probar sin archivos de UO
 
-Descarga el artefacto **UO-3DS-CoreLab-v0.3** de un run verde en
+Descarga el artefacto **UO-3DS-CoreLab-v0.4** de un run verde en
 [Actions](https://github.com/bvrodrigotorres/UO-3DS-CoreLab/actions).
 También se puede compilar localmente con devkitPro y `make -j2`.
 
@@ -35,9 +37,11 @@ pisos, muros, techos, escalones, dos superficies superpuestas y una pendiente.
 |---|---|
 | Circle Pad / cruceta | Caminar |
 | B mantenido | Correr |
-| Y | Ocultar alturas superiores / mostrarlas todas |
+| Y | Techos: AUTO (transparencia) / HIDDEN (quitar superiores) / FULL (mostrar todo) |
 | A | Siguiente punto de prueba en demo; volver al inicio en escena privada |
 | X | Alternar demo y escena privada, si esta se cargó correctamente |
+| R | Alternar mapa local y diagnóstico |
+| SELECT / L | Guardar / restaurar posición, detenido |
 | START | Salir |
 
 La pantalla inferior muestra FPS, tiempo CPU/GPU, objetos enviados, tamaño de
@@ -119,4 +123,4 @@ Licencia MIT; procedencia y diferencias documentadas en [THIRD_PARTY.md](THIRD_P
 
 Cambios e instalación de esta entrega: [v0.2](docs/v0.2.md).
 
-**v0.3:** carrera desarmada corregida a acción 2, atlas con procedencia comprobable, guardado de posición y mapa de orientación. [Instalación y controles](docs/v0.3.md).
+**v0.4:** carrera desarmada corregida a acción 2, atlas con procedencia comprobable, guardado de posición y mapa de orientación. [Instalación y controles](docs/v0.4.md).

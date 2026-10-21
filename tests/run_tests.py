@@ -28,6 +28,11 @@ class SceneTests(unittest.TestCase):
     def test_upstream_differential_and_geometry(self):
         subprocess.run([str(self.binary)], check=True)
 
+    def test_exterior_visibility_and_hud(self):
+        binary=Path(self.temp.name)/'presentation_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/presentation_tests.cpp'),str(ROOT/'source/hud.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
     def fixture(self):
         return exporter.HEAD.pack(b'UCL1',1,2,2,0,0,0,0,0,0,0,0)+bytes(9)+exporter.LAND.pack(3,65535,0,0)*4
 

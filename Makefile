@@ -14,7 +14,7 @@ CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-rtti -fno-exceptions
 LDFLAGS := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lcitro2d -lcitro3d -lctru -lm
 LIBDIRS := $(CTRULIB) $(PORTLIBS)
-APP_TITLE := UO CoreLab v0.3
+APP_TITLE := UO CoreLab v0.4
 APP_DESCRIPTION := Independent scene and walking experiment
 APP_AUTHOR := bvrodrigotorres
 export TOPDIR := $(CURDIR)
@@ -22,7 +22,7 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT := $(CURDIR)/$(TARGET)
 export VPATH := $(CURDIR)/source $(CURDIR)/shaders
 export DEPSDIR := $(CURDIR)/$(BUILD)
-export OFILES := main.o core.o scene_io.o renderer.o exploration.o avatar_io.o world.shbin.o
+export OFILES := main.o core.o scene_io.o renderer.o exploration.o avatar_io.o hud.o world.shbin.o
 export INCLUDE := -I$(CURDIR)/include -I$(CTRULIB)/include -I$(CURDIR)/build
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 export _3DSXFLAGS += --smdh=$(CURDIR)/$(TARGET).smdh

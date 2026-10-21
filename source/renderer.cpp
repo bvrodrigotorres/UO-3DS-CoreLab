@@ -93,11 +93,12 @@ bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               bool cutaway,int direction,int frame,bool authentic,bool moving,bool running){
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running){
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0);
     C3D_FrameDrawOn(target);used=0;objects=0;overflow=false;batches.clear();
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
-    const auto&list=renderCache.get(w,actor,cutaway);
+    const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
+    bool afterActor=false;
     for(const auto&d:list){
         auto center=project(d.x,d.y,d.z);
         if(center.x< -180||center.x>580||center.y< -220||center.y>460)continue;
@@ -123,18 +124,23 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             if(authentic&&imageFor(o.image,image)){
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{center.x-width/2,center.y+22-height},{center.x+width/2,center.y+22-height},{center.x+width/2,center.y+22},{center.x-width/2,center.y+22}};
-                Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
+                float alpha=objectOpacity(o,footZ,roofs,afterActor,{p[0].x,p[0].y,p[2].x,p[2].y});
+                if(alpha==0)continue;
+                Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,alpha);
             }else{
                 if(o.flags&Wall){
                     Point p[]={{center.x-22,center.y},{center.x,center.y+22},{center.x,center.y+22-o.height*4},{center.x-22,center.y-o.height*4}};
-                    quad(p,whiteUV,&white,.58f,.62f,.66f,1);
+                    float alpha=objectOpacity(o,footZ,roofs,afterActor,{center.x-22,center.y-o.height*4,center.x,center.y+22});
+                    if(alpha>0)quad(p,whiteUV,&white,.58f,.62f,.66f,alpha);
                 }else{
                     Point p[]={{center.x,center.y-22},{center.x+22,center.y},{center.x,center.y+22},{center.x-22,center.y}};
                     bool roof=o.flags&Roof;bool rug=o.art==5;
-                    quad(p,whiteUV,&white,rug?.18f:roof?.55f:.63f,rug?.3f:roof?.24f:.44f,rug?.8f:roof?.17f:.24f,1);
+                    float alpha=objectOpacity(o,footZ,roofs,afterActor,{center.x-22,center.y-22,center.x+22,center.y+22});
+                    if(alpha>0)quad(p,whiteUV,&white,rug?.18f:roof?.55f:.63f,rug?.3f:roof?.24f:.44f,rug?.8f:roof?.17f:.24f,alpha);
                 }
             }
         }else{
+            afterActor=true;
             Point foot=project(cameraX,cameraY,footZ);
             if(avatar){
                 unsigned index=avatarImage(direction,moving,running&&runVerified,frame,C2D_SpriteSheetCount(avatar));
