@@ -21,9 +21,17 @@ bool meleeReach(const World&w,const Actor&a,const Actor&b){
     return false;
 }
 int Combat::roll(int lo,int hi){random=random*1664525u+1013904223u;return lo+int((random>>16)%unsigned(hi-lo+1));}
+void Combat::damageVisual(const Actor&position,int amount,bool player,int npc){
+    if(amount<=0)return;
+    auto slot=std::find_if(damage.begin(),damage.end(),[](const DamageVisual&e){return !e.active;});
+    if(slot==damage.end())slot=std::max_element(damage.begin(),damage.end(),[](const DamageVisual&a,const DamageVisual&b){return a.age<b.age;});
+    *slot={true,player,position,npc,amount,0,unsigned(roll(0,65535))};
+}
 void Combat::reset(const Npcs&npcs){
     mob.clear();for(const auto&n:npcs.all()){MobVitals v;v.hits=v.maximum=maximum(n);mob.push_back(v);}
     for(auto&c:corpses)c=Corpse{};
+    for(auto&e:damage)e=DamageVisual{};
+    for(auto&p:blood)p=BloodPool{};
     target=-1;attacking=false;swing=regen=strike=0;message.clear();
 }
 void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
@@ -40,6 +48,9 @@ void Combat::toggle(const Npcs&npcs,const Actor&a){
     if(target>=0){attacking=true;swing=0;message="ACERCATE AL OBJETIVO | A: PARAR";}
 }
 void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
+    auto pool=std::find_if(blood.begin(),blood.end(),[](const BloodPool&p){return !p.active;});
+    if(pool==blood.end())pool=std::max_element(blood.begin(),blood.end(),[](const BloodPool&a,const BloodPool&b){return a.age<b.age;});
+    *pool={true,npcs.all()[index].position,0,unsigned(roll(0,6))};
     auto&n=npcs.combatants()[index];n.alive=false;n.hostile=false;n.moving=false;n.progress=1;n.from=n.position;
     auto&v=mob[index];v.hits=0;v.respawn=20;
     auto slot=std::find_if(corpses.begin(),corpses.end(),[](const Corpse&c){return !c.active;});
@@ -54,6 +65,8 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
 bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,PlayerStatus&status,Inventory&inv){
     if(mob.size()!=npcs.all().size())reset(npcs);
     if(dt<=0)return false;
+    for(auto&e:damage)if(e.active){e.age+=dt;if(e.age>=1.2f)e.active=false;}
+    for(auto&p:blood)if(p.active){p.age+=dt;if(p.age>=3)p.active=false;}
     status.healthVisible=std::max(0.f,status.healthVisible-dt);status.flash=std::max(0.f,status.flash-dt);swing=std::max(0.f,swing-dt);strike=std::max(0.f,strike-dt);
     for(auto&c:corpses)if(c.active){c.decay-=dt;if(c.decay<=0){inv.closeExternal(&c.loot);c.active=false;c.loot.clear();}}
     for(size_t i=0;i<mob.size();++i){auto&v=mob[i];auto&n=npcs.combatants()[i];v.flash=std::max(0.f,v.flash-dt);v.cooldown=std::max(0.f,v.cooldown-dt);
@@ -70,7 +83,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     if(attacking&&target>=0&&!moving&&!npcs.all()[target].moving&&swing<=0&&meleeReach(w,player,npcs.all()[target].position)){
         swing=.85f;
         if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];n.hostile=true;strike=.45f;--status.stamina;
-            v.hits=std::max(0,v.hits-roll(status.damageMin(&inv),status.damageMax(&inv)));v.flash=.15f;
+            int dealt=std::min(v.hits,roll(status.damageMin(&inv),status.damageMax(&inv)));v.hits-=dealt;damageVisual(n.position,dealt,false,target);v.flash=.15f;
             status.healthVisible=6;
             if(v.hits==0)kill(size_t(target),npcs,inv);
         }
@@ -79,14 +92,15 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if(!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
         v.cooldown=1.25f;int damage=roll(n.name.find("dog")!=std::string::npos?4:2,n.name.find("dog")!=std::string::npos?7:4);
         damage=std::max(1,damage*(100-std::max(0,std::min(70,status.resistances[0])))/100);
-        status.hits=std::max(0,status.hits-damage);status.healthVisible=6;status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
+        damage=std::min(status.hits,damage);status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){
-            status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;
+            status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;status.recoveryGoal=0;
             for(auto&other:npcs.combatants())other.hostile=false;
             attacking=false;target=-1;strike=0;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
         }
     }
     regen+=dt;if(regen>=1){regen-=1;status.mana=std::min(status.manaMax,status.mana+1);status.stamina=std::min(status.staminaMax,status.stamina+1);if(status.healthVisible<=0)status.hits=std::min(status.hitsMax,status.hits+1);}
+    status.recovered();
     return false;
 }
 int Combat::nearestCorpse(const World&w,const Actor&a)const{
@@ -115,7 +129,7 @@ bool loadVitals(const std::string&path,PlayerStatus&status){
     std::ifstream f(path,std::ios::binary);if(!f){f.open(path+".bak",std::ios::binary);if(!f)return true;}
     uint8_t b[20];if(!f.read((char*)b,20)||f.peek()!=EOF||std::memcmp(b,"UVT1",4)||get(b+16)!=hash(b,16))return false;
     unsigned h=get(b+4),m=get(b+8),s=get(b+12);if(h==0||h>unsigned(status.hitsMax)||m>unsigned(status.manaMax)||s>unsigned(status.staminaMax))return false;
-    status.hits=h;status.mana=m;status.stamina=s;return true;
+    status.hits=h;if(status.hits<status.hitsMax)status.tookDamage();status.mana=m;status.stamina=s;return true;
 }
 bool saveVitals(const std::string&path,const PlayerStatus&status,SaveRename renameFile){
     uint8_t b[20]={'U','V','T','1'};put(b+4,status.hits);put(b+8,status.mana);put(b+12,status.stamina);put(b+16,hash(b,16));

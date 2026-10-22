@@ -10,6 +10,10 @@ struct PlayerStatus {
     int statCap=225,luck=0,followers=0,followersMax=5;
     std::array<int,5>resistances{{0,0,0,0,0}};
     float healthVisible=0,flash=0;
+    int recoveryGoal=0;
+    bool showHealth()const{return healthVisible>0||(recoveryGoal>0&&hits<recoveryGoal);}
+    void tookDamage(){recoveryGoal=std::min(hitsMax,hits+(hitsMax+3)/4);healthVisible=6;}
+    void recovered(){if(recoveryGoal>0&&hits>=recoveryGoal)recoveryGoal=0;}
     int damageMin(const Inventory*bag)const{return bag&&bag->equipment[0]>=0?7:4;}
     int damageMax(const Inventory*bag)const{return bag&&bag->equipment[0]>=0?11:7;}
     int weightMax()const{return 40+strength*7/2;}

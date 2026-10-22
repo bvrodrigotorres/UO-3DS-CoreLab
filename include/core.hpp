@@ -35,7 +35,7 @@ struct World {
 struct Heights { int top,right,bottom,left,minimum,average; bool slope; };
 Heights heights(const World&,int x,int y);
 int directionalHeight(const Heights&,int direction);
-enum class Kind { Land,Static,Actor,Npc,Corpse };
+enum class Kind { Land,Static,Actor,Npc,Corpse,Blood };
 struct Draw { Kind kind; int x,y,z,priority; size_t index; uint32_t order; };
 struct Actor {int x=0,y=0,z=0;};
 int priority(Kind kind,int z,int height,uint64_t flags,int average,bool slope);

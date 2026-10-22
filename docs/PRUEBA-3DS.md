@@ -124,3 +124,12 @@ Probar A sin arma y con daga, ocho direcciones, ropa y túnica. Caminar durante
 el combate y pausar a mitad de golpe. Atacar una criatura a varias casillas:
 debe acercarse y responder; probar pared, esquina y otro piso. Revisar el
 sombrero coloreado tanto en personalización como en la página de equipo.
+
+## v0.28: daño, vida y sangre
+
+Consultar [v0.28.md](v0.28.md). Reemplazar programa y añadir blood.bin/blood.t3x.
+Recibir daño y esperar: la barra debe seguir visible mientras recupera 13/50
+puntos, o hasta llenarse si falta menos. Comprobar números amarillos al golpear
+y rojos al recibir daño, gotas, charco mortal de tres segundos y botín intacto.
+Pausar durante el efecto y comprobar que su tiempo queda detenido. Probar
+pisos superiores y paredes delante de los efectos.

@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.27
+# UO-3DS-CoreLab v0.28
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -46,6 +46,9 @@ sombrero en las vistas previas.
 
 [Novedades v0.27](docs/v0.27.md): poses y golpes originales del jugador,
 persecución de criaturas y teñido completo del sombrero.
+
+[Novedades v0.28](docs/v0.28.md): barra de vida hasta recuperar un 25%,
+números de daño, partículas y charcos temporales de sangre.
 
 ## Qué cambia respecto al prototipo anterior
 

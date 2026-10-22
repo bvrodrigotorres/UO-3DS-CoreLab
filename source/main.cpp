@@ -143,7 +143,7 @@ int main(){
     lab::Appearance appearance;
     bool appearanceOk=appearance.load(saveRoot+savePrefix+"appearance.sav");
     lab::StatusArt statusArt;statusArt.load(baseRoot+"status.bin");
-    std::string combatArtError;if(hasNpcs&&npcs.hasPopulation())lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);
+    std::string combatArtError;if(hasNpcs&&npcs.hasPopulation()){lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);std::string bloodError;if(!lab::loadBloodArt(baseRoot,bloodError))combatArtError=bloodError;}
     startupFrame(nullptr,false,"PREPARADO",5);
     lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");
     lab::Actor probe;std::string probeMessage;

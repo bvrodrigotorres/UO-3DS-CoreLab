@@ -16,6 +16,7 @@ void clearAppearance();
 bool applyAppearance(const CharacterAssets&,const Appearance&,EquipmentArt&,unsigned,std::string&);
 void warmEquipment(unsigned,const EquipmentArt&);
 bool loadPopulationAtlases(const Npcs&,const std::string&,std::string&);
+bool loadBloodArt(const std::string&,std::string&);
 bool loadCombatArt(const std::string&root,const std::string&population,std::string&error);
 bool loadNpcAtlases(std::string&error);
 bool loadAtlases(int images,std::string&error,const std::string&root="sdmc:/3ds/UO-3DS-CoreLab/");

@@ -64,6 +64,7 @@ static EquipmentCache<Outfit*>outfitCache;
 static void clearOutfits(){while(outfitCache.victim(~0u)>=0)freeOutfit(outfitCache.remove(unsigned(outfitCache.victim(~0u))));}
 static std::vector<C2D_SpriteSheet>npcSheets;
 static size_t npcBytes;
+static C2D_SpriteSheet bloodSheet=nullptr;static size_t bloodBytes=0;
 static C2D_SpriteSheet corpseSheet=nullptr;static std::vector<uint8_t>corpseTypes;static std::array<std::array<int,2>,5>corpsePivots{};static size_t corpseBytes=0;
 static bool runVerified=false;
 static size_t bytes,objects;
@@ -151,6 +152,7 @@ void rendererShutdown(){
     clearOutfits();
     for(auto s:npcSheets)C2D_SpriteSheetFree(s);
     npcSheets.clear();if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);corpseSheet=nullptr;corpseBytes=0;
+    if(bloodSheet){C2D_SpriteSheetFree(bloodSheet);}bloodSheet=nullptr;bloodBytes=0;
     C3D_TexDelete(&labelFont);C3D_TexDelete(&white);if(buffer)linearFree(buffer);
     shaderProgramFree(&program);if(shader)DVLB_Free(shader);
 }
@@ -188,6 +190,16 @@ bool loadAtlases(int images,std::string&error,const std::string&root){
     }
     C3D_FrameSync();for(auto s:sheets)if(s)C2D_SpriteSheetFree(s);
     sheets=std::move(next);bytes=size;return true;
+}
+bool loadBloodArt(const std::string&root,std::string&error){
+    std::ifstream f(root+"blood.bin",std::ios::binary);uint8_t b[16];
+    if(!f.read((char*)b,16)||f.peek()!=EOF||std::memcmp(b,"UBL1",4)){error="FALTA BLOOD.BIN";return false;}
+    auto get=[&](int at){return uint32_t(b[at])|uint32_t(b[at+1])<<8|uint32_t(b[at+2])<<16|uint32_t(b[at+3])<<24;};
+    if(get(4)!=7||get(8)>128*1024||!equipmentChecksum(root+"blood.t3x",get(12))){error="SANGRE: RECURSOS INVALIDOS";return false;}
+    auto sheet=C2D_SpriteSheetLoad((root+"blood.t3x").c_str());
+    if(!sheet||C2D_SpriteSheetCount(sheet)!=7){if(sheet)C2D_SpriteSheetFree(sheet);error="SANGRE: ATLAS INVALIDO";return false;}
+    auto image=C2D_SpriteSheetGetImage(sheet,0);if(image.tex->size>128*1024){C2D_SpriteSheetFree(sheet);error="SANGRE: ATLAS EXCESIVO";return false;}
+    C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);if(bloodSheet)C2D_SpriteSheetFree(bloodSheet);bloodSheet=sheet;bloodBytes=image.tex->size;error.clear();return true;
 }
 bool loadCombatArt(const std::string&root,const std::string&population,std::string&error){
     std::ifstream f(root+"corpses.bin",std::ios::binary|std::ios::ate);
@@ -314,7 +326,7 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     }
 }
 bool rendererTextureError(){return textureFailure;}
-size_t textureBytes(){return bytes+npcBytes+corpseBytes+outfitCache.bytes();}
+size_t textureBytes(){return bytes+npcBytes+corpseBytes+bloodBytes+outfitCache.bytes();}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
@@ -330,7 +342,9 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     auto npcList=npcs?npcs->drawList(w,actor,roofs!=RoofMode::Full):std::vector<Draw>{};
     if(combat){for(size_t i=0;i<combat->corpses.size();++i){const auto&c=combat->corpses[i];
         if(c.active&&std::abs(c.position.x-actor.x)<=12&&std::abs(c.position.y-actor.y)<=12&&std::abs(c.position.z-actor.z)<16)npcList.push_back({Kind::Corpse,c.position.x,c.position.y,c.position.z,c.position.z,i,0xfffffe00u+(uint32_t)i});
-    }std::stable_sort(npcList.begin(),npcList.end(),drawBefore);}
+    }
+    for(size_t i=0;i<combat->blood.size();++i){const auto&p=combat->blood[i];if(p.active&&std::abs(p.position.x-actor.x)<=12&&std::abs(p.position.y-actor.y)<=12&&std::abs(p.position.z-actor.z)<16)npcList.push_back({Kind::Blood,p.position.x,p.position.y,p.position.z,p.position.z,i,0xfffffd00u+uint32_t(i)});}
+    std::stable_sort(npcList.begin(),npcList.end(),drawBefore);}
     mergedDraws.clear();mergedDraws.reserve(list.size()+npcList.size());
     for(size_t wi=0,ni=0;wi<list.size()||ni<npcList.size();){
         bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
@@ -350,6 +364,19 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     }
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0xffffffff);
     C3D_FrameDrawOn(target);
+    auto bloodBurst=[&](const Draw&draw){if(!combat)return;const auto saved=pixelMode;pixelMode=PixelMode::Translucent;
+        for(const auto&e:combat->damage)if(e.active&&e.age<.38f&&std::abs(e.position.z-actor.z)<16){
+            bool victim=e.player?draw.kind==Kind::Actor:draw.kind==Kind::Npc&&int(draw.index)==e.npc;
+            if(!victim&&!e.player&&draw.kind==Kind::Corpse&&npcs&&e.npc>=0&&size_t(e.npc)<npcs->all().size()&&!npcs->all()[e.npc].alive)victim=draw.x==e.position.x&&draw.y==e.position.y&&draw.z==e.position.z;
+            if(!victim)continue;
+            auto p=project(e.position.x,e.position.y,e.position.z);if(p.x< -20||p.x>420||p.y< -20||p.y>280)continue;
+            float height=32;
+            if(!e.player&&npcs&&e.npc>=0&&size_t(e.npc)<npcs->all().size()&&npcs->hasPopulation()){int style=npcs->all()[e.npc].style;if(style>=0&&size_t(style)<npcs->styles().size())height=std::max(6.f,std::min(36.f,npcs->styles()[style].pivotY*.55f));}
+            float t=e.age/.38f;
+            for(unsigned i=0;i<7;++i){unsigned seed=e.seed+i*7919;float vx=float(int(seed%17)-8),vy=-float(5+seed%9);float x=p.x+vx*t*2,y=p.y-height+vy*t*2+22*t*t;rect(overheadPixelOrigin(x),overheadPixelOrigin(y),2,i%2?3:2,.7f,.025f,.035f,1-t*.7f);}
+        }
+        pixelMode=saved;
+    };
     for(const auto&d:mergedDraws){
         if(!visible(d))continue;
         pixelMode=d.kind==Kind::Actor?PixelMode::Character:
@@ -405,6 +432,11 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                     if(alpha>0)quad(p,whiteUV,&white,rug?.18f:roof?.55f:.63f,rug?.3f:roof?.24f:.44f,rug?.8f:roof?.17f:.24f,alpha);
                 }
             }
+        }else if(d.kind==Kind::Blood){
+            const auto&pool=combat->blood[d.index];auto foot=project(pool.position.x,pool.position.y,pool.position.z);pixelMode=PixelMode::Translucent;float alpha=std::min(1.f,(3-pool.age)*2);
+            if(bloodSheet){auto image=C2D_SpriteSheetGetImage(bloodSheet,pool.variant%7);float width=image.subtex->width,height=image.subtex->height;float left=foot.x-width/2,top=foot.y-height+5;
+                Point p[]={{left,top},{left+width,top},{left+width,top+height},{left,top+height}};Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,alpha);
+            }else {rect(foot.x-8,foot.y-2,16,4,.45f,.015f,.02f,alpha);}
         }else if(d.kind==Kind::Corpse){
             const auto&c=combat->corpses[d.index];auto foot=project(c.position.x,c.position.y,c.position.z);
             unsigned type=c.style>=0&&size_t(c.style)<corpseTypes.size()?corpseTypes[c.style]:255;
@@ -436,6 +468,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 Point uv[4];uvFor(image,uv);float tint=status&&status->flash>0?.35f:1;quad(p,uv,image.tex,1,tint,tint,1);
             }else{rect(foot.x-5,foot.y-24,10,24,.2f,.45f,.95f);rect(foot.x-4,foot.y-32,8,8,.95f,.75f,.55f);}
         }
+        if(d.kind==Kind::Actor||d.kind==Kind::Npc||d.kind==Kind::Corpse)bloodBurst(d);
     }
     // Overhead text is a final color-only overlay; it cannot alter floor depth.
     pixelMode=PixelMode::Translucent;
@@ -456,11 +489,18 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         x=overheadPixelOrigin(x-23);y=overheadPixelOrigin(y);rect(x,y,46,7,selected?.9f:.1f,selected?.7f:.1f,.1f);
         rect(x+1,y+1,44,5,.2f,.05f,.04f);rect(x+1,y+1,PlayerStatus::barWidth(current,maximum,44),5,.8f,.12f,.08f);
     };
-    if(status&&status->healthVisible>0){auto p=project(cameraX,cameraY,footZ);healthBar(p.x,p.y-82,status->hits,status->hitsMax,false);}
+    if(status&&status->showHealth()){auto p=project(cameraX,cameraY,footZ);healthBar(p.x,p.y-82,status->hits,status->hitsMax,false);}
     if(combat&&npcs&&combat->target>=0&&size_t(combat->target)<npcs->all().size()&&size_t(combat->target)<combat->vitals().size()){
         const auto&n=npcs->all()[combat->target];if(n.alive){float t=n.progress;auto p=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
             if(p.x>=0&&p.x<400&&p.y>=0&&p.y<260){float pivot=npcs->hasPopulation()?npcs->styles()[n.style].pivotY:64;const auto&v=combat->vitals()[combat->target];healthBar(p.x,p.y-pivot-7,v.hits,v.maximum,true);rect(p.x-10,p.y+3,20,2,.95f,.75f,.1f);}
         }
+    }
+    if(combat)for(const auto&e:combat->damage)if(e.active&&std::abs(e.position.z-actor.z)<16){
+        auto p=project(e.position.x,e.position.y,e.position.z);if(p.x<0||p.x>400||p.y< -20||p.y>280)continue;
+        float pivot=e.player?82.f:64.f;
+        if(!e.player&&npcs&&e.npc>=0&&size_t(e.npc)<npcs->all().size()&&npcs->hasPopulation()){int style=npcs->all()[e.npc].style;if(style>=0&&size_t(style)<npcs->styles().size())pivot=npcs->styles()[style].pivotY+14.f;}
+        std::string value=std::to_string(e.amount);float x=overheadPixelOrigin(p.x-overheadFont.width(value)/2.f+int(e.seed%9)-4),y=overheadPixelOrigin(p.y-pivot-10-e.age*25),alpha=std::min(1.f,(1.2f-e.age)*4);
+        labelText(x+1,y+1,value,false,0,0,0,alpha);labelText(x,y,value,true,0,0,0,alpha);labelText(x,y,value,false,1,e.player?.18f:.9f,e.player?.12f:.2f,alpha);
     }
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);
