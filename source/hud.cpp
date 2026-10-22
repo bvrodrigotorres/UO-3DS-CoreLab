@@ -76,7 +76,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.24",ink,1,13);
+    text(fb,225,20,"C.LAB V0.25",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -200,7 +200,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.24";
+    const std::string version="CORELAB V0.25";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -253,7 +253,8 @@ void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&e,const st
     static OverheadFont medieval;static bool tried=false;if(!tried){medieval.load("sdmc:/3ds/UO-3DS-CoreLab/npc_font.bin");tried=true;}
     int nameX=(400-int(medieval.width(e.draft.name))*2)/2;for(unsigned char c:e.draft.name){for(int y=0;y<16;++y)for(int x=0;x<16;++x)if(medieval.pixel(c,x,y))box(top,nameX+x*2,31+y*2,2,2,ink);nameX+=medieval.step(c)*2;}
     box(top,22,66,178,160,{191,169,132});box(top,210,66,168,160,{176,160,127});
-    std::vector<uint16_t>smallDoll(95*178);if(doll.size()==106*198){for(int y=0;y<178;++y)for(int x=0;x<95;++x)smallDoll[y*95+x]=doll[(y*198/178)*106+x*106/95];}image(top,smallDoll,95,178,62,46,1);image(top,sprite,96,112,246,55,1);
+    // Preserve every source paperdoll pixel, including hair/hat outside the panel.
+    if(doll.size()==260*237){for(int y=0;y<213;++y)for(int x=0;x<234;++x){uint16_t c=doll[(y*237/213)*260+x*260/234];if(c&1)pixel(top,28+x,21+y,{uint8_t((c>>11)*255/31),uint8_t((c>>6&31)*255/31),uint8_t((c>>1&31)*255/31)});}}image(top,sprite,96,112,246,55,1);
     text(top,226,78,"VISTA EN EL MUNDO",ink);
     text(top,222,181,"X: GIRAR",ink);text(top,222,193,"HUMANO - CLASICO",ink);
 
@@ -263,8 +264,11 @@ void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&e,const st
     const char*tabs[]={"IDENTIDAD","ASPECTO","ROPA","COLORES"};
     for(int i=0;i<4;++i){box(bottom,12+i*74,27,72,22,ink);box(bottom,14+i*74,29,68,18,i==e.page?gold:light);text(bottom,19+i*74,35,tabs[i],ink);}
     for(int r=0;r<e.rowCount();++r){int f=e.fieldAt(r),y=57+r*e.step();bool active=e.enabled(f);Color fieldInk=active?ink:Color{120,111,91};
-        box(bottom,12,y,296,e.step()-2,r==e.row?gold:Color{218,195,148});text(bottom,18,y+2,e.label(f),fieldInk,1,22);
-        text(bottom,151,y+10,e.value(f),fieldInk,1,25);if(active){text(bottom,18,y+11,"<",ink);text(bottom,295,y+11,">",ink);}
+        box(bottom,12,y,296,e.step()-2,r==e.row?gold:Color{218,195,148});int baseline=y+(e.step()-9)/2;
+        text(bottom,18,baseline,e.label(f),fieldInk,1,20);
+        text(bottom,144,baseline,"<",fieldInk);
+        const auto value=e.value(f);text(bottom,224-int(value.size())*3,baseline,value,fieldInk,1,20);
+        text(bottom,295,baseline,">",fieldInk);
     }
     text(bottom,15,187,e.message.empty()?"L/R: PAGINA  X: GIRAR  Y: AZAR":e.message,ink,1,48);
     text(bottom,15,197,"PAD: CAMBIAR  A: EDITAR  START: GUARDAR",ink,1,48);

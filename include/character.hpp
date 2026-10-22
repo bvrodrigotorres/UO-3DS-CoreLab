@@ -24,8 +24,8 @@ struct AppearanceEditor {
     int page=0,row=0,direction=4;bool creation=true;unsigned equipment=0;
     std::string message;
     explicit AppearanceEditor(const Appearance&a,bool fresh=true):draft(a),creation(fresh){draft.enabled=true;}
-    int rowCount()const{return page==0?3:page==3?6:4;}
-    int step()const{return page==3?21:25;}
+    int rowCount()const{return page==0?3:page==3?7:4;}
+    int step()const{return page==3?18:25;}
     int field()const{return fieldAt(row);}
     int fieldAt(int r)const;
     bool enabled(int field)const;
@@ -44,6 +44,7 @@ class CharacterAssets {
 public:
     bool load(const std::string&);
     bool ready()const{return !palettes.empty();}
+    bool fullPaperdoll()const;
     // Fixed original anchor and dimensions, shared by every outfit and layer.
     bool compose(const Appearance&,unsigned mask,std::vector<uint16_t>&frames,bool doll=false,int onlyFrame=-1)const;
     bool dolls(const Appearance&,std::vector<uint8_t>&)const;

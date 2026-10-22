@@ -22,7 +22,7 @@ void syntheticAssets(const std::string&root){
     for(unsigned i=0;i<145;++i){size_t pos=604+i*10;unsigned last=(i==144?106*174:96*112)-1;layer[pos+2]=1;layer[pos+4]=255;layer[pos+5]=255;layer[pos+6]=last;layer[pos+7]=last>>8;}
     put(layer,16,fnv(layer,20));write(root+"0-400.bin",layer);
     CharacterAssets bank;assert(bank.load(root));Appearance a;a.hair=a.beard=a.shirt=a.pants=a.shoes=0;std::vector<uint16_t>pixels;
-    assert(bank.compose(a,0,pixels)&&pixels.size()==72*96*112);assert(bank.compose(a,0,pixels,true)&&pixels.size()==106*198);
+    assert(bank.compose(a,0,pixels)&&pixels.size()==72*96*112);assert(bank.compose(a,0,pixels,true)&&pixels.size()==260*237);
     // A valid checksum must not permit a sparse run past the end of a frame.
     layer[604+2]=255;layer[604+3]=255;put(layer,16,fnv(layer,20));write(root+"0-400.bin",layer);assert(bank.load(root));assert(!bank.compose(a,0,pixels));
     // Bad palette checksum and truncated data fail without retaining stale data.
@@ -53,12 +53,12 @@ int main(int argc,char**argv){
     syntheticAssets(root);
     CharacterAssets assets;assert(!assets.load(root)&&!assets.ready());std::vector<uint16_t>pixels;assert(!assets.compose(a,0,pixels));
     std::vector<uint8_t>top(400*240*3+32,0xAB),bottom(320*240*3+32,0xCD);
-    std::vector<uint16_t>doll(106*198,0xFFFF),sprite(96*112,0xFFFF);
+    std::vector<uint16_t>doll(260*237,0xFFFF),sprite(96*112,0xFFFF);
     for(int page=0;page<4;++page){editor.page=page;for(int row=0;row<editor.rowCount();++row){editor.row=row;drawAppearance(top.data()+16,bottom.data()+16,editor,doll,sprite,true);}}
     for(int i=0;i<16;++i)assert(top[i]==0xAB&&top[top.size()-1-i]==0xAB&&bottom[i]==0xCD&&bottom[bottom.size()-1-i]==0xCD);
     if(argc==3){assert(assets.load(argv[2]));
         for(unsigned sex=0;sex<2;++sex){a.female=sex;a.shoes=1;
-            for(unsigned hair=0;hair<10;++hair){a.hair=hair;assert(assets.compose(a,0,pixels,true)&&pixels.size()==106*198);assert(assets.compose(a,0,pixels,false,0));}
+            for(unsigned hair=0;hair<10;++hair){a.hair=hair;assert(assets.compose(a,0,pixels,true)&&pixels.size()==260*237);assert(assets.compose(a,0,pixels,false,0));}
             for(unsigned beard=0;beard<8;++beard){a.beard=beard;assert(assets.compose(a,7,pixels,true));}
             for(unsigned mask=0;mask<8;++mask){assert(assets.compose(a,mask,pixels)&&pixels.size()==72*96*112);assert(std::count_if(pixels.begin(),pixels.end(),[](uint16_t p){return p&1;})>10000);}
             assert(assets.compose(a,255,pixels)&&pixels.size()==72*96*112);assert(assets.compose(a,2047,pixels)&&pixels.size()==72*96*112);

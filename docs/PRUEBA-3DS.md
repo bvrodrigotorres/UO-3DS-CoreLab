@@ -100,3 +100,11 @@ comprobar colores de accesorios deshabilitados al crear y al quitar la prenda.
 Verificar sombrero entero y título de estado centrado. Tocar dos veces cada
 botón de equipo, reiniciar con una ranura vacía y volver a equipar su última
 prenda. Depositarla en un cofre y comprobar que el botón no crea una copia.
+
+## v0.25: colores y recortes
+
+Consultar [v0.25.md](v0.25.md). Copiar character completo. Probar afro con ambos
+cuerpos y sombrero equipado; comprobar ambas vistas y la segunda página del
+juego. Seleccionar el primer y último color de pelo y barba; deben ser tonos
+naturales. Cambiar color calzado, guardar, continuar y comprobar zapatos/botas.
+Recorrer las siete filas de Colores con pad y táctil y verificar cada flecha.

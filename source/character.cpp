@@ -48,14 +48,14 @@ bool Appearance::save(const std::string&p,std::string&error,SaveRename renameFil
     error.clear();return true;
 }
 int AppearanceEditor::fieldAt(int r)const{
-    static const int fields[4][6]={{0,1,2,-1,-1,-1},{3,4,5,6,-1,-1},{7,9,11,18,-1,-1},{8,10,13,15,16,17}};
+    static const int fields[4][7]={{0,1,2,-1,-1,-1,-1},{3,4,5,6,-1,-1,-1},{7,9,11,18,-1,-1,-1},{8,10,12,13,15,16,17}};
     return page>=0&&page<4&&r>=0&&r<rowCount()?fields[page][r]:-1;
 }
 bool AppearanceEditor::enabled(int f)const{
     if(!creation&&(f==7||f==9||f==11||f==18))return false;
     if(draft.female&&(f==5||f==6))return false;
     if(f>=15&&f<=17){unsigned bit=f==15?8:f==16?16:64;return !creation&&(equipment&bit);}
-    return f>=0&&f!=14&&f!=12;
+    return f>=0&&f!=14;
 }
 void AppearanceEditor::change(int delta){
     int f=field();if(!enabled(f)){message=(f==7||f==9||f==11||f==18)?"CAMBIA LAS PRENDAS EN INVENTARIO":"OPCION NO DISPONIBLE";return;}uint8_t*p=nullptr;int n=0;
@@ -63,7 +63,7 @@ void AppearanceEditor::change(int delta){
     if(p)*p=(*p+delta+n)%n;
     message.clear();
 }
-void AppearanceEditor::randomize(uint32_t seed){auto old=draft;auto next=[&](unsigned n){seed=seed*1664525+1013904223;return (seed>>8)%n;};draft.female=next(2);draft.skin=next(64);draft.hair=next(10);draft.hairColor=next(48);draft.beard=next(8);draft.beardColor=draft.hairColor;draft.robe=next(2);draft.shirt=1+next(2);draft.pants=1+next(2);draft.shoes=1;draft.shirtColor=next(32);draft.pantsColor=next(32);draft.bootsColor=next(32);draft.robeColor=next(32);draft.hatColor=next(32);draft.neckColor=next(32);draft.glovesColor=next(32);draft.bootsColor=old.bootsColor;if(!enabled(15))draft.hatColor=old.hatColor;if(!enabled(16))draft.neckColor=old.neckColor;if(!enabled(17))draft.glovesColor=old.glovesColor;if(!creation){draft.robe=old.robe;draft.shirt=old.shirt;draft.pants=old.pants;draft.shoes=old.shoes;}}
+void AppearanceEditor::randomize(uint32_t seed){auto old=draft;auto next=[&](unsigned n){seed=seed*1664525+1013904223;return (seed>>8)%n;};draft.female=next(2);draft.skin=next(64);draft.hair=next(10);draft.hairColor=next(48);draft.beard=next(8);draft.beardColor=draft.hairColor;draft.robe=next(2);draft.shirt=1+next(2);draft.pants=1+next(2);draft.shoes=1;draft.shirtColor=next(32);draft.pantsColor=next(32);draft.bootsColor=next(32);draft.robeColor=next(32);draft.hatColor=next(32);draft.neckColor=next(32);draft.glovesColor=next(32);if(!enabled(15))draft.hatColor=old.hatColor;if(!enabled(16))draft.neckColor=old.neckColor;if(!enabled(17))draft.glovesColor=old.glovesColor;if(!creation){draft.robe=old.robe;draft.shirt=old.shirt;draft.pants=old.pants;draft.shoes=old.shoes;}}
 std::string AppearanceEditor::label(int f)const{const char*labels[]={"NOMBRE","CUERPO","PIEL","PEINADO","COLOR DEL PELO","BARBA","COLOR DE BARBA","CAMISA","COLOR CAMISA","PRENDA INFERIOR","COLOR INFERIOR","CALZADO","COLOR CALZADO","COLOR TUNICA","","COLOR GORRO","COLOR CUELLO","COLOR GUANTES","TUNICA"};return f>=0&&f<19?labels[f]:"";}
 std::string AppearanceEditor::value(int f)const{
     const char*mh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","MEDIA MELENA","NUDO ALTO","AFRO","ENTRADAS","DOS COLETAS"};
@@ -80,29 +80,41 @@ bool CharacterAssets::load(const std::string&p){
     if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UHP1",4)||get(b,4)!=3000||get(b,8)!=3000*64||get(b,12)!=hash(b.data()+16,b.size()-16))return false;
     palettes.resize(3000*32);for(size_t i=0;i<palettes.size();++i)palettes[i]=b[16+i*2]|uint16_t(b[17+i*2])<<8;root=p;return true;
 }
-uint16_t CharacterAssets::color(const Appearance&a,int field)const{switch(field){case 15:return clothColors[a.hatColor];case 16:return clothColors[a.neckColor];case 17:return clothColors[a.glovesColor];case 2:return skins[a.skin];case 4:return hairColors[a.hairColor];case 6:return hairColors[a.beardColor];case 8:return clothColors[a.shirtColor];case 10:return clothColors[a.pantsColor];case 12:return clothColors[a.bootsColor];case 13:return clothColors[a.robeColor];default:return 0;}}
+bool CharacterAssets::fullPaperdoll()const{
+    for(int sex=0;sex<2;++sex)for(int id:{400+sex,700,701,702,703,710,903,900,901,902,712,404,546,545,434,435,430,449,480,477,469,622}){
+        std::ifstream f(root+std::to_string(sex)+"-"+std::to_string(id)+".bin",std::ios::binary);char magic[4];if(!f.read(magic,4)||std::memcmp(magic,"UAP3",4))return false;
+    }
+    return ready();
+}
+uint16_t CharacterAssets::color(const Appearance&a,int field)const{switch(field){case 15:return clothColors[a.hatColor];case 16:return clothColors[a.neckColor];case 17:return clothColors[a.glovesColor];case 2:return skins[a.skin];case 4:return hairColors[a.hairColor]+1;case 6:return hairColors[a.beardColor]+1;case 8:return clothColors[a.shirtColor];case 10:return clothColors[a.pantsColor];case 12:return clothColors[a.bootsColor];case 13:return clothColors[a.robeColor];default:return 0;}}
 bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,int sample,uint16_t hue)const{
     auto found=cache.find(file);
     if(found==cache.end()){
         std::ifstream f(root+file,std::ios::binary|std::ios::ate);if(!f||f.tellg()<604||f.tellg()>8*1024*1024)return false;
         std::vector<uint8_t>b(size_t(f.tellg()));f.seekg(0);f.read((char*)b.data(),b.size());
-        if(!f||(std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4))||b[8]!=144||b[9]||b[10]||b[11]||get(b,12)!=b.size()-20||get(b,16)!=hash(b.data()+20,b.size()-20))return false;
+        if(!f||(std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4)&&std::memcmp(b.data(),"UAP3",4))||b[8]!=144||b[9]||b[10]||b[11]||get(b,12)!=b.size()-20||get(b,16)!=hash(b.data()+20,b.size()-20))return false;
         if(cache.size()>=24)cache.clear();
         found=cache.emplace(file,std::move(b)).first;
     }
     const auto&b=found->second;
     if(sample<0||sample>144||hue>3000)return false;
     uint32_t begin=get(b,20+sample*4),end=get(b,24+sample*4);if(begin>end||end>b.size()-604)return false;
-    bool extended=b[3]=='2';std::vector<uint16_t>layer(sample==144?106*(extended?198:174):96*112);
+    bool full=b[3]=='3',extended=b[3]=='2';
+    std::vector<uint16_t>layer(sample==144?(full?260*237:106*(extended?198:174)):96*112);
     if(!sparse(b,604+begin,604+end,layer))return false;
-    if(sample==144&&!extended){if(out.size()!=106*198)return false;layer.insert(layer.begin(),106*24,0);}
+    if(sample==144&&!full){
+        if(out.size()!=260*237)return false;
+        std::vector<uint16_t>expanded(260*237);int y0=extended?28:52,h=extended?198:174;
+        for(int y=0;y<h;++y)std::copy(layer.begin()+y*106,layer.begin()+(y+1)*106,expanded.begin()+(y+y0)*260+38);
+        layer=std::move(expanded);
+    }
     if(out.size()!=layer.size())return false;
     for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[i]=c;}
     return true;
 }
 bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame)const{
     if(!ready()||!a.valid()||mask>2047||onlyFrame>71)return false;
-    const size_t area=doll?106*198:96*112;int count=doll||onlyFrame>=0?1:72;out.assign(area*count,0);
+    const size_t area=doll?260*237:96*112;int count=doll||onlyFrame>=0?1:72;out.assign(area*count,0);
     std::vector<std::pair<int,uint16_t>>layers;
     layers.push_back({400+a.female,color(a,2)});
     if(!a.realClothes&&a.shoes&&!(mask&4))layers.push_back({480,color(a,12)});
@@ -129,7 +141,11 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
 }
 bool CharacterAssets::portrait(const Appearance&a,unsigned key,std::vector<uint8_t>&out)const{
     std::vector<uint16_t>d;if(!compose(a,key,d,true))return false;out.assign(76*104*4,0);
-    for(int y=0;y<104;++y)for(int x=0;x<55;++x){uint16_t c=d[(y*198/104)*106+x*106/55];size_t at=(y*76+x+10)*4;out[at]=(c>>11)*255/31;out[at+1]=(c>>6&31)*255/31;out[at+2]=(c>>1&31)*255/31;out[at+3]=(c&1)?255:0;}
+    int left=260,top=237,right=0,bottom=0;
+    for(int y=0;y<237;++y)for(int x=0;x<260;++x)if(d[y*260+x]&1){left=std::min(left,x);top=std::min(top,y);right=std::max(right,x+1);bottom=std::max(bottom,y+1);}
+    if(left>=right||top>=bottom)return false;
+    int width=right-left,height=bottom-top,w=std::min(76,std::max(1,width*104/height)),h=std::min(104,std::max(1,height*w/width));
+    for(int y=0;y<h;++y)for(int x=0;x<w;++x){uint16_t c=d[(top+y*height/h)*260+left+x*width/w];size_t at=((y+104-h)*76+x+(76-w)/2)*4;out[at]=(c>>11)*255/31;out[at+1]=(c>>6&31)*255/31;out[at+2]=(c>>1&31)*255/31;out[at+3]=(c&1)?255:0;}
     return true;
 }
 bool CharacterAssets::dolls(const Appearance&a,std::vector<uint8_t>&out)const{

@@ -25,7 +25,7 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
     gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
 }
 bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,std::string&)>&commit){
-    if(!assets.ready())return false;
+    if(!assets.ready()||!assets.fullPaperdoll())return false;
     C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
     while(aptMainLoop()){
@@ -203,9 +203,9 @@ int main(){
         }
         if(action==lab::MenuAction::Exit){quit=true;continue;}
         if(action==lab::MenuAction::NewGame){
-            if(!characterAssets.ready()){
+            if(!characterAssets.ready()||!characterAssets.fullPaperdoll()){
                 if(!available){lab::Appearance diagnostic;started=freshGame(diagnostic);continue;}
-                menu.message="FALTA LA CARPETA CHARACTER";continue;
+                menu.message="ACTUALIZA CHARACTER A V0.25";continue;
             }
             lab::Appearance created;created.enabled=true;created.realClothes=true;
             started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,std::string&message){
@@ -233,6 +233,7 @@ int main(){
             if(!updated.save(saveRoot+savePrefix+"appearance.sav",migrationError)){menu.back();menu.message=migrationError;continue;}appearance=updated;}
     }
     if(appearance.enabled){
+        if(!characterAssets.fullPaperdoll()){menu.back();menu.message="ACTUALIZA CHARACTER A V0.25";continue;}
         if(!lab::applyAppearance(characterAssets,appearance,equipmentArt,inventory.equipmentMask(),equipmentError)){
             menu.back();menu.message=equipmentError;continue;
         }
@@ -271,7 +272,7 @@ int main(){
                 pause.active=false;positionCheckpoint().suspend(now-pauseAt);pages.active=false;frames=0;
             }else if(action==lab::PauseAction::Customize){
                 auto&bag=authentic?inventory:demoInventory;
-                if(!characterAssets.ready())pause.message="FALTA LA CARPETA CHARACTER";
+                if(!characterAssets.ready()||!characterAssets.fullPaperdoll())pause.message="ACTUALIZA CHARACTER A V0.25";
                 else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,std::string&message){
                     const auto previous=appearance;
                     if(!lab::applyAppearance(characterAssets,a,equipmentArt,bag.equipmentMask(),message))return false;

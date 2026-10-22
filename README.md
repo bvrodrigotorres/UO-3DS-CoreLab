@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.24
+# UO-3DS-CoreLab v0.25
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -37,6 +37,9 @@ reorganizada, ropa inicial real y ocho ranuras de equipo persistentes.
 
 [Novedades v0.24](docs/v0.24.md): pestañas reorganizadas, túnica inicial,
 sombreros completos y botones para quitar o recuperar el último equipo.
+
+[Novedades v0.25](docs/v0.25.md): color del calzado, filas en una línea,
+paleta de pelo/barba corregida y paperdolls sin recorte fijo.
 
 ## Qué cambia respecto al prototipo anterior
 
