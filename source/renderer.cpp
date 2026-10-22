@@ -63,7 +63,7 @@ static unsigned outfitMask=~0u;
 static EquipmentCache<Outfit*>outfitCache;
 static void clearOutfits(){while(outfitCache.victim(~0u)>=0)freeOutfit(outfitCache.remove(unsigned(outfitCache.victim(~0u))));}
 static std::vector<C2D_SpriteSheet>npcSheets;
-static size_t npcBytes;
+static size_t npcBytes;static std::string npcRoot;static std::vector<NpcStyle>npcMeta;static std::vector<uint64_t>npcUsed;static uint64_t npcClock=0;static unsigned npcFrameCount=40;
 static C2D_SpriteSheet bloodSheet=nullptr;static size_t bloodBytes=0;
 static C2D_SpriteSheet corpseSheet=nullptr;static std::vector<uint8_t>corpseTypes;static std::array<std::array<int,2>,5>corpsePivots{};static size_t corpseBytes=0;
 static bool runVerified=false;
@@ -150,7 +150,7 @@ void rendererShutdown(){
     C3D_FrameSync();for(auto s:sheets)if(s)C2D_SpriteSheetFree(s);sheets.clear();
     if(avatar)C2D_SpriteSheetFree(avatar);
     clearOutfits();
-    for(auto s:npcSheets)C2D_SpriteSheetFree(s);
+    for(auto s:npcSheets)if(s)C2D_SpriteSheetFree(s);
     npcSheets.clear();if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);corpseSheet=nullptr;corpseBytes=0;
     if(bloodSheet){C2D_SpriteSheetFree(bloodSheet);}bloodSheet=nullptr;bloodBytes=0;
     C3D_TexDelete(&labelFont);C3D_TexDelete(&white);if(buffer)linearFree(buffer);
@@ -223,25 +223,45 @@ bool loadNpcAtlases(std::string&error){
         if(!s||C2D_SpriteSheetCount(s)!=40){if(s)C2D_SpriteSheetFree(s);for(auto t:next)C2D_SpriteSheetFree(t);error="Missing/invalid NPC atlas";return false;}
         auto image=C2D_SpriteSheetGetImage(s,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);usedBytes+=image.tex->size;next.push_back(s);
     }
-    for(auto s:npcSheets)C2D_SpriteSheetFree(s);
+    for(auto s:npcSheets)if(s)C2D_SpriteSheetFree(s);
     npcSheets=std::move(next);npcBytes=usedBytes;error.clear();return true;
 }
 bool loadPopulationAtlases(const Npcs&population,const std::string&root,std::string&error){
-    std::vector<C2D_SpriteSheet>next;size_t used=0;
-    for(size_t i=0;i<population.styles().size();++i){
-        const auto&meta=population.styles()[i];char name[32];std::snprintf(name,sizeof name,"pop_%02u.t3x",unsigned(i));
-        auto path=root+name;
-        auto sheet=equipmentChecksum(path,meta.checksum)?C2D_SpriteSheetLoad(path.c_str()):nullptr;
-        if(!sheet||C2D_SpriteSheetCount(sheet)!=40){
-            if(sheet)C2D_SpriteSheetFree(sheet);
-            for(auto old:next)C2D_SpriteSheetFree(old);
-            error="POBLACION: RECURSOS INVALIDOS";return false;
-        }
-        auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);
-        used+=image.tex->size;next.push_back(sheet);
+    for(size_t i=0;i<population.styles().size();++i){char name[32];std::snprintf(name,sizeof name,"pop_%02u.t3x",unsigned(i));std::ifstream f(root+name,std::ios::binary|std::ios::ate);
+        if(!f||f.tellg()!=std::streamoff(population.styles()[i].bytes)){error="POBLACION: RECURSOS INVALIDOS";return false;}}
+    C3D_FrameSync();for(auto old:npcSheets)if(old)C2D_SpriteSheetFree(old);
+    npcRoot=root;npcMeta=population.styles();npcFrameCount=population.frameCount();npcSheets.assign(npcMeta.size(),nullptr);npcUsed.assign(npcMeta.size(),0);npcBytes=0;error.clear();return true;
+}
+static void prepareNpcPages(const Npcs&npcs,const Combat*combat,const std::vector<Draw>&draws,float cameraX,float cameraY,float footZ,bool load=true){
+    if(npcMeta.empty())return;
+    std::vector<bool>needed(npcSheets.size());
+    for(const auto&d:draws){int style=-1;if(d.kind==Kind::Npc)style=npcs.all()[d.index].style;else if(d.kind==Kind::Corpse&&combat&&npcs.hasDeathFrames())style=combat->corpses[d.index].style;
+        if(style>=0&&size_t(style)<needed.size()){
+            float x=d.x,y=d.y,z=d.z;if(d.kind==Kind::Npc){const auto&n=npcs.all()[d.index];x=n.from.x+(n.position.x-n.from.x)*n.progress;y=n.from.y+(n.position.y-n.from.y)*n.progress;z=n.from.z+(n.position.z-n.from.z)*n.progress;}
+            const auto&meta=npcMeta[style];float left=200+(x-cameraX-y+cameraY)*22-meta.pivotX,top=126+(x-cameraX+y-cameraY)*22-(z-footZ)*4-meta.pivotY;
+            if(left<400&&left+meta.width>0&&top<240&&top+meta.height>0)needed[style]=true;
+        }}
+    if(!load){bool sync=false;
+        while(npcBytes>6*1024*1024||linearSpaceFree()<4*1024*1024){int victim=-1;for(size_t j=0;j<npcSheets.size();++j)if(npcSheets[j]&&!needed[j]&&(victim<0||npcUsed[j]<npcUsed[victim]))victim=int(j);if(victim<0)break;
+            if(!sync){C3D_FrameSync();sync=true;}auto image=C2D_SpriteSheetGetImage(npcSheets[victim],0);npcBytes-=image.tex->size;C2D_SpriteSheetFree(npcSheets[victim]);npcSheets[victim]=nullptr;}
+        return;
     }
-    C3D_FrameSync();for(auto old:npcSheets)C2D_SpriteSheetFree(old);
-    npcSheets=std::move(next);npcBytes=used;error.clear();return true;
+    bool cold=false;for(size_t i=0;i<needed.size();++i)if(needed[i]&&!npcSheets[i])cold=true;
+    if(cold)C3D_FrameSync();
+    for(size_t i=0;i<needed.size();++i)if(needed[i]){npcUsed[i]=++npcClock;if(npcSheets[i])continue;
+        size_t estimate=1;while(estimate<=npcMeta[i].bytes/2)estimate*=2; // Uncompressed T3X pixels plus a small header.
+        while(npcBytes+estimate>6*1024*1024||linearSpaceFree()<estimate+2*1024*1024){
+            int victim=-1;for(size_t j=0;j<npcSheets.size();++j)if(npcSheets[j]&&!needed[j]&&(victim<0||npcUsed[j]<npcUsed[victim]))victim=int(j);
+            if(victim<0)break;
+            auto image=C2D_SpriteSheetGetImage(npcSheets[victim],0);npcBytes-=image.tex->size;C2D_SpriteSheetFree(npcSheets[victim]);npcSheets[victim]=nullptr;
+        }
+        while(linearSpaceFree()<estimate+2*1024*1024){int victim=outfitCache.victim(outfitMask);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
+        if(linearSpaceFree()<estimate+2*1024*1024){textureFailure=true;continue;}
+        char name[32];std::snprintf(name,sizeof name,"pop_%02u.t3x",unsigned(i));auto path=npcRoot+name;
+        auto sheet=equipmentChecksum(path,npcMeta[i].checksum)?C2D_SpriteSheetLoad(path.c_str()):nullptr;
+        if(!sheet||C2D_SpriteSheetCount(sheet)!=npcFrameCount){if(sheet)C2D_SpriteSheetFree(sheet);textureFailure=true;continue;}
+        auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);npcBytes+=image.tex->size;npcSheets[i]=sheet;
+    }
 }
 bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
     bool combatBank=(key&4096)!=0;unsigned mask=key&2047;
@@ -354,6 +374,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         if(d.kind==Kind::Static&&(roofCutaway.hidden(w,d.index,actor,roofs)||(roofs==RoofMode::Hidden&&w.objects[d.index].z>=footZ+14)))return false;
         return !streamed||worldVisible(w,d,cameraX,cameraY,footZ,imageSizes);
     };
+    if(npcs)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ,false);
     if(authentic&&streamed){
         std::vector<unsigned char>needed(sheets.size());
         for(const auto&d:mergedDraws)if(visible(d)){
@@ -362,6 +383,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }
         prepareWorldPages(needed,w.images);
     }
+    if(npcs)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ);
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0xffffffff);
     C3D_FrameDrawOn(target);
     auto bloodBurst=[&](const Draw&draw){if(!combat)return;const auto saved=pixelMode;pixelMode=PixelMode::Translucent;
@@ -440,12 +462,15 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }else if(d.kind==Kind::Corpse){
             const auto&c=combat->corpses[d.index];auto foot=project(c.position.x,c.position.y,c.position.z);
             unsigned type=c.style>=0&&size_t(c.style)<corpseTypes.size()?corpseTypes[c.style]:255;
-            if(corpseSheet&&type<5){auto image=C2D_SpriteSheetGetImage(corpseSheet,type*8+(c.direction&7));float left=foot.x-corpsePivots[type][0],top=foot.y-corpsePivots[type][1];
+            if(npcs&&npcs->hasDeathFrames()&&c.style>=0&&size_t(c.style)<npcSheets.size()&&npcSheets[c.style]){
+                auto image=C2D_SpriteSheetGetImage(npcSheets[c.style],40+(c.direction&7));const auto&meta=npcs->styles()[c.style];float left=foot.x-meta.pivotX,top=foot.y-meta.pivotY;
+                Point p[]={{left,top},{left+image.subtex->width,top},{left+image.subtex->width,top+image.subtex->height},{left,top+image.subtex->height}};Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
+            }else if(corpseSheet&&type<5){auto image=C2D_SpriteSheetGetImage(corpseSheet,type*8+(c.direction&7));float left=foot.x-corpsePivots[type][0],top=foot.y-corpsePivots[type][1];
                 Point p[]={{left,top},{left+image.subtex->width,top},{left+image.subtex->width,top+image.subtex->height},{left,top+image.subtex->height}};Point uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);
             }else rect(foot.x-9,foot.y-3,18,5,.35f,.19f,.12f);
         }else if(d.kind==Kind::Npc){
             const auto&n=npcs->all()[d.index];
-            if((size_t)n.style>=npcSheets.size())continue;
+            if((size_t)n.style>=npcSheets.size()||!npcSheets[n.style])continue;
             float t=n.progress;
             auto foot=project(n.from.x+(n.position.x-n.from.x)*t,n.from.y+(n.position.y-n.from.y)*t,n.from.z+(n.position.z-n.from.z)*t);
             auto image=C2D_SpriteSheetGetImage(npcSheets[n.style],avatarImage(n.direction,n.moving,false,(unsigned)n.animation,40));

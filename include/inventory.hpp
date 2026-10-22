@@ -15,6 +15,7 @@ struct InventoryLayout {
 };
 struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;};
 extern const std::array<ItemDef,ItemTypes> itemDefs;
+uint32_t inventoryWorldId(const World&);
 struct ItemStack {uint16_t type=0,count=0;};
 using Bag=std::vector<ItemStack>;
 struct Chest {size_t object;Bag items;};

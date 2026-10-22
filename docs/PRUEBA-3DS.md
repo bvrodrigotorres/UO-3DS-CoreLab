@@ -133,3 +133,12 @@ puntos, o hasta llenarse si falta menos. Comprobar números amarillos al golpear
 y rojos al recibir daño, gotas, charco mortal de tres segundos y botín intacto.
 Pausar durante el efecto y comprobar que su tiempo queda detenido. Probar
 pisos superiores y paredes delante de los efectos.
+
+## v0.29: Britain ampliado
+
+Consultar [v0.29.md](v0.29.md). Añadir britain-expanded y conservar britain-large.
+Al iniciar debe ofrecer Continuar con la campaña importada, equipo, mochila y
+colores; comprobar un cofre que ya se hubiera saqueado y no se debe rellenar.
+Salir y continuar sin que se importe de nuevo. Caminar al cementerio y exteriores
+del norte/oeste, comprobar agresión, colisiones, muertes, botín y reaparición.
+Revisar mapa, puertas, pisos y la primera carga de nuevas especies desde SD.

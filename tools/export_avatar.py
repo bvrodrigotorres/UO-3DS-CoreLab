@@ -142,7 +142,7 @@ def read_animation_uop(client, body, action, files=None):
     )
 
 
-def decode_frame(blob, start, *, shared_palette=None):
+def decode_frame(blob, start, *, shared_palette=None, max_size=256):
     """Decode 256-color UOP frame with ClassicUO packed signed-10-bit RLE."""
     from PIL import Image
     data_pos = start + (512 if shared_palette is None else 0)
@@ -151,7 +151,7 @@ def decode_frame(blob, start, *, shared_palette=None):
     palette = (struct.unpack_from("<256H", blob, start)
                if shared_palette is None else shared_palette)
     cx, cy, w, h = struct.unpack_from("<hhhh", blob, data_pos)
-    if not (0 < w <= 256 and 0 < h <= 256):
+    if not (0 < w <= max_size and 0 < h <= max_size):
         raise ValueError(f"Invalid UOP frame dimensions {w}x{h}")
     pixels = bytearray(w * h * 4)
     pos = data_pos + 8

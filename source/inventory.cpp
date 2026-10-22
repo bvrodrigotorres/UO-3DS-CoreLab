@@ -14,6 +14,11 @@ uint32_t get(const std::vector<uint8_t>&b,size_t p){return uint32_t(b[p])|uint32
 bool chestArt(unsigned art){return (art>=0xE40&&art<=0xE43)||art==0xE80||art==0x9AB||art==0xE7C;}
 bool exists(const std::string&p){struct stat s;return stat(p.c_str(),&s)==0;}
 }
+uint32_t inventoryWorldId(const World&w){
+    if(w.compatibleInventory)return w.compatibleInventory;
+    std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
+    for(const auto&o:w.objects){put(key,o.art);put(key,o.x);put(key,o.y);put(key,o.z);}return hash(key);
+}
 bool ItemIcons::load(const std::string&p){
     std::ifstream f(p,std::ios::binary);std::vector<uint8_t>b(8+ItemTypes*24*24*4);
     if(!f.read(reinterpret_cast<char*>(b.data()),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UII1",4)||get(b,4)!=ItemTypes){rgba.clear();return false;}
@@ -24,7 +29,7 @@ void Inventory::init(const World&w,const std::string&p){
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
-        put(key,o.art);put(key,o.x);put(key,o.y);put(key,o.z);
+        if(!w.compatibleInventory){put(key,o.art);put(key,o.x);put(key,o.y);put(key,o.z);}
         if(chestArt(o.art)&&chests.size()<1024){
             size_t n=chests.size();
             // Finite local exploration supplies, not server loot tables.

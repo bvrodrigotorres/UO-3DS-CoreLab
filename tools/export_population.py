@@ -70,6 +70,20 @@ def spawn_requests(path,origin,side):
             rows.append(dict(type=kind,x=max(left,min(right,x))-origin[0],y=max(top,min(bottom,y))-origin[1],z=z,roam=max(0,min(120,int(node.findtext('Range')))),animal=animal,profile=profile(kind),source=node.findtext('Name'),spawner=uid,source_center=[x,y,z],bounds=[left-origin[0],top-origin[1],right-origin[0],bottom-origin[1]],original_bounds=[ax,ay,ax+width,ay+height],max_count=int(node.findtext('MaxCount')),min_delay=node.findtext('MinDelay'),max_delay=node.findtext('MaxDelay'),relative_home=node.findtext('IsHomeRangeRelative','True')=='True'))
     return rows,excluded,duplicates
 
+def creature_definition(kind,directory):
+    files={p.stem.lower():p for p in directory.rglob('*.cs')};path=files.get(kind.lower())
+    if not path:return None
+    text=path.read_text();body=re.search(r'(?:Body|BodyValue)\s*=\s*(0x[0-9A-Fa-f]+|[0-9]+)',text)
+    if not body:body=re.search(r'(?:Body|BodyValue)\s*=\s*Utility.RandomList\(\s*(0x[0-9A-Fa-f]+|[0-9]+)',text)
+    if not body:return None
+    body=int(body[1],0)
+    if body>=400:return None
+    def pair(method,default):
+        match=re.search(r'\b'+method+r'\(\s*(\d+)(?:\s*,\s*(\d+))?\s*\)',text)
+        return (int(match[1]),int(match[2] or match[1])) if match else default
+    hp=pair('SetHits',(12,12));damage=pair('SetDamage',(2,4))
+    return dict(body=body,aggressive=bool(re.search(r':\s*base\([^)]*FightMode\.Closest',text,re.S)),hits=(hp[0]+hp[1])//2,damage=list(damage),stationary=bool(re.search(r'DisallowAllMoves\s*=\s*true|override bool DisallowAllMoves.*?return true',text,re.S)))
+
 def composition_layers(body,skin,clothes,hair,hair_hue,animation,item_layer):
     # Hair remains above normal clothes; headgear must cover the scalp last.
     ordinary=[(animation(art),hue) for art,hue in clothes if item_layer(art)!=6]
@@ -90,7 +104,7 @@ def read_layer(client,body,action,direction):
     for i in range(count):
         pos=512+struct.unpack_from('<I',data,516+4*i)[0];cx,cy,w,h=struct.unpack_from('<hhhh',data,pos)
         from PIL import Image
-        image=Image.new('RGBA',(1,1)) if w==0 and h==0 else decode_frame(data,pos,shared_palette=colors)
+        image=Image.new('RGBA',(1,1)) if w==0 and h==0 else decode_frame(data,pos,shared_palette=colors,max_size=512)
         result.append((image,cx,cy))
     return result
 
@@ -98,51 +112,111 @@ def main():
     from PIL import Image,ImageOps
     p=argparse.ArgumentParser(description=__doc__)
     for key in ('client','reference','scene','out'):p.add_argument('--'+key,type=Path,required=True)
+    p.add_argument('--creatures',type=Path);p.add_argument('--regions',type=Path)
     a=p.parse_args()
     if a.out.exists():raise FileExistsError(a.out)
     raw=a.scene.read_bytes();h=struct.unpack_from('<4sHHHHIiiHHhH',raw);rows,excluded,duplicates=spawn_requests(a.reference,(h[6],h[7]),h[2])
+    aliases={}
+    for line in (a.client/'Body.def').read_text().splitlines():
+        m=re.match(r'\s*(\d+)\s+\{(\d+)\}\s+(\d+)',line)
+        if m:aliases[int(m[1])]=(int(m[2]),int(m[3]))
+    creatures={};aquatic=[]
+    if a.creatures:
+        kept=[]
+        for row in rows:
+            kind=row['type'].lower()
+            if kind in ('seaserpent','dolphin'):aquatic.append(row);continue
+            definition=creature_definition(kind,a.creatures)
+            if definition:
+                definition['source_body']=definition['body'];definition['hue']=0
+                if definition['body'] in aliases:definition['body'],definition['hue']=aliases[definition['body']]
+                creatures[kind]=definition;row.update(animal=True,profile=kind,aggressive=definition['aggressive'],hits=definition['hits'],damage=definition['damage'],stationary=definition['stationary'])
+            kept.append(row)
+        rows=kept
+    guards=[]
+    if a.regions:
+        for facet in ET.parse(a.regions).getroot():
+            if facet.attrib.get('name')!='Felucca':continue
+            for region in facet.iter('region'):
+                if region.attrib.get('name') in ('Britain','Blackthorn Castle'):
+                    for rect in region.findall('rect'):guards.append([int(rect.attrib[n]) for n in ('x','y','width','height')])
     names=sorted(set(r['profile'] for r in rows));a.out.mkdir(parents=True)
+    (a.out/'guarded.json').write_text(json.dumps(guards))
     tile=(a.client/'tiledata.mul').read_bytes();n=8;start=512*(4+32*(n+22));stride=4+32*(n+33)
     def anim(art):return struct.unpack_from('<H',tile,start+(art//32)*stride+4+(art%32)*(n+33)+n+6)[0]
     def item_layer(art):return tile[start+(art//32)*stride+4+(art%32)*(n+33)+n+1]
     hues=(a.client/'hues.mul').read_bytes();cache={};styles=[]
     for style,name in enumerate(names):
-        animal=name in ANIMALS
-        if animal:body,skin,clothes,hair,hairhue=ANIMALS[name],0,[],None,0
+        animal=name in ANIMALS or name in creatures
+        if animal:body,skin,clothes,hair,hairhue=(creatures[name]['body'] if name in creatures else ANIMALS[name]),creatures[name].get('hue',0) if name in creatures else 0,[],None,0
         else:body,skin,clothes,hair,hairhue=PROFILES[name]
         layers=composition_layers(body,skin,clothes,hair,hairhue,anim,item_layer)
         idle=1 if body<200 else 2 if body<400 else 4;frames=[]
         for direction,mirror in DIRECTION_MAP:
             for phase in range(5):
-                action=idle if phase==0 else 0;canvas=Image.new('RGBA',(128,144))
+                action=idle if phase==0 else 0;canvas=Image.new('RGBA',(192,192))
                 for graphic,hue in layers:
                     key=(graphic,action,direction)
-                    if key not in cache:cache[key]=read_layer(a.client,graphic,action,direction)
+                    if key not in cache:
+                        try:cache[key]=read_layer(a.client,graphic,action,direction)
+                        except ValueError:
+                            if not a.creatures or not animal or action!=0:raise
+                            cache[key]=read_layer(a.client,graphic,idle,direction)
                     seq=cache[key];image,cx,cy=seq[0 if phase==0 else (phase-1)*len(seq)//4]
                     if hue:image=hue_image(image,hues,hue&0x3FFF)
-                    canvas.alpha_composite(image,(64-cx,139-image.height-cy))
+                    canvas.alpha_composite(image,(96-cx,187-image.height-cy))
+                if mirror:canvas=ImageOps.mirror(canvas)
+                frames.append(canvas)
+        if a.creatures:
+            for direction,mirror in DIRECTION_MAP:
+                canvas=Image.new('RGBA',(192,192))
+                for graphic,hue in layers:
+                    action=2 if body<200 else 8 if body<400 else 21
+                    try:seq=read_layer(a.client,graphic,action,direction)
+                    except ValueError:
+                        if graphic==body:raise
+                        continue
+                    image,cx,cy=seq[-1]
+                    death_scale=min(1,124/image.width,100/image.height)
+                    if death_scale<1:image=image.resize((max(1,round(image.width*death_scale)),max(1,round(image.height*death_scale))),Image.Resampling.NEAREST);cx=round(cx*death_scale);cy=round(cy*death_scale)
+                    if hue:image=hue_image(image,hues,hue&0x3FFF)
+                    canvas.alpha_composite(image,(96-cx,187-image.height-cy))
                 if mirror:canvas=ImageOps.mirror(canvas)
                 frames.append(canvas)
         boxes=[im.getbbox() for im in frames];bounds=(min(b[0] for b in boxes),min(b[1] for b in boxes),max(b[2] for b in boxes),max(b[3] for b in boxes))
         folder=a.out/f'style{style:02d}';folder.mkdir()
-        for i,im in enumerate(frames):im.crop(bounds).save(folder/f'{i:02d}.png')
-        (folder/'npc.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(40)))
+        scale=min(1,128/(bounds[2]-bounds[0]),144/(bounds[3]-bounds[1]));size=(max(1,round((bounds[2]-bounds[0])*scale)),max(1,round((bounds[3]-bounds[1])*scale)))
+        for i,im in enumerate(frames):im.crop(bounds).resize(size,Image.Resampling.NEAREST).save(folder/f'{i:02d}.png')
+        (folder/'npc.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(len(frames))))
         target=(a.out/f'pop_{style:02d}.t3x').resolve()
         subprocess.run([shutil.which('tex3ds') or '/opt/devkitpro/tools/bin/tex3ds','-i','npc.t3s','-o',str(target)],cwd=folder,check=True)
         # Mirroring 128-wide canvas changes the 64 anchor by one pixel, as in
         # the legacy client mirroring convention; the common footprint is fixed.
-        styles.append(dict(name=name,body=body,pivot=[64-bounds[0],139-bounds[1]],size=[bounds[2]-bounds[0],bounds[3]-bounds[1]],bytes=target.stat().st_size,checksum=fnv(target.read_bytes()),layers=layers))
+        styles.append(dict(name=name,body=body,pivot=[round((96-bounds[0])*scale),round((187-bounds[1])*scale)],size=list(size),scale=scale,frames=len(frames),bytes=target.stat().st_size,checksum=fnv(target.read_bytes()),layers=layers))
     for row in rows:row['style']=names.index(row['profile'])
     (a.out/'requests.json').write_text(json.dumps(rows,indent=2))
     with (a.out/'requests.bin').open('wb') as f:
-        for row in rows:f.write(struct.pack('<HHhHHH32s',row['x'],row['y'],row['z'],row['style'],row['roam'],int(row['animal']),row['type'].upper().encode('ascii')[:31].ljust(32,b'\0'))+struct.pack('<4H',*row['bounds']))
-    report=dict(count=len(rows),humans=sum(not r['animal'] for r in rows),animals=sum(r['animal'] for r in rows),styles=styles,excluded_objects=excluded,duplicate_spawners=duplicates,source_sha256=hashlib.sha256(a.reference.read_bytes()).hexdigest(),source_revision='ServUO pub57 d76bf4443cf76d081ddaf8f57c87ff33749256af',scene_fnv=fnv(raw))
+        for row in rows:f.write(struct.pack('<HHhHHH32s',row['x'],row['y'],row['z'],row['style'],row['roam'],int(row['animal'])|(2 if row.get('aggressive') else 0)|(4 if row.get('stationary') else 0),row['type'].upper().encode('ascii')[:31].ljust(32,b'\0'))+struct.pack('<4H',*row['bounds']))
+    report=dict(creatures=creatures,aquatic_excluded=[r['type'] for r in aquatic],guarded=guards,count=len(rows),humans=sum(not r['animal'] for r in rows),animals=sum(r['animal'] for r in rows),styles=styles,excluded_objects=excluded,duplicate_spawners=duplicates,source_sha256=hashlib.sha256(a.reference.read_bytes()).hexdigest(),source_revision='ServUO pub57 d76bf4443cf76d081ddaf8f57c87ff33749256af',scene_fnv=fnv(raw))
     (a.out/'manifest.json').write_text(json.dumps(report,indent=2));print(json.dumps({k:v for k,v in report.items() if k!='styles'},indent=2))
-    placer=a.out/'place-population'
-    root=Path(__file__).resolve().parents[1]
+    finalize_population(a.out,a.scene,bool(a.creatures))
+
+def finalize_population(out,scene,extended=True):
+    rows=json.loads((out/'requests.json').read_text());report=json.loads((out/'manifest.json').read_text());styles=report['styles'];raw=scene.read_bytes()
+    with (out/'requests.bin').open('wb') as f:
+        for row in rows:f.write(struct.pack('<HHhHHH32s',row['x'],row['y'],row['z'],row['style'],row['roam'],int(row['animal'])|(2 if row.get('aggressive') else 0)|(4 if row.get('stationary') else 0),row['type'].upper().encode('ascii')[:31].ljust(32,b'\0'))+struct.pack('<4H',*row['bounds']))
+    placer=out/'place-population';root=Path(__file__).resolve().parents[1]
     subprocess.run(['c++','-std=c++17','-I'+str(root/'include'),str(root/'tools/place_population.cpp'),str(root/'source/core.cpp'),str(root/'source/scene_io.cpp'),str(root/'source/npcs.cpp'),str(root/'source/doors.cpp'),'-o',str(placer.resolve())],check=True)
-    placed=a.out/'placed.bin'
-    subprocess.run([str(placer.resolve()),str(a.scene.resolve()),str((a.out/'requests.bin').resolve()),str(placed.resolve())],check=True)
-    payload=b''.join(struct.pack('<hhHHII',*s['pivot'],*s['size'],s['bytes'],s['checksum']) for s in styles)+placed.read_bytes()
-    (a.out/'population.bin').write_bytes(struct.pack('<4sHHII',b'UNP1',len(rows),len(styles),fnv(raw),fnv(payload))+payload)
+    placed=out/'placed.bin';args=[str(placer.resolve()),str(scene.resolve()),str((out/'requests.bin').resolve()),str(placed.resolve())]
+    if extended:args.append(str((out/'guarded.json').resolve()))
+    subprocess.run(args,check=True)
+    if extended:
+        indices=[int(i) for i in Path(str(placed)+'.indices').read_text().split()];accepted=set(indices)
+        report['unplaced']=report.get('unplaced',[])+[row for i,row in enumerate(rows) if i not in accepted];rows=[rows[i] for i in indices]
+    placed_raw=placed.read_bytes()
+    if extended:placed_raw=b''.join(placed_raw[i*44:(i+1)*44]+struct.pack('<4H',row.get('hits',30 if row['type'].lower()=='dog' else 20 if row['type'].lower()=='cat' else 18 if row['type'].lower()=='rat' else 12),*row.get('damage',[2,4]),60 if row.get('aggressive') else 20) for i,row in enumerate(rows))
+    payload=b''.join(struct.pack('<hhHHII',*s['pivot'],*s['size'],s['bytes'],s['checksum']) for s in styles)+placed_raw
+    (out/'population.bin').write_bytes(struct.pack('<4sHHII',b'UNP2' if extended else b'UNP1',len(rows),len(styles),fnv(raw),fnv(payload))+payload)
+    report.update(count=len(rows),humans=sum(not row['animal'] for row in rows),animals=sum(row['animal'] for row in rows),hostile=sum(bool(row.get('aggressive')) for row in rows))
+    (out/'manifest.json').write_text(json.dumps(report,indent=2));(out/'requests.json').write_text(json.dumps(rows,indent=2));print({k:report[k] for k in ('count','humans','animals','hostile')})
 if __name__=='__main__':main()

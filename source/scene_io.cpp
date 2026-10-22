@@ -17,11 +17,12 @@ bool loadWorld(const std::string&path,World&out,std::string&error){
     World w;w.width=read(2);w.height=read(2);w.images=read(2);unsigned count=read(4);
     w.originX=(int32_t)read(4);w.originY=(int32_t)read(4);
     w.startX=read(2);w.startY=read(2);w.startZ=(int16_t)read(2);unsigned reserved=read(2);
-    if(!ok||w.width<1||w.width>256||w.height<1||w.height>256||w.images>8192||count>131072||reserved||!w.contains(w.startX,w.startY)){
+    if(!ok||w.width<1||w.width>512||w.height<1||w.height>512||w.images>32768||count>131072||reserved||!w.contains(w.startX,w.startY)){
         error="Scene limits or spawn invalid";return false;
     }
     size_t expected=32+(w.width+1)*(w.height+1)+w.width*w.height*13+count*26;
     if(expected!=b.size()){error="Scene length mismatch";return false;}
+    w.vertices.reserve((w.width+1)*(w.height+1));w.land.reserve(w.width*w.height);w.objects.reserve(count);
     for(int i=0;i<(w.width+1)*(w.height+1);++i)w.vertices.push_back((int8_t)read(1));
     auto imageOK=[&](unsigned n){return n==NoImage||n<(unsigned)w.images;};
     for(int i=0;i<w.width*w.height;++i){

@@ -205,8 +205,8 @@ def main():
     p.add_argument('--spawn-y', type=int, default=1612)
     p.add_argument('--spawn-z', type=int, default=20)
     args = p.parse_args()
-    if not 1 <= args.side <= 256:
-        p.error('--side must be 1..256')
+    if not 1 <= args.side <= 512:
+        p.error('--side must be 1..512')
     if not args.x <= args.spawn_x < args.x+args.side or not args.y <= args.spawn_y < args.y+args.side or not -127 <= args.spawn_z <= 127:
         p.error('Spawn outside scene or invalid height')
     out = args.out.resolve()
@@ -235,18 +235,21 @@ def main():
     Files.set_directory(str(client))
     if not Art.initialize():
         raise ValueError('Cannot initialize Ultima SDK Art')
-    palette, images, identical = {}, [], {}
+    palette, images, identical = {}, [], {};missing_lands=set()
     texture_files = (find(client, 'texidx.mul', False), find(client, 'texmaps.mul', False))
     def picture(kind, graphic):
         key = (kind, graphic)
         if key in palette:
             return palette[key]
-        if len(images) >= 2048:
-            raise ValueError('More than 2048 source graphics; choose a smaller region')
+        if len(images) >= 8192:
+            raise ValueError('More than 8192 source graphics; choose a smaller region')
         if kind == 'static':
             image = static_image(Art, graphic)
         elif kind == 'land':
-            image = land_image(Art, graphic)
+            try:image = land_image(Art, graphic)
+            except ValueError:
+                from PIL import Image
+                image=Image.new('RGBA',(44,44),(0,0,0,255));missing_lands.add(graphic)
         else:
             idx, tex = texture_files
             if not idx or not tex:
@@ -269,7 +272,7 @@ def main():
         palette[key] = len(images);identical[digest]=len(images)
         images.append(image)
         return palette[key]
-    cells = []
+    cells = [];terrain_fallbacks=set()
     for y in range(args.side):
         for x in range(args.side):
             art, z = grid[y][x]
@@ -277,7 +280,10 @@ def main():
             corners = (z, grid[y][x+1][1], grid[y+1][x+1][1], grid[y+1][x][1])
             slope = len(set(corners)) > 1
             mode = int(slope and texid > 0)
-            image = NONE if art == 2 else picture('texture' if mode else 'land', texid if mode else art)
+            try:image = NONE if art == 2 else picture('texture' if mode else 'land', texid if mode else art)
+            except ValueError:
+                if not mode:raise
+                terrain_fallbacks.add((art,texid));mode=0;image=picture('land',art)
             cells.append(LAND.pack(art, image, flags, mode))
     objects = []
     for order, (x, y, z, art, hue) in enumerate(rows):
@@ -306,7 +312,7 @@ def main():
             while len(packed)%32:packed.append(Image.new('RGBA',(1,1)))
         for old in permutation[group:group+8]:remap[old]=len(packed);packed.append(images[old])
     images=packed
-    if len(images)>8192:raise ValueError('Paged image limit exceeded')
+    if len(images)>32768:raise ValueError('Paged image limit exceeded')
     next_cells=[]
     for cell in cells:
         values=list(LAND.unpack(cell));values[1]=remap.get(values[1],NONE);next_cells.append(LAND.pack(*values))
@@ -344,7 +350,7 @@ def main():
         for byte in raw:scene_hash=((scene_hash^byte)*16777619)&0xffffffff
         (out/'doors.bin').write_bytes(struct.pack('<4sHHII',b'UOD1',1,len(door_records),base_count,scene_hash)+b''.join(door_records))
         (out/'decoration_manifest.json').write_text(json.dumps(decoration,indent=2)+'\n')
-    report = dict(origin=[args.x, args.y], side=args.side, spawn=[args.spawn_x, args.spawn_y, args.spawn_z], objects=len(rows), images=len(images), roofs=sum(bool(data[r[3]][0] & 0x10000000) for r in rows), hued_objects=sum(r[4] != 0 for r in rows), sha256=hashlib.sha256(raw).hexdigest(), limitations=['Hues retained but not rendered in v0.1', 'Dynamic objects and multis not included', 'Experimental height ceiling, not full CrossUO roof connectivity'], source_files={name:hashlib.sha256(find(client,name).read_bytes()).hexdigest() for name in ['tiledata.mul','staidx0.mul']})
+    report = dict(missing_land_graphics=sorted(missing_lands),terrain_fallbacks=sorted(terrain_fallbacks),origin=[args.x, args.y], side=args.side, spawn=[args.spawn_x, args.spawn_y, args.spawn_z], objects=len(rows), images=len(images), roofs=sum(bool(data[r[3]][0] & 0x10000000) for r in rows), hued_objects=sum(r[4] != 0 for r in rows), sha256=hashlib.sha256(raw).hexdigest(), limitations=['Hues retained but not rendered in v0.1', 'Dynamic objects and multis not included', 'Experimental height ceiling, not full CrossUO roof connectivity'], source_files={name:hashlib.sha256(find(client,name).read_bytes()).hexdigest() for name in ['tiledata.mul','staidx0.mul']})
     if decoration:
         report['base_objects']=base_count
         report['server_decoration']=len(decoration['placements'])

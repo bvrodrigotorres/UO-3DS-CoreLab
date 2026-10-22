@@ -11,7 +11,7 @@ uint32_t hash(const uint8_t*p,size_t n){uint32_t h=2166136261;while(n--)h=(h^*p+
 uint32_t get(const uint8_t*p){return uint32_t(p[0])|uint32_t(p[1])<<8|uint32_t(p[2])<<16|uint32_t(p[3])<<24;}
 void put(uint8_t*p,uint32_t n){for(int i=0;i<4;++i)p[i]=uint8_t(n>>(8*i));}
 int distance(const Actor&a,const Actor&b){return std::max(std::abs(a.x-b.x),std::abs(a.y-b.y));}
-int maximum(const Npc&n){return n.name.find("dog")!=std::string::npos?30:n.name.find("cat")!=std::string::npos?20:n.name.find("rat")!=std::string::npos?18:12;}
+int maximum(const Npc&n){if(n.maximumHits>0)return n.maximumHits;return n.name.find("dog")!=std::string::npos?30:n.name.find("cat")!=std::string::npos?20:n.name.find("rat")!=std::string::npos?18:12;}
 }
 bool meleeReach(const World&w,const Actor&a,const Actor&b){
     if(std::abs(a.z-b.z)>8||distance(a,b)>1||!w.contains(a.x,a.y)||!w.contains(b.x,b.y))return false;
@@ -52,7 +52,7 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     if(pool==blood.end())pool=std::max_element(blood.begin(),blood.end(),[](const BloodPool&a,const BloodPool&b){return a.age<b.age;});
     *pool={true,npcs.all()[index].position,0,unsigned(roll(0,6))};
     auto&n=npcs.combatants()[index];n.alive=false;n.hostile=false;n.moving=false;n.progress=1;n.from=n.position;
-    auto&v=mob[index];v.hits=0;v.respawn=20;
+    auto&v=mob[index];v.hits=0;v.respawn=float(n.respawnSeconds);
     auto slot=std::find_if(corpses.begin(),corpses.end(),[](const Corpse&c){return !c.active;});
     if(slot==corpses.end())slot=std::min_element(corpses.begin(),corpses.end(),[](const Corpse&a,const Corpse&b){return a.decay<b.decay;});
     inv.closeExternal(&slot->loot);*slot=Corpse{};slot->active=true;slot->position=n.position;slot->style=n.style;slot->direction=n.direction;slot->decay=90;slot->name=n.name;
@@ -89,8 +89,8 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         }
     }
     for(size_t i=0;i<mob.size();++i){auto&n=npcs.combatants()[i];auto&v=mob[i];
-        if(!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
-        v.cooldown=1.25f;int damage=roll(n.name.find("dog")!=std::string::npos?4:2,n.name.find("dog")!=std::string::npos?7:4);
+        if((n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
+        v.cooldown=1.25f;int damage=roll(n.meleeMin?n.meleeMin:n.name.find("dog")!=std::string::npos?4:2,n.meleeMax?n.meleeMax:n.name.find("dog")!=std::string::npos?7:4);
         damage=std::max(1,damage*(100-std::max(0,std::min(70,status.resistances[0])))/100);
         damage=std::min(status.hits,damage);status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){

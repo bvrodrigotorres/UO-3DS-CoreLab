@@ -7,6 +7,7 @@
 #include "combat.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
+#include "region_migration.hpp"
 #include <3ds.h>
 #include <cstdio>
 #include <cmath>
@@ -91,13 +92,16 @@ int main(){
     startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
     const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
-    const std::string worldRoot=std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
+    const std::string worldRoot=std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
     std::string error;bool available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
+    std::string migrationMessage;if(available&&worldRoot==baseRoot+"britain-expanded/")lab::migrateRegion(baseRoot+"britain-large/",worldRoot,privateWorld,migrationMessage);
     if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);
-    const lab::World canonicalPrivate=privateWorld;
-    lab::World legacyPrivate=privateWorld;lab::Doors doors;std::string doorError;
+    const lab::World canonicalPrivate=lab::positionSnapshot(privateWorld);
+    lab::World legacyPrivate;lab::Doors doors;std::string doorError;
     bool hasDoors=available&&doors.load(worldRoot+"doors.bin",worldRoot+"scene.bin",privateWorld,doorError);
-    if(hasDoors){legacyPrivate.objects.resize(doors.baseObjects);legacyPrivate.index();}
+    if(hasDoors)legacyPrivate=lab::positionSnapshot(privateWorld,doors.baseObjects);
+    privateWorld.compatiblePosition=canonicalPrivate.compatiblePosition;privateWorld.compatibleInventory=lab::inventoryWorldId(privateWorld);
+
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
     lab::TouchPages pages;lab::Journal journal;std::string journalError;
@@ -132,7 +136,7 @@ int main(){
     }
     if(hasNpcs&&npcs.hasPopulation())npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
     if(hasNpcs)npcs.reset(privateWorld,actor);
-    lab::Inventory inventory;inventory.init(canonicalPrivate,saveRoot+savePrefix+"inventory-private.sav");
+    lab::Inventory inventory;inventory.init(privateWorld,saveRoot+savePrefix+"inventory-private.sav");
     lab::Inventory demoInventory;demoInventory.init(demo,saveRoot+savePrefix+"inventory-demo.sav");
     lab::ItemIcons itemIcons;itemIcons.load("sdmc:/3ds/UO-3DS-CoreLab/items.bin");
     startupFrame(nullptr,false,"MOCHILA Y EQUIPAMIENTO",4);
@@ -143,9 +147,9 @@ int main(){
     lab::Appearance appearance;
     bool appearanceOk=appearance.load(saveRoot+savePrefix+"appearance.sav");
     lab::StatusArt statusArt;statusArt.load(baseRoot+"status.bin");
-    std::string combatArtError;if(hasNpcs&&npcs.hasPopulation()){lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);std::string bloodError;if(!lab::loadBloodArt(baseRoot,bloodError))combatArtError=bloodError;}
+    std::string combatArtError;if(hasNpcs&&npcs.hasPopulation()){if(!npcs.hasDeathFrames())lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);std::string bloodError;if(!lab::loadBloodArt(baseRoot,bloodError))combatArtError=bloodError;}
     startupFrame(nullptr,false,"PREPARADO",5);
-    lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");
+    lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");menu.message=migrationMessage;
     lab::Actor probe;std::string probeMessage;
     bool positionSaved=lab::loadPosition(positionPath(),savedWorld(),probe,probeMessage);
     if(!positionSaved&&authentic&&hasDoors)positionSaved=lab::loadPosition(positionPath(),legacyPrivate,probe,probeMessage);
@@ -165,7 +169,7 @@ int main(){
             menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
         }
         if(available){
-            freshPrivate.init(canonicalPrivate,saveRoot+prefix+"inventory-private.sav");
+            freshPrivate.init(privateWorld,saveRoot+prefix+"inventory-private.sav");
             freshPrivate.initialDress(created.shirt,created.pants,created.shoes,created.robe);freshPrivate.addAccessories();
             if(!freshPrivate.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-private.sav",canonicalPrivate,{canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},error)){
                 menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
@@ -174,7 +178,7 @@ int main(){
         if(!created.save(saveRoot+prefix+"appearance.sav",error)){menu.message=error;return false;}
         if(!campaign.commit(generation,error)){menu.message=error;return false;}
         appearance=created;savePrefix=prefix;inventory=std::move(freshPrivate);demoInventory=std::move(freshDemo);
-        privateWorld=canonicalPrivate;
+        if(hasDoors)doors.reset(privateWorld);
         if(available)hasDoors=doors.load(saveRoot+"doors.bin",saveRoot+"scene.bin",privateWorld,doorError);
         actor={w->startX,w->startY,w->startZ};alignCamera();lab::invalidateRenderList();
         checkpoints[0].baseline({demo.startX,demo.startY,demo.startZ},osGetTime());
@@ -378,7 +382,7 @@ int main(){
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){
-            lab::HudInfo hud{authentic?(w->width>32?"BRITAIN 256X256":"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
+            lab::HudInfo hud{authentic?(w->width>32?"BRITAIN "+std::to_string(w->width)+"X"+std::to_string(w->height):"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};
             std::snprintf(line,sizeof(line),"XY %d,%d   Z %d | %s",actor.x+w->originX,actor.y+w->originY,actor.z,blocked);add();
@@ -391,7 +395,7 @@ int main(){
                 std::snprintf(line,sizeof(line),"HEAP USED %.2F MIB",heap.uordblks/1048576.f);add();
                 std::snprintf(line,sizeof(line),"HEAP REUSABLE %.2F MIB",heap.fordblks/1048576.f);add();
                 std::snprintf(line,sizeof(line),"RUN ART: %s",lab::hasRunAnimation()?"ACTION 2 VERIFIED":"UNVERIFIED (WALK)");add();
-                if(authentic&&hasDoors){std::snprintf(line,sizeof(line),"DECOR %lu | DOORS %lu",(unsigned long)(canonicalPrivate.objects.size()-doors.baseObjects-doors.count()),(unsigned long)doors.count());add();}
+                if(authentic&&hasDoors){std::snprintf(line,sizeof(line),"DECOR %lu | DOORS %lu",(unsigned long)(privateWorld.objects.size()-doors.baseObjects-doors.count()),(unsigned long)doors.count());add();}
                 else hud.lines.emplace_back("");
 
             }

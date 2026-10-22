@@ -30,6 +30,9 @@ bool Doors::load(const std::string&path,const std::string&scene,const World&w,st
     for(size_t i=0;i<next.size();++i)if(next[i].pair!=65535&&next[next[i].pair].pair!=i){error="Invalid paired doors";return false;}
     entries=std::move(next);baseObjects=base;error.clear();return true;
 }
+void Doors::reset(World&w){
+    for(auto&d:entries){int x=w.objects[d.index].x,y=w.objects[d.index].y;w.objects[d.index]=d.closed;w.moved(d.index,x,y);d.open=d.opening=false;d.elapsed=0;}
+}
 bool Doors::tryOpen(const Actor&a,int dx,int dy){
     bool pending=false;
     for(auto&d:entries){

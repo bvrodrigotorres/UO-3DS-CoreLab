@@ -11,6 +11,7 @@ class Doors {
 public:
     unsigned baseObjects=0;
     bool load(const std::string&,const std::string&scene,const World&,std::string&);
+    void reset(World&);
     bool tryOpen(const Actor&,int dx,int dy);
     bool update(World&,float dt,const std::vector<Actor>&occupants={});
     size_t count()const{return entries.size();}

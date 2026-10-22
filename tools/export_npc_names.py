@@ -5,12 +5,18 @@ import argparse,json,re,struct,xml.etree.ElementTree as ET
 from pathlib import Path
 from export_journal import fnv
 
-def describe(kind,reference):
-    files={p.stem.lower():p for p in reference.glob('*.cs')}
+def class_files(reference):
+    files={}
+    for path in reference.rglob('*.cs'):
+        for kind in re.findall(r'\bclass\s+(\w+)',path.read_text(errors='replace')):files.setdefault(kind.lower(),path)
+    return files
+
+def describe(kind,reference,files=None):
+    if files is None:files=class_files(reference)
     visited=set();scope='';base=kind;protected=None;direct=''
     while base.lower() not in ('mobile','basecreature'):
         if base.lower() in visited or base.lower() not in files:raise ValueError('Missing/cyclic NPC class '+base)
-        visited.add(base.lower());raw=files[base.lower()].read_text()
+        visited.add(base.lower());raw=files[base.lower()].read_text(errors='replace')
         match=re.search(r'class\s+'+re.escape(base)+r'\s*:\s*(\w+)',raw,re.I)
         if not match:raise ValueError('Missing class declaration '+base)
         code=raw[match.start():];next_class=re.search(r'\n\s*public\s+(?:abstract\s+)?class\s+',code[match.end()-match.start():])
@@ -32,12 +38,12 @@ def describe(kind,reference):
 
 def generate(requests,reference,hues,scene,population):
     pools={n.attrib['type']:[x.strip() for x in (n.text or '').split(',') if x.strip()] for n in ET.parse(reference/'names.xml').getroot().findall('namelist')}
-    records=[];report=[]
+    records=[];report=[];files=class_files(reference)
     for i,row in enumerate(requests):
-        name,title,protected=describe(row['type'],reference)
+        name,title,protected=describe(row['type'],reference,files)
         female=row['profile'] in ('female','tailor','Sarakki','Verity')
         if female:title=title.replace('guildmaster','guildmistress')
-        if row['animal']:title='';name='a '+row['type'].lower()
+        if row['animal']:title='';name=name or 'a '+re.sub(r'(?<!^)(?=[A-Z])',' ',row['type']).lower()
         elif not name:
             female=row['profile'] in ('female','tailor','Sarakki','Verity');pool=pools['female' if female else 'male']
             name=pool[fnv((row['spawner']+row['type']+str(i)).encode())%len(pool)]

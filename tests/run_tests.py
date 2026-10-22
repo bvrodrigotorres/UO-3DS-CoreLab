@@ -93,6 +93,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/large_world_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/exploration.cpp'),str(ROOT/'source/journal.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
+    def test_expanded_region_and_import(self):
+        binary=Path(self.temp.name)/'region29_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/region29_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),str(ROOT/'source/doors.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/exploration.cpp'),str(ROOT/'source/journal.cpp'),str(ROOT/'source/region_migration.cpp'),str(ROOT/'source/startup.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/combat.cpp'),str(ROOT/'source/npcs.cpp'),'-o',str(binary)],check=True)
+
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_character_pixel_depth(self):
         binary=Path(self.temp.name)/'character_depth_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/character_depth_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
@@ -141,6 +147,21 @@ class SceneTests(unittest.TestCase):
             self.assertEqual(subprocess.run([str(self.binary),str(new)],capture_output=True).returncode,2)
             new.write_bytes(raw[:32]+bytes([1])+raw[33:])
             with self.assertRaises(ValueError):export(old,new)
+
+    def test_creature_constructor_rules(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'tools'))
+        from export_population import creature_definition
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'Cow.cs').write_text('class Cow : BaseCreature { Cow() : base(AIType.AI_Animal, FightMode.Aggressor, 10) { Body = Utility.RandomList(216,231); SetHits(18); SetDamage(1,4); if (rare) FightMode = FightMode.Closest; } }')
+            cow=creature_definition('Cow',root)
+            self.assertFalse(cow['aggressive'])
+            self.assertEqual((cow['body'],cow['hits'],cow['damage']),(216,18,[1,4]))
+            (root/'Orc.cs').write_text('class Orc : BaseCreature { Orc() : base(AIType.AI_Melee, FightMode.Closest, 10) { Body = 17; SetHits(58,72); SetDamage(5,7); } public override bool DisallowAllMoves { get { return true; } } }')
+            orc=creature_definition('orc',root)
+            self.assertTrue(orc['aggressive'] and orc['stationary'])
+            self.assertEqual((orc['body'],orc['hits']),(17,65))
 
     def test_spawner_identity_and_rectangles(self):
         import sys

@@ -8,15 +8,19 @@
 #include <sys/stat.h>
 namespace lab {
 static uint32_t hashBytes(const unsigned char*p,size_t n){uint32_t h=2166136261u;for(size_t i=0;i<n;++i)h=(h^p[i])*16777619u;return h;}
-static uint32_t worldId(const World&w){
+static uint32_t worldId(const World&w,size_t limit=~size_t(0)){
     if(w.compatiblePosition)return w.compatiblePosition;
     uint32_t h=2166136261u;
     auto add=[&](uint64_t v){for(int i=0;i<8;++i){h=(h^(v&255))*16777619u;v>>=8;}};
     add(w.width);add(w.height);add(w.originX);add(w.originY);
     for(int z:w.vertices)add(z);
     for(const auto&l:w.land){add(l.art);add(l.flags);}
-    for(const auto&o:w.objects){add(o.art);add(o.x);add(o.y);add(o.z);add(o.height);add(o.flags);}
+    for(size_t i=0;i<std::min(limit,w.objects.size());++i){const auto&o=w.objects[i];add(o.art);add(o.x);add(o.y);add(o.z);add(o.height);add(o.flags);}
     return h;
+}
+World positionSnapshot(const World&w,size_t objects){
+    World snapshot;snapshot.width=w.width;snapshot.height=w.height;snapshot.originX=w.originX;snapshot.originY=w.originY;snapshot.startX=w.startX;snapshot.startY=w.startY;snapshot.startZ=w.startZ;
+    snapshot.compatiblePosition=worldId(w,objects);return snapshot;
 }
 static void put(unsigned char*p,uint32_t n){for(int i=0;i<4;++i)p[i]=(n>>(i*8))&255;}
 static uint32_t get(const unsigned char*p){return uint32_t(p[0])|uint32_t(p[1])<<8|uint32_t(p[2])<<16|uint32_t(p[3])<<24;}
