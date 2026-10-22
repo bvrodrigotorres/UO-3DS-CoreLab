@@ -24,13 +24,14 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
     GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
     gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
 }
-bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,std::string&)>&commit){
+bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,const std::array<int,8>&,std::string&)>&commit,const lab::Inventory*owned=nullptr){
     if(!assets.ready()||!assets.fullPaperdoll())return false;
-    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
+    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(owned)editor.useWardrobe(*owned);if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
     while(aptMainLoop()){
         if(changed){
             if(fresh&&editor.draft.realClothes){lab::Inventory initial;initial.initialDress(editor.draft.shirt,editor.draft.pants,editor.draft.shoes,editor.draft.robe);equipment=initial.equipmentMask();}
+            if(editor.wardrobe)equipment=editor.equipment;
             unsigned mask=equipment;editor.equipment=equipment;
             valid=assets.compose(editor.draft,mask,doll,true)&&assets.compose(editor.draft,mask,sprite,false,editor.direction*5);
             if(!valid)editor.message="FALTAN ARCHIVOS CHARACTER";
@@ -70,7 +71,7 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
             if(!valid||!editor.draft.valid()){editor.message="REVISA EL NOMBRE Y LOS RECURSOS";continue;}
             lab::drawLoading(gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr),"GUARDANDO TU PERSONAJE",4);
             auto fb=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);GSPGPU_FlushDataCache(fb,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
-            if(commit(editor.draft,editor.message))return true;
+            if(commit(editor.draft,editor.outfit,editor.message))return true;
         }
     }
     return false;
@@ -208,7 +209,7 @@ int main(){
                 menu.message="ACTUALIZA CHARACTER A V0.25";continue;
             }
             lab::Appearance created;created.enabled=true;created.realClothes=true;
-            started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,std::string&message){
+            started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,const std::array<int,8>&,std::string&message){
                 std::vector<uint8_t>dolls;std::vector<uint16_t>frames;
                 if(!characterAssets.dolls(a,dolls)||!characterAssets.compose(a,7,frames)){message="FALTAN CAPAS DE EQUIPAMIENTO";return false;}
                 bool ok=freshGame(a);if(!ok)message=menu.message;return ok;
@@ -273,16 +274,20 @@ int main(){
             }else if(action==lab::PauseAction::Customize){
                 auto&bag=authentic?inventory:demoInventory;
                 if(!characterAssets.ready()||!characterAssets.fullPaperdoll())pause.message="ACTUALIZA CHARACTER A V0.25";
-                else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,std::string&message){
-                    const auto previous=appearance;
-                    if(!lab::applyAppearance(characterAssets,a,equipmentArt,bag.equipmentMask(),message))return false;
-                    if(!a.save(saveRoot+savePrefix+"appearance.sav",message)){
-                        std::string ignored;if(previous.enabled)lab::applyAppearance(characterAssets,previous,equipmentArt,bag.equipmentMask(),ignored);
-                        else {lab::clearAppearance();equipmentArt.load(baseRoot+"equipment.bin");lab::prepareEquipment(bag.equipmentMask(),equipmentArt,ignored);}
-                        return false;
+                else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,const std::array<int,8>&outfit,std::string&message){
+                    const auto previous=appearance;lab::Inventory preview;preview.equipment=outfit;unsigned key=preview.equipmentMask();
+                    if(!lab::applyAppearance(characterAssets,a,equipmentArt,key,message))return false;
+                    auto restore=[&](){std::string ignored;if(previous.enabled)lab::applyAppearance(characterAssets,previous,equipmentArt,bag.equipmentMask(),ignored);
+                        else {lab::clearAppearance();equipmentArt.load(baseRoot+"equipment.bin");lab::prepareEquipment(bag.equipmentMask(),equipmentArt,ignored);}};
+                    const auto appearancePath=saveRoot+savePrefix+"appearance.sav";
+                    if(!a.save(appearancePath,message)){restore();return false;}
+                    if(!bag.setOutfit(outfit)){
+                        message=bag.message;std::string rollback;
+                        if(!previous.save(appearancePath,rollback))message="ERROR SD: REVISA GUARDADO DE ASPECTO";
+                        restore();return false;
                     }
                     appearance=a;hasEquipment=true;lab::warmEquipment(bag.equipmentMask(),equipmentArt);return true;
-                });
+                },&bag);
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus);
             }else if(action==lab::PauseAction::MainMenu||action==lab::PauseAction::Exit){

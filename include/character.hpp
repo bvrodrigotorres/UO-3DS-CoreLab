@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "exploration.hpp"
+#include "inventory.hpp"
 #include <array>
 #include <map>
 #include <vector>
@@ -23,9 +23,13 @@ struct AppearanceEditor {
     Appearance draft;
     int page=0,row=0,direction=4;bool creation=true;unsigned equipment=0;
     std::string message;
+    bool wardrobe=false;
+    std::array<int,8>outfit{{-1,-1,-1,-1,-1,-1,-1,-1}};
+    std::array<std::vector<int>,8>owned;
+    void useWardrobe(const Inventory&);
     explicit AppearanceEditor(const Appearance&a,bool fresh=true):draft(a),creation(fresh){draft.enabled=true;}
-    int rowCount()const{return page==0?3:page==3?7:4;}
-    int step()const{return page==3?18:25;}
+    int rowCount()const{return page==0?3:page==2&&wardrobe?8:page==3?7:4;}
+    int step()const{return page==2&&wardrobe?16:page==3?18:25;}
     int field()const{return fieldAt(row);}
     int fieldAt(int r)const;
     bool enabled(int field)const;
@@ -40,7 +44,7 @@ class CharacterAssets {
     std::string root;
     std::vector<uint16_t>palettes;
     mutable std::map<std::string,std::vector<uint8_t>>cache;
-    bool overlay(std::vector<uint16_t>&,const std::string&,int sample,uint16_t hue)const;
+    bool overlay(std::vector<uint16_t>&,const std::string&,int sample,uint16_t hue,bool partial=false)const;
 public:
     bool load(const std::string&);
     bool ready()const{return !palettes.empty();}

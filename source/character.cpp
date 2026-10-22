@@ -47,25 +47,42 @@ bool Appearance::save(const std::string&p,std::string&error,SaveRename renameFil
     if(renameFile(tmp.c_str(),p.c_str())){if(had)renameFile(bak.c_str(),p.c_str());std::remove(tmp.c_str());error="ERROR SD: CAMBIOS SIN GUARDAR";return false;}
     error.clear();return true;
 }
+void AppearanceEditor::useWardrobe(const Inventory&inventory){
+    wardrobe=true;outfit=inventory.equipment;equipment=inventory.equipmentMask();
+    for(size_t slot=0;slot<owned.size();++slot){
+        auto&types=owned[slot];types={-1};
+        auto add=[&](int type){if(type>=0&&type<int(ItemTypes)&&itemDefs[type].slot==int(slot)&&std::find(types.begin(),types.end(),type)==types.end())types.push_back(type);};
+        add(outfit[slot]);for(auto item:inventory.backpack)if(item.count)add(item.type);
+        std::sort(types.begin()+1,types.end());
+    }
+}
 int AppearanceEditor::fieldAt(int r)const{
+    if(page==2&&wardrobe){static const int slots[]={3,4,5,6,7,2,1,0};return r>=0&&r<8?19+slots[r]:-1;}
     static const int fields[4][7]={{0,1,2,-1,-1,-1,-1},{3,4,5,6,-1,-1,-1},{7,9,11,18,-1,-1,-1},{8,10,12,13,15,16,17}};
     return page>=0&&page<4&&r>=0&&r<rowCount()?fields[page][r]:-1;
 }
 bool AppearanceEditor::enabled(int f)const{
+    if(f>=19&&f<27)return wardrobe&&owned[f-19].size()>1;
     if(!creation&&(f==7||f==9||f==11||f==18))return false;
     if(draft.female&&(f==5||f==6))return false;
     if(f>=15&&f<=17){unsigned bit=f==15?8:f==16?16:64;return !creation&&(equipment&bit);}
     return f>=0&&f!=14;
 }
 void AppearanceEditor::change(int delta){
-    int f=field();if(!enabled(f)){message=(f==7||f==9||f==11||f==18)?"CAMBIA LAS PRENDAS EN INVENTARIO":"OPCION NO DISPONIBLE";return;}uint8_t*p=nullptr;int n=0;
+    int f=field();
+    if(wardrobe&&f>=19&&f<27){
+        auto&types=owned[f-19];auto found=std::find(types.begin(),types.end(),outfit[f-19]);int n=int(types.size()),index=int(found-types.begin());
+        outfit[f-19]=types[(index+delta%n+n)%n];Inventory key;key.equipment=outfit;equipment=key.equipmentMask();message.clear();return;
+    }
+if(!enabled(f)){message=(f==7||f==9||f==11||f==18)?"CAMBIA LAS PRENDAS EN INVENTARIO":"OPCION NO DISPONIBLE";return;}uint8_t*p=nullptr;int n=0;
     switch(f){case 1:p=&draft.female;n=2;break;case 2:p=&draft.skin;n=64;break;case 3:p=&draft.hair;n=10;break;case 4:p=&draft.hairColor;n=48;break;case 5:if(!draft.female){p=&draft.beard;n=8;}break;case 6:if(!draft.female){p=&draft.beardColor;n=48;}break;case 7:p=&draft.shirt;n=3;break;case 8:p=&draft.shirtColor;n=32;break;case 9:p=&draft.pants;n=3;break;case 10:p=&draft.pantsColor;n=32;break;case 11:p=&draft.shoes;n=2;break;case 12:p=&draft.bootsColor;n=32;break;case 13:p=&draft.robeColor;n=32;break;case 15:p=&draft.hatColor;n=32;break;case 16:p=&draft.neckColor;n=32;break;case 17:p=&draft.glovesColor;n=32;break;case 18:p=&draft.robe;n=2;break;default:break;}
     if(p)*p=(*p+delta+n)%n;
     message.clear();
 }
 void AppearanceEditor::randomize(uint32_t seed){auto old=draft;auto next=[&](unsigned n){seed=seed*1664525+1013904223;return (seed>>8)%n;};draft.female=next(2);draft.skin=next(64);draft.hair=next(10);draft.hairColor=next(48);draft.beard=next(8);draft.beardColor=draft.hairColor;draft.robe=next(2);draft.shirt=1+next(2);draft.pants=1+next(2);draft.shoes=1;draft.shirtColor=next(32);draft.pantsColor=next(32);draft.bootsColor=next(32);draft.robeColor=next(32);draft.hatColor=next(32);draft.neckColor=next(32);draft.glovesColor=next(32);if(!enabled(15))draft.hatColor=old.hatColor;if(!enabled(16))draft.neckColor=old.neckColor;if(!enabled(17))draft.glovesColor=old.glovesColor;if(!creation){draft.robe=old.robe;draft.shirt=old.shirt;draft.pants=old.pants;draft.shoes=old.shoes;}}
-std::string AppearanceEditor::label(int f)const{const char*labels[]={"NOMBRE","CUERPO","PIEL","PEINADO","COLOR DEL PELO","BARBA","COLOR DE BARBA","CAMISA","COLOR CAMISA","PRENDA INFERIOR","COLOR INFERIOR","CALZADO","COLOR CALZADO","COLOR TUNICA","","COLOR GORRO","COLOR CUELLO","COLOR GUANTES","TUNICA"};return f>=0&&f<19?labels[f]:"";}
+std::string AppearanceEditor::label(int f)const{if(f>=19&&f<27){const char*slots[]={"ARMA","TUNICA","CALZADO","GORRO","CUELLO","PECHO","GUANTES","INFERIOR"};return slots[f-19];}const char*labels[]={"NOMBRE","CUERPO","PIEL","PEINADO","COLOR DEL PELO","BARBA","COLOR DE BARBA","CAMISA","COLOR CAMISA","PRENDA INFERIOR","COLOR INFERIOR","CALZADO","COLOR CALZADO","COLOR TUNICA","","COLOR GORRO","COLOR CUELLO","COLOR GUANTES","TUNICA"};return f>=0&&f<19?labels[f]:"";}
 std::string AppearanceEditor::value(int f)const{
+    if(f>=19&&f<27){int type=outfit[f-19];return type>=0?itemDefs[type].name:"SIN EQUIPAR";}
     const char*mh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","MEDIA MELENA","NUDO ALTO","AFRO","ENTRADAS","DOS COLETAS"};
     const char*fh[]={"SIN PELO","CORTO","LARGO","COLETA","MOHICANO","MEDIA MELENA","NUDO ALTO","AFRO","DOS COLETAS","MONO"};
     const char*bh[]={"SIN BARBA","CORTA","LARGA","PERILLA","BIGOTE","CORTA Y BIGOTE","LARGA Y BIGOTE","PERILLA Y BIGOTE"};
@@ -87,7 +104,7 @@ bool CharacterAssets::fullPaperdoll()const{
     return ready();
 }
 uint16_t CharacterAssets::color(const Appearance&a,int field)const{switch(field){case 15:return clothColors[a.hatColor];case 16:return clothColors[a.neckColor];case 17:return clothColors[a.glovesColor];case 2:return skins[a.skin];case 4:return hairColors[a.hairColor]+1;case 6:return hairColors[a.beardColor]+1;case 8:return clothColors[a.shirtColor];case 10:return clothColors[a.pantsColor];case 12:return clothColors[a.bootsColor];case 13:return clothColors[a.robeColor];default:return 0;}}
-bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,int sample,uint16_t hue)const{
+bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,int sample,uint16_t hue,bool partial)const{
     auto found=cache.find(file);
     if(found==cache.end()){
         std::ifstream f(root+file,std::ios::binary|std::ios::ate);if(!f||f.tellg()<604||f.tellg()>8*1024*1024)return false;
@@ -109,7 +126,7 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
         layer=std::move(expanded);
     }
     if(out.size()!=layer.size())return false;
-    for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[i]=c;}
+    for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue&&(!partial||((c>>11)==(c>>6&31)&&(c>>11)==(c>>1&31)))){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[i]=c;}
     return true;
 }
 bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame)const{
@@ -125,7 +142,8 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
     if(mask&64)layers.push_back({545,color(a,17)});
     if(mask&2)layers.push_back({469,color(a,13)});
     if(a.beard&&!a.female)layers.push_back({beards[a.beard],color(a,6)});
-    if(a.hair)layers.push_back({(a.female?femaleHair:maleHair)[a.hair],color(a,4)});
+    // In the paperdoll, keep bulky hair from protruding through the hat crown.
+    if(a.hair&&!(doll&&(mask&8)))layers.push_back({(a.female?femaleHair:maleHair)[a.hair],color(a,4)});
     if(mask&8)layers.push_back({404,color(a,15)});
     if(mask&1)layers.push_back({622,0});
     // Read each checked sparse layer once, then compose requested poses.
@@ -134,7 +152,7 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
         auto order=layers;
         static const int originalDirections[]={3,2,1,0,1,2,3,4};int d=originalDirections[frame<40?frame/5:(frame-40)/4];
         if(!doll&&(mask&1)&&d>=3){auto weapon=order.back();order.pop_back();order.insert(order.begin(),weapon);}
-        for(auto l:order)if(!overlay(canvas,std::to_string(a.female)+"-"+std::to_string(l.first)+".bin",sample,l.second)){out.clear();return false;}
+        for(auto l:order)if(!overlay(canvas,std::to_string(a.female)+"-"+std::to_string(l.first)+".bin",sample,l.second,doll&&l.first==404)){out.clear();return false;}
         std::copy(canvas.begin(),canvas.end(),out.begin()+i*area);
     }
     return true;

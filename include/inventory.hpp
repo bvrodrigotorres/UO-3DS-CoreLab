@@ -36,6 +36,7 @@ public:
     bool checkpoint(){if(!writable)return false;return persist(message,std::rename);}
     std::function<bool(unsigned)>prepareEquipment;
     unsigned equipmentMask()const;
+    bool setOutfit(const std::array<int,8>&,SaveRename=std::rename);
     bool equip(size_t,SaveRename=std::rename);
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);

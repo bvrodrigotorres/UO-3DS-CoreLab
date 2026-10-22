@@ -108,3 +108,11 @@ cuerpos y sombrero equipado; comprobar ambas vistas y la segunda página del
 juego. Seleccionar el primer y último color de pelo y barba; deben ser tonos
 naturales. Cambiar color calzado, guardar, continuar y comprobar zapatos/botas.
 Recorrer las siete filas de Colores con pad y táctil y verificar cada flecha.
+
+## v0.26: guardarropa propio
+
+Consultar [v0.26.md](v0.26.md). Desde pausa, probar las ocho ranuras de Ropa:
+quitar, alternar prendas de la mochila, guardar y continuar tras reiniciar.
+Cancelar debe conservar el inventario anterior. Probar mochila llena y verificar
+que no desaparece ningún objeto. Revisar sombrero teñido en ambas vistas,
+cambiar el peinado y volver a quitar el sombrero.

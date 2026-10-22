@@ -98,6 +98,27 @@ void Inventory::addAccessories(){
     for(auto&c:chests)if(c.items.size()+3<=ChestSlots){c.items.push_back({13,1});c.items.push_back({14,1});c.items.push_back({15,1});}
     accessories=true;
 }
+bool Inventory::setOutfit(const std::array<int,8>&desired,SaveRename renameFile){
+    if(!writable){message="ERROR INVENTARIO: ARCHIVO INTACTO";return false;}
+    if(desired==equipment)return true;
+    Bag pool=backpack;
+    for(int type:equipment)if(type>=0)pool.push_back({uint16_t(type),1});
+    for(size_t slot=0;slot<desired.size();++slot){
+        int type=desired[slot];if(type==-1)continue;
+        if(type<0||type>=int(ItemTypes)||itemDefs[type].slot!=int(slot)){message="PRENDA NO VALIDA";return false;}
+        auto found=std::find_if(pool.begin(),pool.end(),[&](const ItemStack&i){return i.type==type&&i.count;});
+        if(found==pool.end()){message="NO POSEES ESA PRENDA";return false;}
+        if(!--found->count)pool.erase(found);
+    }
+    if(pool.size()>BagSlots){message="MOCHILA LLENA: HAZ ESPACIO";return false;}
+    Inventory key;key.equipment=desired;
+    if(prepareEquipment&&!prepareEquipment(key.equipmentMask())){message="FALTAN RECURSOS DE EQUIPO";return false;}
+    auto oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;
+    backpack=std::move(pool);equipment=desired;
+    for(size_t slot=0;slot<desired.size();++slot)if(desired[slot]>=0)lastEquipment[slot]=desired[slot];else if(oldEquipment[slot]>=0)lastEquipment[slot]=oldEquipment[slot];
+    if(!persist(message,renameFile)){backpack=std::move(oldBag);equipment=oldEquipment;lastEquipment=oldLast;return false;}
+    message="EQUIPO GUARDADO";return true;
+}
 bool Inventory::equip(size_t index,SaveRename renameFile){
     if(!writable){message="ERROR INVENTARIO: ARCHIVO INTACTO";return false;}
     if(index>=backpack.size())return false;
