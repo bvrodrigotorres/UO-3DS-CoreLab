@@ -116,3 +116,11 @@ quitar, alternar prendas de la mochila, guardar y continuar tras reiniciar.
 Cancelar debe conservar el inventario anterior. Probar mochila llena y verificar
 que no desaparece ningún objeto. Revisar sombrero teñido en ambas vistas,
 cambiar el peinado y volver a quitar el sombrero.
+
+## v0.27: combate animado
+
+Consultar [v0.27.md](v0.27.md). Reemplazar character completo, incluido combat/.
+Probar A sin arma y con daga, ocho direcciones, ropa y túnica. Caminar durante
+el combate y pausar a mitad de golpe. Atacar una criatura a varias casillas:
+debe acercarse y responder; probar pared, esquina y otro piso. Revisar el
+sombrero coloreado tanto en personalización como en la página de equipo.

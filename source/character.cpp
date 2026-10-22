@@ -129,7 +129,7 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
     for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue&&(!partial||((c>>11)==(c>>6&31)&&(c>>11)==(c>>1&31)))){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[i]=c;}
     return true;
 }
-bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame)const{
+bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame,bool combat)const{
     if(!ready()||!a.valid()||mask>2047||onlyFrame>71)return false;
     const size_t area=doll?260*237:96*112;int count=doll||onlyFrame>=0?1:72;out.assign(area*count,0);
     std::vector<std::pair<int,uint16_t>>layers;
@@ -152,7 +152,7 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
         auto order=layers;
         static const int originalDirections[]={3,2,1,0,1,2,3,4};int d=originalDirections[frame<40?frame/5:(frame-40)/4];
         if(!doll&&(mask&1)&&d>=3){auto weapon=order.back();order.pop_back();order.insert(order.begin(),weapon);}
-        for(auto l:order)if(!overlay(canvas,std::to_string(a.female)+"-"+std::to_string(l.first)+".bin",sample,l.second,doll&&l.first==404)){out.clear();return false;}
+        for(auto l:order)if(!overlay(canvas,(combat&&!doll?"combat/":"")+std::to_string(a.female)+"-"+std::to_string(l.first)+".bin",sample,l.second)){out.clear();return false;}
         std::copy(canvas.begin(),canvas.end(),out.begin()+i*area);
     }
     return true;

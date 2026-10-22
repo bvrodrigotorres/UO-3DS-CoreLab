@@ -50,7 +50,7 @@ public:
     bool ready()const{return !palettes.empty();}
     bool fullPaperdoll()const;
     // Fixed original anchor and dimensions, shared by every outfit and layer.
-    bool compose(const Appearance&,unsigned mask,std::vector<uint16_t>&frames,bool doll=false,int onlyFrame=-1)const;
+    bool compose(const Appearance&,unsigned mask,std::vector<uint16_t>&frames,bool doll=false,int onlyFrame=-1,bool combat=false)const;
     bool dolls(const Appearance&,std::vector<uint8_t>&)const;
     bool portrait(const Appearance&,unsigned,std::vector<uint8_t>&)const;
     uint16_t color(const Appearance&,int field)const;

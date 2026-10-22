@@ -24,7 +24,7 @@ int Combat::roll(int lo,int hi){random=random*1664525u+1013904223u;return lo+int
 void Combat::reset(const Npcs&npcs){
     mob.clear();for(const auto&n:npcs.all()){MobVitals v;v.hits=v.maximum=maximum(n);mob.push_back(v);}
     for(auto&c:corpses)c=Corpse{};
-    target=-1;attacking=false;swing=regen=0;message.clear();
+    target=-1;attacking=false;swing=regen=strike=0;message.clear();
 }
 void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
     std::vector<int>choices;for(size_t i=0;i<npcs.all().size();++i){const auto&n=npcs.all()[i];if(attackable(n)&&distance(n.position,a)<=8&&std::abs(n.position.z-a.z)<=8)choices.push_back(int(i));}
@@ -54,7 +54,7 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
 bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,PlayerStatus&status,Inventory&inv){
     if(mob.size()!=npcs.all().size())reset(npcs);
     if(dt<=0)return false;
-    status.healthVisible=std::max(0.f,status.healthVisible-dt);status.flash=std::max(0.f,status.flash-dt);swing=std::max(0.f,swing-dt);
+    status.healthVisible=std::max(0.f,status.healthVisible-dt);status.flash=std::max(0.f,status.flash-dt);swing=std::max(0.f,swing-dt);strike=std::max(0.f,strike-dt);
     for(auto&c:corpses)if(c.active){c.decay-=dt;if(c.decay<=0){inv.closeExternal(&c.loot);c.active=false;c.loot.clear();}}
     for(size_t i=0;i<mob.size();++i){auto&v=mob[i];auto&n=npcs.combatants()[i];v.flash=std::max(0.f,v.flash-dt);v.cooldown=std::max(0.f,v.cooldown-dt);
         if(!n.alive){v.respawn-=dt;if(v.respawn>0)continue;bool placed=false;
@@ -66,9 +66,10 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         }
     }
     if(target>=0&&(target>=int(mob.size())||!attackable(npcs.all()[target])||distance(player,npcs.all()[target].position)>10)){target=-1;attacking=false;}
+    if(attacking&&target>=0){auto&enemy=npcs.combatants()[target];if(!enemy.hostile)enemy.wait=0;enemy.hostile=true;}
     if(attacking&&target>=0&&!moving&&!npcs.all()[target].moving&&swing<=0&&meleeReach(w,player,npcs.all()[target].position)){
         swing=.85f;
-        if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];n.hostile=true;--status.stamina;
+        if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];n.hostile=true;strike=.45f;--status.stamina;
             v.hits=std::max(0,v.hits-roll(status.damageMin(&inv),status.damageMax(&inv)));v.flash=.15f;
             status.healthVisible=6;
             if(v.hits==0)kill(size_t(target),npcs,inv);
@@ -82,7 +83,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if(status.hits==0){
             status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;
             for(auto&other:npcs.combatants())other.hostile=false;
-            attacking=false;target=-1;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
+            attacking=false;target=-1;strike=0;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
         }
     }
     regen+=dt;if(regen>=1){regen-=1;status.mana=std::min(status.manaMax,status.mana+1);status.stamina=std::min(status.staminaMax,status.stamina+1);if(status.healthVisible<=0)status.hits=std::min(status.hitsMax,status.hits+1);}

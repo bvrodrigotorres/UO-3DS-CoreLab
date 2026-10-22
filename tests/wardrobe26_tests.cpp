@@ -42,7 +42,7 @@ int main(int argc,char**argv){
     CharacterAssets assets;assert(assets.load(root));a.hair=0;a.beard=0;a.shirt=a.pants=a.shoes=0;
     std::vector<uint16_t>bare,afro,world;
     assert(assets.compose(a,8,bare,true));a.hair=7;assert(assets.compose(a,8,afro,true));assert(bare==afro);
-    assert(afro[0]==63&&afro[1]==0xf801); // original colored hat detail survives, neutral fabric is dyed
+    assert(afro[0]==0xf801&&afro[1]==0xf801); // the entire hat is dyed: its dark crown must not stay black
     assert(assets.compose(a,8,world,false,0)&&world[0]==0xf801); // world tint remains unchanged
     std::cout<<"Wardrobe 26: owned-only preview, all slots, atomic save/rollback, full bag swap, no creation, hat occlusion and detail tint passed\n";
 }

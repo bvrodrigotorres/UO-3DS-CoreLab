@@ -35,7 +35,7 @@ def sparse(values):
     return result
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--client',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--combat',action='store_true');p.add_argument('--client',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
     if a.out.exists():raise FileExistsError(a.out)
     a.out.mkdir(parents=True)
     u=UopFile(a.client/'gumpartLegacyMUL.uop','build/gumpartlegacymul/{0:D8}.tga',has_extra=True)
@@ -46,6 +46,8 @@ def main():
         except ValueError:
             if body in BEARD:
                 fallback.append([body,act,d,"hidden rear-facing beard"]);return [(Image.new("RGBA",(1,1)),0,0)]
+            if a.combat and body not in (400,401):
+                fallback.append([body,act,d,4]);return layer(a.client,body,4,d)
             # Some beard assets only supply idle/walking, as in the old client.
             alternative=4 if act==4 else 0
             if act==alternative:raise
@@ -60,11 +62,18 @@ def main():
                 for d,mirror in DIRECTION_MAP:
                     samples.append((d,mirror,4,0));samples.extend((d,mirror,walk,i) for i in range(4))
                 for d,mirror in DIRECTION_MAP:samples.extend((d,mirror,run,i) for i in range(4))
+            if a.combat:
+                samples=[]
+                for armed in (False,True):
+                    attack=9 if armed else 10
+                    for d,mirror in DIRECTION_MAP:
+                        samples.append((d,mirror,7,0));samples.extend((d,mirror,attack,i) for i in range(4))
+                    for d,mirror in DIRECTION_MAP:samples.extend((d,mirror,attack,i) for i in range(4))
             frames=[]
             for d,mirror,act,phase in samples:
-                base=seq(body,act,d);b,cx,cy=base[0 if act==4 else phase*len(base)//4]
+                base=seq(body,act,d);b,cx,cy=base[0 if act in (4,7) else (phase*(len(base)-1)//3 if a.combat else phase*len(base)//4)]
                 ax=(96-b.width)//2+cx;ay=107+cy
-                s=seq(graphic,act,d);im,x,y=s[0 if act==4 else phase*len(s)//4]
+                s=seq(graphic,act,d);im,x,y=s[0 if act in (4,7) else (phase*(len(s)-1)//3 if a.combat else phase*len(s)//4)]
                 canvas=Image.new('RGBA',(96,112));canvas.alpha_composite(im,(ax-x,ay-im.height-y))
                 if mirror:canvas=ImageOps.mirror(canvas)
                 frames.append(sparse(pixels(canvas)))
@@ -89,5 +98,5 @@ def main():
         colors.extend(struct.unpack_from('<32H',raw,at))
     payload=struct.pack('<'+'H'*len(colors),*colors)
     (a.out/'hues.bin').write_bytes(struct.pack('<4sIII',b'UHP1',3000,len(payload),fnv(payload))+payload)
-    (a.out/'manifest.json').write_text(json.dumps(dict(race='human',bodies=[400,401],frames=144,canvas=[96,112],paperdoll=[260,237],hair=HAIR,beards=BEARD,files=report,animation_fallback=fallback),indent=2)+'\n')
+    (a.out/'manifest.json').write_text(json.dumps(dict(combat=a.combat,combat_actions=[7,9,10] if a.combat else [],race='human',bodies=[400,401],frames=144,canvas=[96,112],paperdoll=[260,237],hair=HAIR,beards=BEARD,files=report,animation_fallback=fallback),indent=2)+'\n')
 if __name__=='__main__':main()

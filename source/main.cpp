@@ -369,7 +369,12 @@ int main(){
         }
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
         int animation=(int)animationPhase;
-        if(authentic&&hasEquipment)lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
+        if(authentic&&hasEquipment){
+            unsigned key=inventory.equipmentMask();
+            if(combat.combatPose()&&!moving&&appearance.enabled){
+                if(!lab::prepareEquipment(key|4096,equipmentArt,equipmentError))lab::prepareEquipment(key,equipmentArt,equipmentError);
+            }else lab::prepareEquipment(key,equipmentArt,equipmentError);
+        }
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||frames%12==0||down||pageChanged){

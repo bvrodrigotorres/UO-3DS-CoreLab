@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.26
+# UO-3DS-CoreLab v0.27
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -43,6 +43,9 @@ paleta de pelo/barba corregida y paperdolls sin recorte fijo.
 
 [Novedades v0.26](docs/v0.26.md): prendas propias desde pausa y ajuste del
 sombrero en las vistas previas.
+
+[Novedades v0.27](docs/v0.27.md): poses y golpes originales del jugador,
+persecución de criaturas y teñido completo del sombrero.
 
 ## Qué cambia respecto al prototipo anterior
 

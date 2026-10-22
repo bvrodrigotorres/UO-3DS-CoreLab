@@ -231,16 +231,18 @@ bool loadPopulationAtlases(const Npcs&population,const std::string&root,std::str
     C3D_FrameSync();for(auto old:npcSheets)C2D_SpriteSheetFree(old);
     npcSheets=std::move(next);npcBytes=used;error.clear();return true;
 }
-bool prepareEquipment(unsigned mask,const EquipmentArt&art,std::string&error){
-    if(mask>2047||(!characterAppearance.enabled&&mask>7))return false;
+bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
+    bool combatBank=(key&4096)!=0;unsigned mask=key&2047;
+    if((key&~6143u)||mask>2047||(!characterAppearance.enabled&&mask>7))return false;
     std::vector<uint8_t>portrait;
     if(characterAppearance.enabled&&characterAssets&&art.currentKey!=mask&&!characterAssets->portrait(characterAppearance,mask,portrait))return false;
-    if(auto cached=outfitCache.get(mask)){outfit=cached;outfitMask=mask;if(!portrait.empty()){art.currentDoll=std::move(portrait);art.currentKey=mask;}error.clear();return true;}
+    if(auto cached=outfitCache.get(key)){outfit=cached;outfitMask=key;if(!portrait.empty()){art.currentDoll=std::move(portrait);art.currentKey=mask;}error.clear();return true;}
     if(art.dolls.empty()&&art.currentDoll.empty()){error="FALTAN RECURSOS DE EQUIPO";return mask==0;}
     std::vector<uint16_t>customPixels;
     bool custom=characterAppearance.enabled&&characterAssets;
-    if(custom&&!characterAssets->compose(characterAppearance,mask,customPixels)){error="PERSONAJE: CAPAS INCOMPLETAS";return false;}
+    if(custom&&!characterAssets->compose(characterAppearance,mask,customPixels,false,-1,combatBank)){error="PERSONAJE: CAPAS INCOMPLETAS";return false;}
     char path[128];std::snprintf(path,sizeof path,"sdmc:/3ds/UO-3DS-CoreLab/equip_%02u.t3x",mask);
+    if(combatBank&&!custom)return false;
     if(!custom&&!equipmentChecksum(path,art.checksums[mask])){error="EQUIPO: ATLAS INVALIDO";return false;}
     // Keep the current outfit intact if a new load fails. Leave at least 2 MiB
     // of linear memory for gameplay; cold misses evict only inactive outfits.
@@ -258,8 +260,8 @@ bool prepareEquipment(unsigned mask,const EquipmentArt&art,std::string&error){
         else if(sheet)C2D_SpriteSheetFree(sheet);
     }
     if(!next){error="EQUIPO: SIN MEMORIA O ATLAS INVALIDO";return false;}
-    outfitCache.insert(mask,next,outfitBytes(next));
-    outfit=next;outfitMask=mask;if(!portrait.empty()){art.currentDoll=std::move(portrait);art.currentKey=mask;}error.clear();return true;
+    outfitCache.insert(key,next,outfitBytes(next));
+    outfit=next;outfitMask=key;if(!portrait.empty()){art.currentDoll=std::move(portrait);art.currentKey=mask;}error.clear();return true;
 }
 void clearAppearance(){C3D_FrameSync();clearOutfits();outfit=nullptr;outfitMask=99;characterAssets=nullptr;characterAppearance=Appearance{};}
 bool applyAppearance(const CharacterAssets&assets,const Appearance&a,EquipmentArt&art,unsigned mask,std::string&error){
@@ -426,7 +428,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             bool dressed=authentic&&outfit;
             auto player=avatar;
             if(dressed||player){
-                unsigned index=avatarImage(direction,moving,running&&(authentic&&outfit?true:runVerified),frame,dressed?72:C2D_SpriteSheetCount(player));
+                bool combatPose=dressed&&(outfitMask&4096)&&!moving;
+                unsigned index=avatarImage(direction,combatPose?(combat&&combat->striking()):moving,combatPose?false:running&&(authentic&&outfit?true:runVerified),combatPose?(combat?combat->strikeFrame():0):frame,dressed?72:C2D_SpriteSheetCount(player));
                 auto image=dressed?outfitImage(outfit,index):C2D_SpriteSheetGetImage(player,index);
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{foot.x-width/2,foot.y-height+5},{foot.x+width/2,foot.y-height+5},{foot.x+width/2,foot.y+5},{foot.x-width/2,foot.y+5}};

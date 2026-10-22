@@ -84,6 +84,7 @@ void Npcs::addOccupants(std::vector<Actor>&out)const{
     for(const auto&n:people)if(n.alive){out.push_back(n.position);if(n.moving)out.push_back(n.from);}
 }
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
+    if(dt<=0)return;
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
     for(size_t i=0;i<people.size();++i){auto&n=people[i];if(!n.alive)continue;
         int px=player.x-n.position.x,py=player.y-n.position.y;
@@ -92,21 +93,41 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
         if(std::max(std::abs(px),std::abs(py))>24)continue;
         if(n.moving){
             n.progress=std::min(1.f,n.progress+dt/.45f);n.animation=std::fmod(n.animation+dt*8,4.f);
-            if(n.progress>=1){n.moving=false;n.wait=1.0f+(random%20)/10.f;}
+            if(n.progress>=1){n.moving=false;n.wait=n.hostile?0:1.0f+(random%20)/10.f;}
             continue;
         }
         if(n.hostile){
             if(std::max(std::abs(px),std::abs(py))>8||std::max(std::abs(n.position.x-n.home.x),std::abs(n.position.y-n.home.y))>12)n.hostile=false;
-            else if(std::max(std::abs(px),std::abs(py))<=1){n.wait=.2f;continue;}
             else {
-                int x=(px>0)-(px<0),y=(py>0)-(py<0),d=0;for(int k=0;k<8;++k)if(dx[k]==x&&dy[k]==y)d=k;
-                Actor next;int actual;
-                if(step(w,n.position,d,next,actual)&&!same(next,player)&&!(playerMoving&&same(next,from))&&!occupied(next,(int)i)){
-                    n.from=n.position;n.position=next;n.progress=0;n.moving=true;n.direction=(actual+1)&7;
+                auto canHit=[&](const Actor&a){
+                    if(std::abs(a.z-player.z)>8||std::max(std::abs(a.x-player.x),std::abs(a.y-player.y))>1)return false;
+                    for(int d=0;d<8;++d){Actor next;int actual;if(step(w,a,d,next,actual)&&next.x==player.x&&next.y==player.y&&std::abs(next.z-player.z)<=8)return true;}return same(a,player);
+                };
+                if(canHit(n.position)){int x=(px>0)-(px<0),y=(py>0)-(py<0);for(int d=0;d<8;++d)if(dx[d]==x&&dy[d]==y)n.direction=(d+1)&7;n.wait=.2f;continue;}
+                int aimX=(px>0)-(px<0),aimY=(py>0)-(py<0);bool direct=false;
+                for(int d=0;d<8;++d)if(dx[d]==aimX&&dy[d]==aimY){Actor next;int actual;
+                    if(step(w,n.position,d,next,actual)&&!same(next,player)&&!(playerMoving&&same(next,from))&&!occupied(next,int(i))&&std::abs(next.x-n.home.x)<=12&&std::abs(next.y-n.home.y)<=12&&std::max(std::abs(next.x-player.x),std::abs(next.y-player.y))<std::max(std::abs(px),std::abs(py))){
+                        bool clear=true;if(actual&1){Actor s1{n.position.x+dx[actual],n.position.y,n.position.z},s2{n.position.x,n.position.y+dy[actual],n.position.z};clear=!occupied(s1,int(i))&&!occupied(s2,int(i))&&!same(s1,player)&&!same(s2,player);}
+                        if(clear){n.from=n.position;n.position=next;n.progress=0;n.moving=true;n.direction=(actual+1)&7;direct=true;}
+                    }
                 }
+                if(direct)continue;
+                if(n.wait>0){n.wait-=dt;continue;}
+                struct Node{Actor at,first;int direction;};std::vector<Node>queue;queue.reserve(256);queue.push_back({n.position,n.position,0});bool found=false;Node route{};
+                for(size_t q=0;q<queue.size()&&!found&&q<256;++q){
+                    for(int d=0;d<8&&queue.size()<256;++d){Actor next;int actual;
+                        if(!step(w,queue[q].at,d,next,actual)||same(next,player)||(playerMoving&&same(next,from))||occupied(next,int(i))||std::abs(next.x-n.home.x)>12||std::abs(next.y-n.home.y)>12)continue;
+                        if(actual&1){Actor s1{queue[q].at.x+dx[actual],queue[q].at.y,queue[q].at.z},s2{queue[q].at.x,queue[q].at.y+dy[actual],queue[q].at.z};if(occupied(s1,int(i))||occupied(s2,int(i))||same(s1,player)||same(s2,player))continue;}
+                        bool seen=false;for(const auto&v:queue)if(v.at.x==next.x&&v.at.y==next.y&&v.at.z==next.z){seen=true;break;}if(seen)continue;
+                        Node node{next,q?queue[q].first:next,q?queue[q].direction:actual};queue.push_back(node);
+                        if(canHit(next)){route=node;found=true;break;}
+                    }
+                }
+                if(found){n.from=n.position;n.position=route.first;n.progress=0;n.moving=true;n.direction=(route.direction+1)&7;}else n.wait=.35f;
                 continue;
             }
         }
+
         if(near){
             int x=(px>0)-(px<0),y=(py>0)-(py<0);
             for(int d=0;d<8;++d)if(dx[d]==x&&dy[d]==y)n.direction=(d+1)&7;
