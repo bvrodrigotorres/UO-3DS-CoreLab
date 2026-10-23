@@ -56,7 +56,7 @@ bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::s
     original=std::move(next);error.clear();return true;
 }
 void Npcs::reset(const World&w,const Actor&player){
-    occupancyDirty=true;people.clear();random=12345;routeCursor=0;routeNodes=routeSearches=0;
+    occupancyDirty=true;people.clear();random=12345;aggressionClock=0;routeCursor=0;routeNodes=routeSearches=0;
     if(hasPopulation()){
         for(auto n:original){
             if(!same(n.position,player)&&!occupied(n.position)){people.push_back(n);occupancyDirty=true;continue;}
@@ -107,15 +107,17 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
         bool near=std::abs(player.z-n.position.z)<16&&std::max(std::abs(px),std::abs(py))<=2;
         n.namePresence.update(near,dt);
         if(std::max(std::abs(px),std::abs(py))>24)continue;
+        if(n.aggressive&&!n.hostile&&std::abs(player.z-n.position.z)<=8&&std::max(std::abs(px),std::abs(py))<=6){engage(i);n.wait=0;}
+        if(!n.hostile)n.aggressionOrder=0;
         if(n.moving){
             n.progress=std::min(1.f,n.progress+dt/.45f);n.animation=std::fmod(n.animation+dt*8,4.f);
             if(n.progress>=1){occupancyDirty=true;n.moving=false;n.wait=n.hostile?0:1.0f+(random%20)/10.f;}
             continue;
         }
-        if(n.aggressive&&!n.hostile&&std::abs(player.z-n.position.z)<=8&&std::max(std::abs(px),std::abs(py))<=6){n.hostile=true;n.wait=0;}
+
         if(n.stationary)continue;
         if(n.hostile){
-            if(std::max(std::abs(px),std::abs(py))>8||std::max(std::abs(n.position.x-n.home.x),std::abs(n.position.y-n.home.y))>12)n.hostile=false;
+            if(std::max(std::abs(px),std::abs(py))>8||std::max(std::abs(n.position.x-n.home.x),std::abs(n.position.y-n.home.y))>12){n.hostile=false;n.aggressionOrder=0;}
             else {
                 if(n.wait>0){n.wait-=dt;continue;}
                 auto canHit=[&](const Actor&a){

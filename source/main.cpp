@@ -295,6 +295,7 @@ int main(){
     lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
     auto persistVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
+    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";return used;};
     if(!lab::loadVitals(vitalsPath(),playerStatus))saveMessage="ESTADISTICAS: ARCHIVO INVALIDO";
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
@@ -376,7 +377,7 @@ int main(){
             bool dragged=false,changed=false;
             if(inventoryDrag.active){dragged=inventoryDrag.finish(*w,actor,inventory);pages.active=false;}
             else changed=pages.end();
-            if(!dragged&&!changed&&oldPage==2&&authentic&&(!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
+            if(!dragged&&!changed&&oldPage==2&&authentic&&(inventory.useMode||!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
                 if(lab::characterPaperdollHit(pages.startX,pages.startY)){

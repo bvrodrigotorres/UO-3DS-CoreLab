@@ -194,3 +194,8 @@ a cadáveres, arrastre, objetos temporales en Suelo y precios/cantidades claros.
 
 Corrección del desbordamiento de pila al abrir Equipamiento y menú Desarrollador
 con teletransporte seguro a puntos de interés. [Instalación y controles](docs/v0.33.md).
+
+## v0.34
+
+Defensa automática con foco en el primer agresor y curación mediante pociones,
+vendas, pan y manzanas. [Instalación y controles](docs/v0.34.md).

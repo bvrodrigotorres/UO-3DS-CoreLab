@@ -48,7 +48,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;ground={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=false;dressed=accessories=false;
+    path=p;ground={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=useMode=false;dressed=accessories=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -317,6 +317,11 @@ void Inventory::tickGround(float dt,SaveRename renameFile){
     if(!persist(message,renameFile))ground=std::move(before);
     groundRetry=1;
 }
+bool Inventory::consume(size_t index,SaveRename renameFile){
+    if(!writable||index>=backpack.size()||!itemHealing(backpack[index].type)){message="ESTE OBJETO NO CURA";return false;}
+    Bag previous=backpack;if(!--backpack[index].count)backpack.erase(backpack.begin()+index);
+    if(!persist(message,renameFile)){backpack=std::move(previous);return false;}return true;
+}
 bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFile){
     if(!writable||type==0||type>=ItemTypes||!price||price>65535){message="COMERCIO NO DISPONIBLE";return false;}
     Bag next=backpack;
@@ -336,10 +341,10 @@ bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFil
 }
 void Inventory::tap(const World&w,const Actor&a,int x,int y){
     if(InventoryLayout::page(x,y)){bagPage=1-bagPage;return;}
-    if(InventoryLayout::mode(x,y)){equipMode=!equipMode;return;}
+    if(InventoryLayout::mode(x,y)){if(equipMode){equipMode=false;useMode=true;}else if(useMode)useMode=false;else equipMode=true;message=useMode?"TOCA POCION, VENDA O COMIDA":equipMode?"TOCA OBJETO PARA EQUIPAR":"TOCA OBJETO PARA TRANSFERIR";return;}
     if(InventoryLayout::take(x,y)){takeAll(w,a);return;}
     int left=InventoryLayout::slot(x,y,InventoryLayout::Left),right=InventoryLayout::slot(x,y,InventoryLayout::Right);
-    if(left>=0){size_t index=bagPage*BagPageSlots+left;if(index<backpack.size())detailType=backpack[index].type;if(equipMode)equip(index);else transfer(w,a,false,index);}
+    if(left>=0){size_t index=bagPage*BagPageSlots+left;if(index<backpack.size())detailType=backpack[index].type;if(useMode){if(useItem)useItem(index);else message="CURACION NO DISPONIBLE";}else if(equipMode)equip(index);else transfer(w,a,false,index);}
     else if(right>=0){if(size_t(right)<containerItems().size())detailType=containerItems()[right].type;transfer(w,a,true,size_t(right));}
 }
 }

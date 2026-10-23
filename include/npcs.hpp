@@ -7,14 +7,14 @@ namespace lab {
 struct Npc {
     Actor position,from,home;int direction=4,style=0;float progress=1,wait=1,animation=0;bool moving=false;
     bool alive=true,hostile=false,aggressive=false,stationary=false;int maximumHits=0,meleeMin=0,meleeMax=0,respawnSeconds=20;
-    NamePresence namePresence;std::string name,greeting,title;std::array<uint8_t,3>nameColor{{238,238,0}};uint16_t nameHue=0x35;int roam=3;bool animal=false;
+    uint64_t aggressionOrder=0;NamePresence namePresence;std::string name,greeting,title;std::array<uint8_t,3>nameColor{{238,238,0}};uint16_t nameHue=0x35;int roam=3;bool animal=false;
 };
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
 class Npcs {
     bool occupancyActive=false;mutable bool occupancyDirty=true;mutable std::vector<int>occupancyHead=std::vector<int>(4096,-1);mutable std::vector<int>occupancyNext;
     void rebuildOccupancy()const;
     bool deathFrames=false;
-    size_t routeCursor=0;unsigned routeNodes=0,routeSearches=0;
+    uint64_t aggressionClock=0;size_t routeCursor=0;unsigned routeNodes=0,routeSearches=0;
     std::vector<Npc> people,original;std::vector<NpcStyle>art;uint32_t random=12345;
 public:
     bool loadPopulation(const std::string&,const std::string&scene,const World&,std::string&);
@@ -26,6 +26,7 @@ public:
     bool hasPopulation()const{return !art.empty();}
     const std::vector<NpcStyle>&styles()const{return art;}
     void reset(const World&,const Actor&player);
+    void engage(size_t index){if(index>=people.size())return;auto&n=people[index];if(!n.hostile||!n.aggressionOrder)n.aggressionOrder=++aggressionClock;n.hostile=true;}
     void update(const World&,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&);
     bool occupied(const Actor&,int except=-1)const;
     void addOccupants(std::vector<Actor>&)const;

@@ -33,9 +33,10 @@ void Combat::reset(const Npcs&npcs){
     for(auto&c:corpses)c=Corpse{};
     for(auto&e:damage)e=DamageVisual{};
     for(auto&p:blood)p=BloodPool{};
-    target=-1;attacking=false;swing=regen=strike=0;message.clear();
+    target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=0;swing=regen=strike=0;message.clear();
 }
 void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
+    automaticDefense=false;
     std::vector<int>choices;for(size_t i=0;i<npcs.all().size();++i){const auto&n=npcs.all()[i];if(attackable(n)&&distance(n.position,a)<=8&&std::abs(n.position.z-a.z)<=8)choices.push_back(int(i));}
     if(choices.empty()){target=-1;attacking=false;message="NO HAY CRIATURAS CERCANAS";return;}
     std::stable_sort(choices.begin(),choices.end(),[&](int l,int r){return distance(npcs.all()[l].position,a)<distance(npcs.all()[r].position,a);});
@@ -44,15 +45,15 @@ void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
     message="OBJETIVO: "+npcs.all()[target].name;
 }
 void Combat::toggle(const Npcs&npcs,const Actor&a){
-    if(attacking){attacking=false;message="ATAQUE DETENIDO";return;}
+    if(attacking){attacking=false;automaticDefense=false;suppressDefense=true;message="ATAQUE DETENIDO";return;}
     if(target<0||target>=int(npcs.all().size())||!attackable(npcs.all()[target])||distance(a,npcs.all()[target].position)>8)select(npcs,a);
-    if(target>=0){attacking=true;swing=0;message="ACERCATE AL OBJETIVO | A: PARAR";}
+    if(target>=0){automaticDefense=suppressDefense=false;attacking=true;swing=0;message="ACERCATE AL OBJETIVO | A: PARAR";}
 }
 void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     auto pool=std::find_if(blood.begin(),blood.end(),[](const BloodPool&p){return !p.active;});
     if(pool==blood.end())pool=std::max_element(blood.begin(),blood.end(),[](const BloodPool&a,const BloodPool&b){return a.age<b.age;});
     *pool={true,npcs.all()[index].position,0,unsigned(roll(0,6))};
-    auto&n=npcs.combatants()[index];n.alive=false;n.hostile=false;n.moving=false;n.progress=1;n.from=n.position;
+    auto&n=npcs.combatants()[index];n.alive=false;n.hostile=false;n.aggressionOrder=0;n.moving=false;n.progress=1;n.from=n.position;
     auto&v=mob[index];v.hits=0;v.respawn=float(n.respawnSeconds);
     auto slot=std::find_if(corpses.begin(),corpses.end(),[](const Corpse&c){return !c.active;});
     if(slot==corpses.end())slot=std::min_element(corpses.begin(),corpses.end(),[](const Corpse&a,const Corpse&b){return a.decay<b.decay;});
@@ -78,9 +79,30 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     message="CRIATURA MUERTA | MOCHILA: ABRIR CADAVER";
     if(target==int(index)){target=-1;attacking=false;}
 }
+void Combat::defend(Npcs&npcs,const Actor&player){
+    auto eligible=[&](int index){if(index<0||size_t(index)>=npcs.all().size())return false;const auto&n=npcs.all()[index];return attackable(n)&&n.hostile&&!(n.maximumHits>0&&n.meleeMax==0)&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8&&distance(n.position,n.home)<=12;};
+    if(automaticDefense&&eligible(target))return;
+    if(attacking&&!automaticDefense)return; // Explicit A/X target overrides automatic selection.
+    if(suppressDefense)return;
+    int next=-1;uint64_t first=UINT64_MAX;
+    for(size_t i=0;i<npcs.all().size();++i)if(eligible(int(i))){npcs.engage(i);uint64_t order=npcs.all()[i].aggressionOrder;if(order<first){first=order;next=int(i);}}
+    if(next>=0){target=next;attacking=automaticDefense=true;message="DEFENSA: "+npcs.all()[next].name;}
+    else if(automaticDefense){target=-1;attacking=automaticDefense=false;}
+}
+bool Combat::useHealing(Inventory&inv,size_t index,PlayerStatus&status,SaveRename renameFile){
+    if(index>=inv.backpack.size())return false;
+    unsigned type=inv.backpack[index].type;int amount=itemHealing(type);
+    if(!amount){inv.message="ESTE OBJETO NO CURA";return false;}
+    if(status.hits>=status.hitsMax){inv.message="YA TIENES TODA LA VIDA";return false;}
+    if(healCooldown>0){inv.message="ESPERA PARA CURARTE";return false;}
+    if(!inv.consume(index,renameFile))return false;
+    int recovered=std::min(amount,status.hitsMax-status.hits);status.hits+=recovered;status.healthVisible=6;status.recovered();healCooldown=3;
+    inv.message=std::string(itemDefs[type].name)+": +"+std::to_string(recovered)+" VIDA";return true;
+}
 bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,PlayerStatus&status,Inventory&inv){
     if(mob.size()!=npcs.all().size())reset(npcs);
     if(dt<=0)return false;
+    healCooldown=std::max(0.f,healCooldown-dt);
     for(auto&e:damage)if(e.active){e.age+=dt;if(e.age>=1.2f)e.active=false;}
     for(auto&p:blood)if(p.active){p.age+=dt;if(p.age>=3)p.active=false;}
     status.healthVisible=std::max(0.f,status.healthVisible-dt);status.flash=std::max(0.f,status.flash-dt);swing=std::max(0.f,swing-dt);strike=std::max(0.f,strike-dt);
@@ -89,32 +111,35 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if(!n.alive){v.respawn-=dt;if(v.respawn>0)continue;bool placed=false;
             for(int radius=0;radius<=3&&!placed;++radius){for(int y=-radius;y<=radius&&!placed;++y){for(int x=-radius;x<=radius&&!placed;++x){
                 Actor a{n.home.x+x,n.home.y+y,n.home.z};
-                if(canStand(w,a)&&!npcs.occupied(a)&&!(distance(a,player)==0&&std::abs(a.z-player.z)<16)){n.position=n.from=a;n.alive=true;n.hostile=false;n.moving=false;n.progress=1;n.wait=1;n.namePresence={};v.hits=v.maximum;v.cooldown=1;placed=true;}
+                if(canStand(w,a)&&!npcs.occupied(a)&&!(distance(a,player)==0&&std::abs(a.z-player.z)<16)){n.position=n.from=a;n.alive=true;n.hostile=false;n.aggressionOrder=0;n.moving=false;n.progress=1;n.wait=1;n.namePresence={};v.hits=v.maximum;v.cooldown=1;placed=true;}
             }}}
             if(!placed)v.respawn=1;
         }
     }
     if(target>=0&&(target>=int(mob.size())||!attackable(npcs.all()[target])||distance(player,npcs.all()[target].position)>10)){target=-1;attacking=false;}
-    if(attacking&&target>=0){auto&enemy=npcs.combatants()[target];if(!enemy.hostile)enemy.wait=0;enemy.hostile=true;}
+    defend(npcs,player);
+    if(attacking&&target>=0){auto&enemy=npcs.combatants()[target];if(!enemy.hostile)enemy.wait=0;npcs.engage(size_t(target));}
     if(attacking&&target>=0&&!moving&&!npcs.all()[target].moving&&swing<=0&&meleeReach(w,player,npcs.all()[target].position)){
         swing=status.attackDelay(&inv);
-        if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];n.hostile=true;strike=.45f;--status.stamina;
+        if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];npcs.engage(size_t(target));strike=.45f;--status.stamina;
             int dealt=std::min(v.hits,roll(status.damageMin(&inv),status.damageMax(&inv)));v.hits-=dealt;damageVisual(n.position,dealt,false,target);v.flash=.15f;
             status.healthVisible=6;
             if(v.hits==0)kill(size_t(target),npcs,inv);
         }
     }
+    defend(npcs,player);
     for(size_t i=0;i<mob.size();++i){auto&n=npcs.combatants()[i];auto&v=mob[i];
         if((n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
         v.cooldown=1.25f;int damage=roll(n.meleeMin?n.meleeMin:n.name.find("dog")!=std::string::npos?4:2,n.meleeMax?n.meleeMax:n.name.find("dog")!=std::string::npos?7:4);
         damage=std::max(1,damage*(100-status.resistance(&inv))/100);
-        damage=std::min(status.hits,damage);status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
+        damage=std::min(status.hits,damage);suppressDefense=false;status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){
             status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;status.recoveryGoal=0;
-            for(auto&other:npcs.combatants())other.hostile=false;
-            attacking=false;target=-1;strike=0;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
+            for(auto&other:npcs.combatants()){other.hostile=false;other.aggressionOrder=0;}
+            attacking=automaticDefense=suppressDefense=false;target=-1;strike=0;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
         }
     }
+    defend(npcs,player);
     regen+=dt;if(regen>=1){regen-=1;status.mana=std::min(status.manaMax,status.mana+1);status.stamina=std::min(status.staminaMax,status.stamina+1);if(status.healthVisible<=0)status.hits=std::min(status.hitsMax,status.hits+1);}
     status.recovered();
     return false;

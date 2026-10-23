@@ -81,7 +81,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.33",ink,1,13);
+    text(fb,225,20,"C.LAB V0.34",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -176,14 +176,15 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     bag(inv.backpack,InventoryLayout::Left,inv.bagPage*BagPageSlots);bag(inv.containerItems(),InventoryLayout::Right,0);
     auto button=[&](int x,int y,int width,int height,const std::string&label,bool active){box(fb,x,y,width,height,ink);box(fb,x+1,y+1,width-2,height-2,active?gold:Color{161,143,108});text(fb,x+7,y+(height-7)/2,label,ink);};
     button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/2  >",true);
-    button(18,214,90,16,inv.equipMode?"EQUIPAR":"TRANSFERIR",true);
+    button(18,214,90,16,inv.useMode?"USAR":inv.equipMode?"EQUIPAR":"TRANSFERIR",true);
     box(fb,116,214,32,17,ink);box(fb,118,216,28,13,{161,143,108});
     box(fb,126,219,13,9,ink);box(fb,124,217,17,2,ink);box(fb,130,215,5,2,ink);
     for(int x:{129,133,137})box(fb,x,221,1,5,{244,222,160});
     button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
-    if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
-        std::string detail=d.name;if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
+    if(!failed&&inv.useMode){text(fb,18,29,inv.message,ink,1,47);}
+    else if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
+        std::string detail=d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(itemHealing(unsigned(inv.detailType)))+" VIDA";else if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
         text(fb,18,29,detail,ink,1,47);}
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
@@ -254,7 +255,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.33";
+    const std::string version="CORELAB V0.34";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }

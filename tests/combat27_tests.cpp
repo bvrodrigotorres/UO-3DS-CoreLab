@@ -12,7 +12,7 @@ int main(int argc,char**argv){
     for(int i=0;i<150&&!meleeReach(w,n.position,player);++i){npcs.update(w,player,player,false,.05f,doors);assert(canStand(w,n.position));}
     assert(meleeReach(w,n.position,player));
     bool swing=false;for(int i=0;i<40;++i){npcs.update(w,player,player,false,.05f,doors);c.update(w,npcs,player,false,.05f,status,inv);if(c.striking()){swing=true;assert(c.strikeFrame()>=0&&c.strikeFrame()<4);break;}}
-    assert(swing);c.attacking=false;for(int i=0;i<12;++i)c.update(w,npcs,player,false,.05f,status,inv);assert(!c.striking()&&!c.combatPose());
+    assert(swing);c.toggle(npcs,player);n.hostile=false;for(int i=0;i<12;++i)c.update(w,npcs,player,false,.05f,status,inv);assert(!c.striking()&&!c.combatPose());
     // A wall forces a detour; no path can cross the blocked tile or the player.
     n.position=n.from=n.home={10,10,0};n.moving=false;n.alive=true;n.hostile=true;player={6,10,0};
     Object wall;wall.x=8;wall.y=10;wall.height=40;wall.flags=Wall|Impassable;w.objects={wall};w.index();
