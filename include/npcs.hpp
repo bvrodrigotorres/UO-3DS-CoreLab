@@ -14,10 +14,13 @@ class Npcs {
     bool occupancyActive=false;mutable bool occupancyDirty=true;mutable std::array<int,4096>occupancyHead{};mutable std::vector<int>occupancyNext;
     void rebuildOccupancy()const;
     bool deathFrames=false;
+    size_t routeCursor=0;unsigned routeNodes=0,routeSearches=0;
     std::vector<Npc> people,original;std::vector<NpcStyle>art;uint32_t random=12345;
 public:
     bool loadPopulation(const std::string&,const std::string&scene,const World&,std::string&);
     bool loadNames(const std::string&,const std::string&scene,const std::string&population,std::string&);
+    unsigned lastRouteNodes()const{return routeNodes;}
+    unsigned lastRouteSearches()const{return routeSearches;}
     unsigned frameCount()const{return deathFrames?48:40;}
     bool hasDeathFrames()const{return deathFrames;}
     bool hasPopulation()const{return !art.empty();}

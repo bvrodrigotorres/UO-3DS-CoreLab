@@ -56,7 +56,7 @@ bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::s
     original=std::move(next);error.clear();return true;
 }
 void Npcs::reset(const World&w,const Actor&player){
-    occupancyDirty=true;people.clear();random=12345;
+    occupancyDirty=true;people.clear();random=12345;routeCursor=0;routeNodes=routeSearches=0;
     if(hasPopulation()){
         for(auto n:original){
             if(!same(n.position,player)&&!occupied(n.position)){people.push_back(n);occupancyDirty=true;continue;}
@@ -96,10 +96,13 @@ void Npcs::addOccupants(std::vector<Actor>&out)const{
     for(const auto&n:people)if(n.alive){out.push_back(n.position);if(n.moving)out.push_back(n.from);}
 }
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
-    if(dt<=0)return;
+    routeNodes=routeSearches=0;
+    if(dt<=0||people.empty())return;
     struct IndexScope{bool&active;~IndexScope(){active=false;}}scope{occupancyActive};occupancyActive=true;occupancyDirty=true;
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
-    for(size_t i=0;i<people.size();++i){auto&n=people[i];if(!n.alive)continue;
+    // Rotate priority so a blocked creature cannot monopolize the shared route budget.
+    size_t first=routeCursor++%people.size();
+    for(size_t offset=0;offset<people.size();++offset){size_t i=(first+offset)%people.size();auto&n=people[i];if(!n.alive)continue;
         int px=player.x-n.position.x,py=player.y-n.position.y;
         bool near=std::abs(player.z-n.position.z)<16&&std::max(std::abs(px),std::abs(py))<=2;
         n.namePresence.update(near,dt);
@@ -114,6 +117,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
         if(n.hostile){
             if(std::max(std::abs(px),std::abs(py))>8||std::max(std::abs(n.position.x-n.home.x),std::abs(n.position.y-n.home.y))>12)n.hostile=false;
             else {
+                if(n.wait>0){n.wait-=dt;continue;}
                 auto canHit=[&](const Actor&a){
                     if(std::abs(a.z-player.z)>8||std::max(std::abs(a.x-player.x),std::abs(a.y-player.y))>1)return false;
                     for(int d=0;d<8;++d){Actor next;int actual;if(step(w,a,d,next,actual)&&next.x==player.x&&next.y==player.y&&std::abs(next.z-player.z)<=8)return true;}return same(a,player);
@@ -127,10 +131,12 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
                     }
                 }
                 if(direct)continue;
-                if(n.wait>0){n.wait-=dt;continue;}
-                struct Node{Actor at,first;int direction;};std::vector<Node>queue;queue.reserve(256);queue.push_back({n.position,n.position,0});bool found=false;Node route{};
-                for(size_t q=0;q<queue.size()&&!found&&q<256;++q){
-                    for(int d=0;d<8&&queue.size()<256;++d){Actor next;int actual;
+                if(routeSearches>=1){continue;}
+                ++routeSearches;
+                struct Node{Actor at,first;int direction;};std::vector<Node>queue;queue.reserve(64);queue.push_back({n.position,n.position,0});bool found=false;Node route{};
+                for(size_t q=0;q<queue.size()&&!found&&q<64;++q){
+                    ++routeNodes;
+                    for(int d=0;d<8&&queue.size()<64;++d){Actor next;int actual;
                         if(!step(w,queue[q].at,d,next,actual)||same(next,player)||(playerMoving&&same(next,from))||occupied(next,int(i))||std::abs(next.x-n.home.x)>12||std::abs(next.y-n.home.y)>12)continue;
                         if(actual&1){Actor s1{queue[q].at.x+dx[actual],queue[q].at.y,queue[q].at.z},s2{queue[q].at.x,queue[q].at.y+dy[actual],queue[q].at.z};if(occupied(s1,int(i))||occupied(s2,int(i))||same(s1,player)||same(s2,player))continue;}
                         bool seen=false;for(const auto&v:queue)if(v.at.x==next.x&&v.at.y==next.y&&v.at.z==next.z){seen=true;break;}if(seen)continue;
@@ -138,7 +144,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
                         if(canHit(next)){route=node;found=true;break;}
                     }
                 }
-                if(found){n.from=n.position;n.position=route.first;n.progress=0;n.moving=true;occupancyDirty=true;n.direction=(route.direction+1)&7;}else n.wait=.35f;
+                if(found){n.from=n.position;n.position=route.first;n.progress=0;n.moving=true;occupancyDirty=true;n.direction=(route.direction+1)&7;}else n.wait=.75f;
                 continue;
             }
         }

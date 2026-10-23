@@ -37,6 +37,14 @@ int main(int argc,char**argv){
     std::vector<uint8_t>pop{'U','N','P','2'};put(pop,1,2);put(pop,1,2);put(pop,hash(read(newRoot+"scene.bin")),4);put(pop,hash(payload),4);pop.insert(pop.end(),payload.begin(),payload.end());write(root+"population.bin",pop);
     Npcs npcs;assert(npcs.loadPopulation(root+"population.bin",newRoot+"scene.bin",large,error)&&npcs.hasDeathFrames());npcs.reset(large,{384,390,0});Doors doors;npcs.update(large,{384,390,0},{384,390,0},false,.05f,doors);assert(npcs.all()[0].hostile&&npcs.all()[0].moving&&npcs.all()[0].maximumHits==65&&npcs.all()[0].meleeMax==7);auto&plant=npcs.combatants()[0];plant.stationary=true;plant.moving=false;plant.hostile=false;plant.wait=0;plant.position=plant.from=plant.home={390,390,0};npcs.update(large,{380,390,0},{380,390,0},false,.1f,doors);assert(!plant.moving);
     Combat combat;combat.reset(npcs);assert(combat.vitals()[0].hits==65);
+    // Dense hostile pack behind an impassable wall: route work remains bounded
+    // after prolonged play, including failed searches and cooldown retries.
+    World blockedWorld;blockedWorld.width=blockedWorld.height=32;blockedWorld.vertices.assign(33*33,0);blockedWorld.land.resize(32*32);
+    for(int y=0;y<32;++y){Object wall;wall.x=17;wall.y=y;wall.z=0;wall.height=80;wall.flags=Impassable;blockedWorld.objects.push_back(wall);}blockedWorld.index();
+    auto&pack=npcs.combatants();pack.clear();for(int i=0;i<103;++i){Npc enemy;enemy.position=enemy.from=enemy.home={19,16,0};enemy.animal=enemy.hostile=true;enemy.wait=0;pack.push_back(enemy);}
+    unsigned searches=0;for(int frame=0;frame<1200;++frame){npcs.update(blockedWorld,{15,16,0},{15,16,0},false,1.f/60,doors);assert(npcs.lastRouteSearches()<=1&&npcs.lastRouteNodes()<=64);searches+=npcs.lastRouteSearches();}
+    assert(searches>100);for(const auto&enemy:npcs.all())assert(enemy.position.x>17);
+
     if(argc==3){World actual;assert(loadWorld(std::string(argv[2])+"/scene.bin",actual,error)&&actual.width==512&&actual.objects.size()>110000);Npcs population;assert(population.loadPopulation(std::string(argv[2])+"/population.bin",std::string(argv[2])+"/scene.bin",actual,error)&&population.hasDeathFrames());population.reset(actual,{actual.startX,actual.startY,actual.startZ});assert(population.all().size()>500);assert(population.loadNames(std::string(argv[2])+"/npc_names.bin",std::string(argv[2])+"/scene.bin",std::string(argv[2])+"/population.bin",error));Journal journal;assert(loadJournal(std::string(argv[2])+"/journal.bin",std::string(argv[2])+"/scene.bin",journal,error)&&journal.width==512);std::cout<<"Private map objects "<<actual.objects.size()<<", NPCs "<<population.all().size()<<"\n";}
     std::cout<<"Region 29: 512 map, lightweight identity, safe campaign import, original untouched, retained chests/gear/colors, no reimport and aggressive metadata passed\n";
 }
