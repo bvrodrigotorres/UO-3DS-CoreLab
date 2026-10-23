@@ -199,3 +199,9 @@ con teletransporte seguro a puntos de interés. [Instalación y controles](docs/
 
 Defensa automática con foco en el primer agresor y curación mediante pociones,
 vendas, pan y manzanas. [Instalación y controles](docs/v0.34.md).
+
+## v0.35
+
+SELECT cambia techos, Y repite la última curación y pausar guarda la partida.
+Corrección de foco defensivo ante objetivos anteriores y agresores alejados del
+origen. [Instalación y controles](docs/v0.35.md).

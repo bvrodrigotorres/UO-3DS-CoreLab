@@ -89,8 +89,8 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     for(const auto&line:info.lines){if(y>174)break;text(fb,20,y,line,ink);y+=spacing;}
     box(fb,17,181,286,1,ink);box(fb,17,183,286,1,gold);
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
-    text(fb,20,199,"Y: ROOFS | A: ATACAR | X: OBJ",ink);
-    text(fb,20,209,"SELECT: SAVE | L/R: PAGINAS",ink);
+    text(fb,20,199,"Y: CURAR | A: ATACAR | X: OBJ",ink);
+    text(fb,20,209,"SELECT: TECHOS | L/R: PAGINAS",ink);
     text(fb,20,219,"START: PAUSA | DESLIZA 1/4",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}

@@ -18,6 +18,7 @@ public:
     std::array<DamageVisual,32>damage{};std::array<BloodPool,32>blood{};
     std::array<Corpse,32>corpses{};int target=-1;bool attacking=false;std::string message;
     bool useHealing(Inventory&,size_t,PlayerStatus&,SaveRename=std::rename);
+    bool repeatHealing(Inventory&,PlayerStatus&,SaveRename=std::rename);
     float healingWait()const{return healCooldown;}
     bool striking()const{return strike>0;}
     bool combatPose()const{return attacking||striking();}

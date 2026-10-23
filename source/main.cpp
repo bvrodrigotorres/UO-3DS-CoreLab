@@ -5,6 +5,7 @@
 #include "performance.hpp"
 #include "npc_push.hpp"
 #include "combat.hpp"
+#include "session_save.hpp"
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
 #include "inventory_drag.hpp"
@@ -298,12 +299,13 @@ int main(){
     inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";return used;};
     if(!lab::loadVitals(vitalsPath(),playerStatus))saveMessage="ESTADISTICAS: ARCHIVO INVALIDO";
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
+    auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
         bool wasPaused=pause.active;
-        if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();}
+        if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();saveAtPause(now);now=osGetTime();}
         else if((down&KEY_START)&&pause.active)pause.active=false;
         if(pause.active||wasPaused){
             lab::PauseAction action=lab::PauseAction::None;
@@ -367,7 +369,8 @@ int main(){
             continue;
         }
         if(down&(KEY_X|KEY_A))npcPush.reset();
-        if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
+        if(down&KEY_SELECT)roofs=lab::nextRoofMode(roofs);
+        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";saveMessage=inventory.message;}
         bool pageChanged=false;
         if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:3))%4;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
         touchPosition touch;
@@ -381,7 +384,7 @@ int main(){
                 inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
                 if(lab::characterPaperdollHit(pages.startX,pages.startY)){
-                    pause.open();pause.selected=2;pauseAt=now;
+                    pause.open();pause.selected=2;pauseAt=now;saveAtPause(now);
                     if(appearance.enabled&&characterAssets.ready())equipmentEditor(characterAssets,appearance,inventory,playerStatus);
                     else pause.message="PERSONALIZA EL PERSONAJE PRIMERO";
                     now=osGetTime();last=sample=now;pausePad=0;frames=0;
@@ -394,10 +397,6 @@ int main(){
         }
         if(authentic)inventory.tickGround(dt);
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
-        if(down&KEY_SELECT){
-            if(moving)saveMessage="Stop moving before saving";
-            else {bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();positionCheckpoint().result(actor,now,ok);}
-        }
         if(authentic&&(down&KEY_X))combat.select(npcs,actor,true);
         if(authentic&&(down&KEY_A))combat.toggle(npcs,actor);
         if(authentic){

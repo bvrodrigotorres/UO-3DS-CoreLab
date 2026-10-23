@@ -80,9 +80,9 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     if(target==int(index)){target=-1;attacking=false;}
 }
 void Combat::defend(Npcs&npcs,const Actor&player){
-    auto eligible=[&](int index){if(index<0||size_t(index)>=npcs.all().size())return false;const auto&n=npcs.all()[index];return attackable(n)&&n.hostile&&!(n.maximumHits>0&&n.meleeMax==0)&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8&&distance(n.position,n.home)<=12;};
+    auto eligible=[&](int index){if(index<0||size_t(index)>=npcs.all().size())return false;const auto&n=npcs.all()[index];return attackable(n)&&n.hostile&&!(n.maximumHits>0&&n.meleeMax==0)&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8;};
     if(automaticDefense&&eligible(target))return;
-    if(attacking&&!automaticDefense)return; // Explicit A/X target overrides automatic selection.
+    if(attacking&&!automaticDefense&&eligible(target))return; // Keep an active manual opponent; stale/neutral selections cannot block defense.
     if(suppressDefense)return;
     int next=-1;uint64_t first=UINT64_MAX;
     for(size_t i=0;i<npcs.all().size();++i)if(eligible(int(i))){npcs.engage(i);uint64_t order=npcs.all()[i].aggressionOrder;if(order<first){first=order;next=int(i);}}
@@ -96,8 +96,13 @@ bool Combat::useHealing(Inventory&inv,size_t index,PlayerStatus&status,SaveRenam
     if(status.hits>=status.hitsMax){inv.message="YA TIENES TODA LA VIDA";return false;}
     if(healCooldown>0){inv.message="ESPERA PARA CURARTE";return false;}
     if(!inv.consume(index,renameFile))return false;
-    int recovered=std::min(amount,status.hitsMax-status.hits);status.hits+=recovered;status.healthVisible=6;status.recovered();healCooldown=3;
+    int recovered=std::min(amount,status.hitsMax-status.hits);status.hits+=recovered;status.lastHealing=type;status.healthVisible=6;status.recovered();healCooldown=3;
     inv.message=std::string(itemDefs[type].name)+": +"+std::to_string(recovered)+" VIDA";return true;
+}
+bool Combat::repeatHealing(Inventory&inv,PlayerStatus&status,SaveRename renameFile){
+    if(!itemHealing(status.lastHealing)){inv.message="USA PRIMERO UN OBJETO CURATIVO";return false;}
+    for(size_t i=0;i<inv.backpack.size();++i)if(inv.backpack[i].type==status.lastHealing)return useHealing(inv,i,status,renameFile);
+    inv.message="NO QUEDA "+std::string(itemDefs[status.lastHealing].name);return false;
 }
 bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,PlayerStatus&status,Inventory&inv){
     if(mob.size()!=npcs.all().size())reset(npcs);
@@ -174,14 +179,17 @@ bool StatusArt::load(const std::string&path){
 }
 bool loadVitals(const std::string&path,PlayerStatus&status){
     std::ifstream f(path,std::ios::binary);if(!f){f.open(path+".bak",std::ios::binary);if(!f)return true;}
-    uint8_t b[20];if(!f.read((char*)b,20)||f.peek()!=EOF||std::memcmp(b,"UVT1",4)||get(b+16)!=hash(b,16))return false;
-    unsigned h=get(b+4),m=get(b+8),s=get(b+12);if(h==0||h>unsigned(status.hitsMax)||m>unsigned(status.manaMax)||s>unsigned(status.staminaMax))return false;
-    status.hits=h;if(status.hits<status.hitsMax)status.tookDamage();status.mana=m;status.stamina=s;return true;
+    std::vector<uint8_t>b(25);f.read((char*)b.data(),b.size());b.resize(size_t(f.gcount()));
+    bool legacy=b.size()==20&&!std::memcmp(b.data(),"UVT1",4),current=b.size()==24&&!std::memcmp(b.data(),"UVT2",4);
+    if((!legacy&&!current)||get(b.data()+b.size()-4)!=hash(b.data(),b.size()-4))return false;
+    unsigned last=current?get(b.data()+16):0;if(last&&!itemHealing(last))return false;
+    unsigned h=get(b.data()+4),m=get(b.data()+8),s=get(b.data()+12);if(h==0||h>unsigned(status.hitsMax)||m>unsigned(status.manaMax)||s>unsigned(status.staminaMax))return false;
+    status.lastHealing=last;status.hits=h;if(status.hits<status.hitsMax)status.tookDamage();status.mana=m;status.stamina=s;return true;
 }
 bool saveVitals(const std::string&path,const PlayerStatus&status,SaveRename renameFile){
-    uint8_t b[20]={'U','V','T','1'};put(b+4,status.hits);put(b+8,status.mana);put(b+12,status.stamina);put(b+16,hash(b,16));
+    uint8_t b[24]={'U','V','T','2'};put(b+4,status.hits);put(b+8,status.mana);put(b+12,status.stamina);put(b+16,status.lastHealing);put(b+20,hash(b,20));
     std::string tmp=path+".tmp",bak=path+".bak";FILE*f=std::fopen(tmp.c_str(),"wb");if(!f)return false;
-    bool ok=std::fwrite(b,1,20,f)==20;if(std::fclose(f))ok=false;if(!ok){std::remove(tmp.c_str());return false;}
+    bool ok=std::fwrite(b,1,sizeof b,f)==sizeof b;if(std::fclose(f))ok=false;if(!ok){std::remove(tmp.c_str());return false;}
     bool had=std::ifstream(path).good();if(had&&((std::remove(bak.c_str())&&errno!=ENOENT)||renameFile(path.c_str(),bak.c_str()))){std::remove(tmp.c_str());return false;}
     if(renameFile(tmp.c_str(),path.c_str())){if(had)renameFile(bak.c_str(),path.c_str());std::remove(tmp.c_str());return false;}return true;
 }
