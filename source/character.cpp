@@ -139,6 +139,11 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
     if((a.realClothes&&(mask&128))||(!a.realClothes&&a.pants))layers.push_back({a.realClothes?((mask&512)?449:430):(a.pants==1?430:449),color(a,10)});
     const unsigned armor=(mask>>15)&3;
     if((a.realClothes&&(mask&32))||(!a.realClothes&&a.shirt))layers.push_back({a.realClothes?(armor?std::array<int,3>{{542,538,527}}[armor-1]:((mask&256)?435:434)):(a.shirt==1?434:435),uint16_t(armor>=2?0:color(a,8))});
+    unsigned sleeves=(mask>>17)&3;
+    if(sleeves>2)return false;
+    if(sleeves)layers.push_back({sleeves==1?544:528,uint16_t(sleeves==1?color(a,8):0)});
+    if(doll&&(mask&(1u<<19)))layers.push_back({498,0});
+    if(doll&&(mask&(1u<<20)))layers.push_back({495,0});
     if(mask&16)layers.push_back({546,color(a,16)});
     if(mask&64)layers.push_back({545,color(a,17)});
     if(mask&2)layers.push_back({469,color(a,13)});

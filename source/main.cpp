@@ -6,6 +6,7 @@
 #include "npc_push.hpp"
 #include "combat.hpp"
 #include "commerce.hpp"
+#include "equipment_menu.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include "region_migration.hpp"
@@ -26,7 +27,30 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
     GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
     gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
 }
-bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,const std::array<int,8>&,std::string&)>&commit,const lab::Inventory*owned=nullptr){
+bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearance,lab::Inventory&bag,const lab::PlayerStatus&status){
+    C3D_FrameSync();lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
+    while(aptMainLoop()){
+        if(changed){lab::Inventory staged;staged.equipment=editor.desired;unsigned key=staged.equipmentMask();valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";changed=false;}
+        auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
+        lab::drawEquipmentMenu(top,bottom,editor,appearance,bag,status,doll,sprite);
+        GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+        hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();if(down&KEY_B)return false;
+        if(down&(KEY_L|KEY_R)){editor.pageMove();changed=true;}
+        if(down&KEY_X){editor.direction=(editor.direction+1)%8;changed=true;}
+        circlePosition pad;hidCircleRead(&pad);int vertical=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35),horizontal=((held&KEY_RIGHT)||pad.dx>35)-((held&KEY_LEFT)||pad.dx< -35);
+        if(!vertical&&!horizontal)repeat=0;else if(now>=repeat){if(vertical)editor.move(vertical);else editor.change(horizontal);changed=true;repeat=now+170;}
+        if(down&KEY_A){editor.change(1);changed=true;}
+        bool apply=down&KEY_START;
+        if(down&KEY_TOUCH){touchPosition touch;hidTouchRead(&touch);int action=editor.tap(touch.px,touch.py);if(action<0)return false;apply=apply||action>0;changed=true;}
+        if(apply){
+            lab::Inventory staged;staged.equipment=editor.desired;unsigned key=staged.equipmentMask();
+            valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);
+            if(valid&&editor.apply(bag))return true;
+            if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";
+        }
+    }return false;
+}
+bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,const std::array<int,11>&,std::string&)>&commit,const lab::Inventory*owned=nullptr){
     if(!assets.ready()||!assets.fullPaperdoll())return false;
     C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(owned)editor.useWardrobe(*owned);if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
@@ -214,7 +238,7 @@ int main(){
                 menu.message="ACTUALIZA CHARACTER A V0.25";continue;
             }
             lab::Appearance created;created.enabled=true;created.realClothes=true;
-            started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,const std::array<int,8>&,std::string&message){
+            started=appearanceEditor(characterAssets,created,0,true,[&](const lab::Appearance&a,const std::array<int,11>&,std::string&message){
                 std::vector<uint8_t>dolls;std::vector<uint16_t>frames;
                 if(!characterAssets.dolls(a,dolls)||!characterAssets.compose(a,7,frames)){message="FALTAN CAPAS DE EQUIPAMIENTO";return false;}
                 bool ok=freshGame(a);if(!ok)message=menu.message;return ok;
@@ -276,10 +300,16 @@ int main(){
             }
             if(action==lab::PauseAction::Resume){
                 pause.active=false;positionCheckpoint().suspend(now-pauseAt);pages.active=false;frames=0;
+            }else if(action==lab::PauseAction::Equipment){
+                auto&bag=authentic?inventory:demoInventory;
+                if(!appearance.enabled||!characterAssets.ready())pause.message="PERSONALIZA EL PERSONAJE PRIMERO";
+                else equipmentEditor(characterAssets,appearance,bag,playerStatus);
+                now=osGetTime();pausePad=0;frames=0;
+                lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus);
             }else if(action==lab::PauseAction::Customize){
                 auto&bag=authentic?inventory:demoInventory;
                 if(!characterAssets.ready()||!characterAssets.fullPaperdoll())pause.message="ACTUALIZA CHARACTER A V0.25";
-                else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,const std::array<int,8>&outfit,std::string&message){
+                else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,const std::array<int,11>&outfit,std::string&message){
                     const auto previous=appearance;lab::Inventory preview;preview.equipment=outfit;unsigned key=preview.equipmentMask();
                     if(!lab::applyAppearance(characterAssets,a,equipmentArt,key,message))return false;
                     auto restore=[&](){std::string ignored;if(previous.enabled)lab::applyAppearance(characterAssets,previous,equipmentArt,bag.equipmentMask(),ignored);

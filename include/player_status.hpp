@@ -14,8 +14,9 @@ struct PlayerStatus {
     bool showHealth()const{return healthVisible>0||(recoveryGoal>0&&hits<recoveryGoal);}
     void tookDamage(){recoveryGoal=std::min(hitsMax,hits+(hitsMax+3)/4);healthVisible=6;}
     void recovered(){if(recoveryGoal>0&&hits>=recoveryGoal)recoveryGoal=0;}
-    int damageMin(const Inventory*bag)const{int t=bag?bag->equipment[0]:-1;return t>=0&&t<int(ItemTypes)?itemDefs[t].damageMin:4;}
-    int damageMax(const Inventory*bag)const{int t=bag?bag->equipment[0]:-1;return t>=0&&t<int(ItemTypes)?itemDefs[t].damageMax:7;}
+    int damageBonus(const Inventory*bag)const{return bag&&bag->equipment[9]==28?2:0;}
+    int damageMin(const Inventory*bag)const{int t=bag?bag->equipment[0]:-1;return (t>=0&&t<int(ItemTypes)?itemDefs[t].damageMin:4)+damageBonus(bag);}
+    int damageMax(const Inventory*bag)const{int t=bag?bag->equipment[0]:-1;return (t>=0&&t<int(ItemTypes)?itemDefs[t].damageMax:7)+damageBonus(bag);}
     float attackDelay(const Inventory*bag)const{int t=bag?bag->equipment[0]:-1;return t>=0&&t<int(ItemTypes)?itemDefs[t].delay:.85f;}
     int resistance(const Inventory*bag,int channel=0)const{int value=resistances[channel];if(channel==0&&bag)for(int t:bag->equipment)if(t>=0&&t<int(ItemTypes))value+=itemDefs[t].protection;return std::max(0,std::min(70,value));}
     int weightMax()const{return 40+strength*7/2;}

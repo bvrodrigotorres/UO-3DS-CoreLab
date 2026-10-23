@@ -24,7 +24,11 @@ const std::array<ItemDef,ItemTypes> itemDefs={{{0xEED,"ORO",true,-1,0,0,.85f,0,0
 {0x9F1,"CARNE CRUDA",true,-1,0,0,.85f,0,1,4},
 {0x1079,"PIELES",true,-1,0,0,.85f,0,1,8},
 {0x1BD1,"PLUMAS",true,-1,0,0,.85f,0,1,3},
-{0xF7E,"HUESOS",true,-1,0,0,.85f,0,1,5}}};
+{0xF7E,"HUESOS",true,-1,0,0,.85f,0,1,5},
+{0x13CD,"MANGAS CUERO",false,8,0,0,.85f,6,2,45},
+{0x1410,"MANGAS PLACAS",false,8,0,0,.85f,10,5,120},
+{0x108A,"ANILLO PODER",false,9,2,2,.85f,0,1,220},
+{0x1086,"BRAZALETE GUARDA",false,10,0,0,.85f,5,1,160}}};
 namespace {
 uint32_t hash(const std::vector<uint8_t>&v){uint32_t h=2166136261u;for(auto b:v)h=(h^b)*16777619u;return h;}
 void put(std::vector<uint8_t>&b,uint32_t n){for(int i=0;i<4;++i)b.push_back(uint8_t(n>>(i*8)));}
@@ -63,7 +67,7 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4)||!std::memcmp(b.data(),"UIN5",4))&&get(b,4)==identity&&get(b,8)==chests.size();
+    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4)||!std::memcmp(b.data(),"UIN5",4)||!std::memcmp(b.data(),"UIN6",4))&&get(b,4)==identity&&get(b,8)==chests.size();
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
@@ -78,19 +82,21 @@ void Inventory::init(const World&w,const std::string&p){
         bags.push_back(bag);
     }
     bool legacy=b.size()>=4&&b[3]=='1';
-    std::array<int,8>loaded;loaded.fill(-1);
-    bool remembered=b.size()>=4&&b[3]=='5';
+    std::array<int,11>loaded;loaded.fill(-1);
+    bool expanded=b.size()>=4&&b[3]=='6';
+    int slots=expanded?11:8;
+    bool remembered=b.size()>=4&&(b[3]=='5'||expanded);
     bool extended=b.size()>=4&&(b[3]=='4'||remembered);
     if(ok&&!legacy){
-        if(pos+(remembered?68:extended?36:12)!=b.size()-4)ok=false;
-        else for(int slot=0;slot<(extended?8:3);++slot){uint32_t value=get(b,pos);pos+=4;
+        if(pos+(expanded?92:remembered?68:extended?36:12)!=b.size()-4)ok=false;
+        else for(int slot=0;slot<(extended?slots:3);++slot){uint32_t value=get(b,pos);pos+=4;
             if(value==0xffffffffu)continue;
             if(value>=ItemTypes||itemDefs[value].slot!=slot){ok=false;break;}
             loaded[slot]=int(value);
         }
     }
     if(ok&&extended){uint32_t flags=get(b,pos);pos+=4;if(flags>3)ok=false;dressed=flags&1;accessories=flags&2;}
-    if(ok&&remembered){for(int slot=0;slot<8;++slot){uint32_t type=get(b,pos);pos+=4;if(type==0xffffffffu)continue;if(type>=ItemTypes||itemDefs[type].slot!=slot){ok=false;break;}lastEquipment[slot]=type;}}
+    if(ok&&remembered){for(int slot=0;slot<slots;++slot){uint32_t type=get(b,pos);pos+=4;if(type==0xffffffffu)continue;if(type>=ItemTypes||itemDefs[type].slot!=slot){ok=false;break;}lastEquipment[slot]=type;}}
     if(!ok||pos!=b.size()-4){writable=false;backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
     restored=true;equipment=loaded;if(legacy)seedGear();
@@ -101,12 +107,15 @@ void Inventory::seedGear(){
     for(auto&c:chests)if(c.items.size()+2<=ChestSlots){c.items.push_back({6,1});c.items.push_back({7,1});}
 }
 unsigned Inventory::equipmentMask()const{
-    unsigned m=0;for(size_t s=0;s<equipment.size();++s)if(equipment[s]>=0)m|=1u<<s;
+    unsigned m=0;for(size_t s=0;s<8;++s)if(equipment[s]>=0)m|=1u<<s;
     if(equipment[5]==9)m|=256;
     if(equipment[7]==11)m|=512;
     if(equipment[2]==12)m|=1024;
     if(equipment[0]>=16&&equipment[0]<=18)m|=unsigned(equipment[0]-15)<<13;
     if(equipment[5]>=19&&equipment[5]<=21)m|=unsigned(equipment[5]-18)<<15;
+    if(equipment[8]>=26&&equipment[8]<=27)m|=unsigned(equipment[8]-25)<<17;
+    if(equipment[9]>=0)m|=1u<<19;
+    if(equipment[10]>=0)m|=1u<<20;
     return m;
 }
 unsigned Inventory::prospectiveKey(size_t slot,int type)const{Inventory copy;copy.equipment=equipment;copy.equipment[slot]=type;return copy.equipmentMask();}
@@ -123,7 +132,7 @@ void Inventory::addAccessories(){
     for(auto&c:chests)if(c.items.size()+3<=ChestSlots){c.items.push_back({13,1});c.items.push_back({14,1});c.items.push_back({15,1});}
     accessories=true;
 }
-bool Inventory::setOutfit(const std::array<int,8>&desired,SaveRename renameFile){
+bool Inventory::setOutfit(const std::array<int,11>&desired,SaveRename renameFile){
     if(!writable){message="ERROR INVENTARIO: ARCHIVO INTACTO";return false;}
     if(desired==equipment)return true;
     Bag pool=backpack;
@@ -141,7 +150,7 @@ bool Inventory::setOutfit(const std::array<int,8>&desired,SaveRename renameFile)
     auto oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;
     backpack=std::move(pool);equipment=desired;
     for(size_t slot=0;slot<desired.size();++slot)if(desired[slot]>=0)lastEquipment[slot]=desired[slot];else if(oldEquipment[slot]>=0)lastEquipment[slot]=oldEquipment[slot];
-    if(!persist(message,renameFile)){backpack=std::move(oldBag);equipment=oldEquipment;lastEquipment=oldLast;return false;}
+    if(!persist(message,renameFile)){backpack=std::move(oldBag);equipment=oldEquipment;lastEquipment=oldLast;if(prepareEquipment)prepareEquipment(equipmentMask());return false;}
     message="EQUIPO GUARDADO";return true;
 }
 bool Inventory::equip(size_t index,SaveRename renameFile){
@@ -155,7 +164,7 @@ bool Inventory::equip(size_t index,SaveRename renameFile){
     backpack.erase(backpack.begin()+index);
     if(equipment[slot]>=0)backpack.push_back({uint16_t(equipment[slot]),1});
     equipment[slot]=item.type;lastEquipment[slot]=item.type;
-    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;return false;}
+    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;if(prepareEquipment)prepareEquipment(equipmentMask());return false;}
     message=std::string(itemDefs[item.type].name)+" EQUIPADO - GUARDADO";return true;
 }
 bool Inventory::unequip(size_t slot,SaveRename renameFile){
@@ -165,7 +174,7 @@ bool Inventory::unequip(size_t slot,SaveRename renameFile){
     if(prepareEquipment&&!prepareEquipment(mask)){message="FALTAN RECURSOS DE EQUIPO";return false;}
     Bag oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;int type=equipment[slot];
     backpack.push_back({uint16_t(type),1});equipment[slot]=-1;lastEquipment[slot]=type;
-    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;return false;}
+    if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;if(prepareEquipment)prepareEquipment(equipmentMask());return false;}
     message=std::string(itemDefs[type].name)+" A MOCHILA - GUARDADO";return true;
 }
 bool Inventory::toggleEquipment(size_t slot,SaveRename renameFile){
@@ -211,9 +220,12 @@ void Inventory::open(const World&w,const Actor&a){
 bool Inventory::persist(std::string&error,SaveRename renameFile){
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
     bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    bool expanded=false;for(size_t s=8;s<11;++s)if(equipment[s]>=0||lastEquipment[s]>=0)expanded=true;
+    if(expanded){extended=true;remembered=true;}
+    size_t slots=expanded?11:8;
+    std::vector<uint8_t>b={'U','I','N',uint8_t(expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
-    append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?8u:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(int t:lastEquipment)put(b,uint32_t(t));put(b,hash(b));
+    append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));put(b,hash(b));
     std::string tmp=path+".tmp",bak=path+".bak";
     FILE*f=std::fopen(tmp.c_str(),"wb");if(!f){error="ERROR SD: NO SE MOVIO EL OBJETO";return false;}
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fclose(f))ok=false;

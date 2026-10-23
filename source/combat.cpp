@@ -68,8 +68,10 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
         if(armed)slot->loot.push_back({3,1});
         if(is("harpy"))slot->loot.push_back({24,uint16_t(roll(5,12))});
         if(undead){slot->loot.push_back({25,uint16_t(roll(1,3))});slot->loot.push_back({3,uint16_t(roll(1,3))});if(roll(0,3)==0)slot->loot.push_back({4,1});}
+        if((armed||undead)&&roll(0,7)==0)slot->loot.push_back({uint16_t(roll(28,29)),1});
         if(armed||is("skeleton")){if(roll(0,2)==0)slot->loot.push_back({uint16_t(tier==1?5:roll(16,18)),1});
-            if(roll(0,3)==0)slot->loot.push_back({uint16_t(tier==1?19:tier==2?20:21),1});}
+            if(roll(0,3)==0)slot->loot.push_back({uint16_t(tier==1?19:tier==2?20:21),1});
+            if(roll(0,4)==0)slot->loot.push_back({uint16_t(tier==1?26:27),1});}
     }else if(is("corpser")||is("reaper")){slot->loot={{3,uint16_t(roll(2,5))}};}
     else {slot->loot={{22,uint16_t(roll(1,2))}};if(is("bird")||is("chicken"))slot->loot.push_back({24,uint16_t(roll(3,8))});
         else if(is("cow")||is("bull")||is("sheep")||is("deer")||is("hind")||is("bear")||is("wolf")||is("goat"))slot->loot.push_back({23,uint16_t(roll(1,3))});}

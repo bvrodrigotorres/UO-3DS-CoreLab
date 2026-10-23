@@ -35,7 +35,7 @@ def sparse(values):
     return result
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--graphics',type=int,nargs='+');p.add_argument('--combat',action='store_true');p.add_argument('--client',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--doll-only',action='store_true');p.add_argument('--graphics',type=int,nargs='+');p.add_argument('--combat',action='store_true');p.add_argument('--client',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
     if a.out.exists():raise FileExistsError(a.out)
     a.out.mkdir(parents=True)
     u=UopFile(a.client/'gumpartLegacyMUL.uop','build/gumpartlegacymul/{0:D8}.tga',has_extra=True)
@@ -70,7 +70,8 @@ def main():
                         samples.append((d,mirror,7,0));samples.extend((d,mirror,attack,i) for i in range(4))
                     for d,mirror in DIRECTION_MAP:samples.extend((d,mirror,attack,i) for i in range(4))
             frames=[]
-            for d,mirror,act,phase in samples:
+            if a.doll_only:frames=[sparse([0]*(96*112)) for _ in samples]
+            for d,mirror,act,phase in ([] if a.doll_only else samples):
                 base=seq(body,act,d);b,cx,cy=base[0 if act in (4,7) else (phase*(len(base)-1)//3 if a.combat else phase*len(base)//4)]
                 ax=(96-b.width)//2+cx;ay=107+cy
                 s=seq(graphic,act,d);im,x,y=s[0 if act in (4,7) else (phase*(len(s)-1)//3 if a.combat else phase*len(s)//4)]

@@ -7,14 +7,15 @@ std::vector<unsigned>catalogue(const Npc&n){
     if(!n.alive||n.animal)return {};
     std::string title=n.title;std::transform(title.begin(),title.end(),title.begin(),[](unsigned char c){return char(std::tolower(c));});
     auto is=[&](const char*s){return title.find(s)!=std::string::npos;};
-    if(is("smith")||is("armorer"))return {5,16,17,18,19,20,21,14,15};
+    if(is("smith")||is("armorer"))return {5,16,17,18,19,20,21,14,15,26,27};
+    if(is("jewel"))return {28,29};
     if(is("tailor")||is("weaver"))return {6,7,8,9,10,11,12,13,23};
     if(is("butcher"))return {22};
-    if(is("tanner"))return {19,14,15,23};
+    if(is("tanner"))return {19,14,15,23,26};
     if(is("bowyer"))return {24};
     if(is("healer")||is("alchemist"))return {3,4,25};
     if(is("baker")||is("cook")||is("innkeeper")||is("tavern keeper")||is("barkeeper"))return {1,2};
-    if(is("provisioner")||is("merchant"))return {1,2,3,4,5,7,8,10,12};
+    if(is("provisioner")||is("merchant"))return {1,2,3,4,5,7,8,10,12,28,29};
     return {};
 }
 }

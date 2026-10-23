@@ -27,7 +27,7 @@ int main(int argc,char**argv){
     assert(menu.hit(100,60)==0&&menu.hit(100,90)==1&&menu.hit(5,60)==-1&&menu.hit(100,200)==-1);
     menu.back();menu.move(-1);assert(menu.selected==3);assert(menu.activate(true)==MenuAction::Exit);menu.move(1);assert(menu.selected==0);
     World w=demoWorld();Object chest;chest.art=0xE42;chest.x=5;chest.y=5;w.objects={chest};w.index();
-    Inventory old;old.init(w,root+"inventory-private.sav");old.backpack={{5,1},{0,30}};old.equipment={{-1,6,7,-1,-1,-1,-1,-1}};old.chests[0].items.clear();assert(old.checkpoint());
+    Inventory old;old.init(w,root+"inventory-private.sav");old.backpack={{5,1},{0,30}};old.equipment={{-1,6,7,-1,-1,-1,-1,-1,-1,-1,-1}};old.chests[0].items.clear();assert(old.checkpoint());
     Actor location{6,5,0};assert(savePosition(root+"position-private.sav",w,location,error));auto bytes=read(root+"inventory-private.sav");
     Campaign campaign(root);assert(campaign.load()&&campaign.generation==0&&campaign.prefix().empty());
     uint32_t next=campaign.unusedGeneration();assert(next==1);auto prefix=campaign.prefix(next);
@@ -49,7 +49,7 @@ int main(int argc,char**argv){
     menu.back();drawStartMenu(bottom.data()+16,menu,true);ppm(root+"menu.ppm",bottom,320);
     for(int i=0;i<16;++i)assert(top[i]==0xA5&&top[top.size()-1-i]==0xA5&&bottom[i]==0xA5&&bottom[bottom.size()-1-i]==0xA5);
     PauseMenu pause;pause.open();std::vector<uint8_t>paused(320*240*3+32,0xCD);
-    for(int row=0;row<4;++row){pause.selected=row;drawPause(paused.data()+16,pause);}
+    for(int row=0;row<5;++row){pause.selected=row;drawPause(paused.data()+16,pause);}
     ppm(root+"pause.ppm",paused,320);
     for(int i=0;i<16;++i)assert(paused[i]==0xCD&&paused[paused.size()-1-i]==0xCD);
     std::cout<<"Startup: navigation, touch, cancellation, options, exact continue, safe new game, SD failure, legacy saves and framebuffer bounds passed\n";

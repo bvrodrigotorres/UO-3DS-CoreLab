@@ -18,13 +18,13 @@ struct Campaign {
     uint32_t unusedGeneration()const;
     bool commit(uint32_t,std::string&,SaveRename=std::rename);
 };
-enum class PauseAction {None,Resume,Customize,MainMenu,Exit};
+enum class PauseAction {None,Resume,Customize,Equipment,MainMenu,Exit};
 struct PauseMenu {
     bool active=false;int selected=0;std::string message;
     void open(){active=true;selected=0;message.clear();}
-    void move(int delta){selected=(selected+delta+4)%4;}
-    int hit(int x,int y)const{if(x<25||x>=295)return -1;for(int i=0;i<4;++i)if(y>=58+i*30&&y<86+i*30)return i;return -1;}
-    PauseAction activate()const{return selected==0?PauseAction::Resume:selected==1?PauseAction::Customize:selected==2?PauseAction::MainMenu:PauseAction::Exit;}
+    void move(int delta){selected=(selected+delta+5)%5;}
+    int hit(int x,int y)const{if(x<25||x>=295)return -1;for(int i=0;i<5;++i)if(y>=52+i*26&&y<76+i*26)return i;return -1;}
+    PauseAction activate()const{return selected==0?PauseAction::Resume:selected==1?PauseAction::Customize:selected==2?PauseAction::Equipment:selected==3?PauseAction::MainMenu:PauseAction::Exit;}
 };
 enum class MenuPage {Main,Options,Confirm};
 enum class MenuAction {None,NewGame,Continue,Exit};

@@ -5,7 +5,7 @@
 #include <array>
 #include <functional>
 namespace lab {
-constexpr size_t ItemTypes=26, BagSlots=24, ChestSlots=12, BagPageSlots=12;
+constexpr size_t ItemTypes=30, BagSlots=24, ChestSlots=12, BagPageSlots=12;
 struct InventoryLayout {
     static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
     static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
@@ -16,7 +16,7 @@ struct InventoryLayout {
 struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;
     int damageMin=0,damageMax=0;float delay=.85f;int protection=0,weight=1,price=1;
 };
-constexpr unsigned EquipmentAppearanceMask=2047u|(3u<<13)|(3u<<15);
+constexpr unsigned EquipmentAppearanceMask=2047u|(3u<<13)|(3u<<15)|(3u<<17)|(1u<<19)|(1u<<20);
 extern const std::array<ItemDef,ItemTypes> itemDefs;
 uint32_t inventoryWorldId(const World&);
 struct ItemStack {uint16_t type=0,count=0;};
@@ -31,7 +31,7 @@ class Inventory {
     Bag*external=nullptr;Actor externalPosition;std::string externalTitle;
     bool persist(std::string&,SaveRename);
 public:
-    std::array<int,8>equipment{{-1,-1,-1,-1,-1,-1,-1,-1}},lastEquipment{{-1,-1,-1,-1,-1,-1,-1,-1}};
+    std::array<int,11>equipment{{-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}},lastEquipment{{-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}};
     bool equipMode=false,restored=false,dressed=false,accessories=false;
     void initialDress(int shirt,int pants,bool shoes,bool robe=false);
     void addAccessories();
@@ -40,7 +40,7 @@ public:
     bool checkpoint(){if(!writable)return false;return persist(message,std::rename);}
     std::function<bool(unsigned)>prepareEquipment;
     unsigned equipmentMask()const;
-    bool setOutfit(const std::array<int,8>&,SaveRename=std::rename);
+    bool setOutfit(const std::array<int,11>&,SaveRename=std::rename);
     bool equip(size_t,SaveRename=std::rename);
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);

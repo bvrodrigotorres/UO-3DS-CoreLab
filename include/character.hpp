@@ -24,7 +24,7 @@ struct AppearanceEditor {
     int page=0,row=0,direction=4;bool creation=true;unsigned equipment=0;
     std::string message;
     bool wardrobe=false;
-    std::array<int,8>outfit{{-1,-1,-1,-1,-1,-1,-1,-1}};
+    std::array<int,11>outfit{{-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}};
     std::array<std::vector<int>,8>owned;
     void useWardrobe(const Inventory&);
     explicit AppearanceEditor(const Appearance&a,bool fresh=true):draft(a),creation(fresh){draft.enabled=true;}

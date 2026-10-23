@@ -178,3 +178,8 @@ Cambios e instalación de esta entrega: [v0.2](docs/v0.2.md).
 
 Armas con daño/cadencia y armaduras con protección física; botín por criatura y
 comerciantes cercanos en la cuarta página táctil. [Instalación y reglas](docs/v0.30.md).
+
+## v0.31
+
+Menú de Equipamiento en pausa, once ranuras con selección de objetos propios,
+mangas y joyas con efectos. [Instalación y controles](docs/v0.31.md).

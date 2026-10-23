@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
 #include "commerce.hpp"
+#include "equipment_menu.hpp"
 #include "character.hpp"
 #include "overhead_font.hpp"
 #include "combat.hpp"
@@ -77,7 +78,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.30",ink,1,13);
+    text(fb,225,20,"C.LAB V0.31",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -180,11 +181,27 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
     if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
-        std::string detail=d.name;if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
+        std::string detail=d.name;if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
         text(fb,18,29,detail,ink,1,47);}
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
         text(fb,18,29,inv.message,ink,1,46);
+}
+
+void drawEquipmentMenu(uint8_t*top,uint8_t*bottom,const EquipmentMenu&e,const Appearance&a,const Inventory&bag,const PlayerStatus&status,const std::vector<uint16_t>&doll,const std::vector<uint16_t>&sprite){
+    AppearanceEditor preview(a,false);preview.direction=e.direction;drawAppearance(top,bottom,preview,doll,sprite,false);
+    const Color ink={55,37,22},paper={231,213,177},gold={174,131,64};
+    Inventory staged;staged.equipment=e.desired;staged.backpack=bag.backpack;
+    canvasWidth=400;box(top,112,13,268,16,paper);text(top,140,17,"EQUIPAMIENTO",ink);
+    box(top,218,178,158,41,{176,160,127});text(top,222,181,"DANO "+std::to_string(status.damageMin(&staged))+"-"+std::to_string(status.damageMax(&staged)),ink);
+    text(top,222,194,"PROTECCION "+std::to_string(status.resistance(&staged))+"%",ink);
+    text(top,222,207,"X: GIRAR",ink);
+    canvasWidth=320;drawHudFrame(bottom,{},false,true);text(bottom,18,15,"EQUIPAMIENTO",ink);text(bottom,18,31,"L/R: HOJA | PAD: ELEGIR / CAMBIAR",ink,1,48);
+    box(bottom,249,25,54,17,gold);text(bottom,254,30,std::to_string(e.page()+1)+"/2 >",ink);
+    for(int r=0;r<6;++r){int slot=e.page()*6+r;if(slot>=11)break;int y=46+r*22;box(bottom,18,y,285,20,slot==e.row?gold:paper);text(bottom,22,y+7,equipmentSlotNames[slot],ink,1,11);text(bottom,133,y+7,"<",ink);text(bottom,146,y+7,e.desired[slot]<0?"SIN EQUIPAR":itemDefs[e.desired[slot]].name,ink,1,24);text(bottom,292,y+7,">",ink);}
+    int t=e.desired[e.row];std::string detail=t<0?"SIN OBJETO EN ESTA RANURA":t==28?"EFECTO: +2 AL DANO":t==29?"EFECTO: +5% PROTECCION FISICA":itemDefs[t].slot==0?"DANO "+std::to_string(itemDefs[t].damageMin)+"-"+std::to_string(itemDefs[t].damageMax)+" | "+std::to_string(int(itemDefs[t].delay*1000))+" MS":"PROTECCION FISICA: "+std::to_string(itemDefs[t].protection)+"%";
+    text(bottom,20,183,detail,ink,1,47);text(bottom,20,194,"A: CAMBIAR | START: APLICAR",ink);text(bottom,20,205,e.message.empty()?"SOLO OBJETOS QUE YA POSEES":e.message,ink,1,47);
+    box(bottom,18,216,132,18,gold);text(bottom,33,222,"B: CANCELAR",ink);box(bottom,170,216,133,18,gold);text(bottom,185,222,"APLICAR",ink);
 }
 
 void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemIcons*icons){
@@ -205,7 +222,7 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
     box(fb,18,194,130,16,gold);text(fb,22,198,"HOJA "+std::to_string(shop.bagPage+1)+"/2 >",ink);
     box(fb,170,194,130,16,gold);text(fb,176,198,shop.selected()<0?"ELIGE OBJETO":shop.purchase()?"COMPRAR 1":"VENDER 1",ink);
     text(fb,18,225,shop.message,ink,1,47);
-    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
+    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
 }
 
 void drawTitle(uint8_t*fb,bool loading){
@@ -226,7 +243,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.30";
+    const std::string version="CORELAB V0.31";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -242,8 +259,8 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
 void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
-    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
-    for(int i=0;i<4;++i){int y=58+i*30;box(fb,25,y,270,28,ink);box(fb,27,y+2,266,24,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    for(int i=0;i<5;++i){int y=52+i*26;box(fb,25,y,270,24,ink);box(fb,27,y+2,266,20,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }
