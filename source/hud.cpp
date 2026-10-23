@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
+#include "commerce.hpp"
 #include "character.hpp"
 #include "overhead_font.hpp"
 #include "combat.hpp"
@@ -76,7 +77,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.29.1",ink,1,13);
+    text(fb,225,20,"C.LAB V0.30",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -86,14 +87,14 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: ROOFS | A: ATACAR | X: OBJ",ink);
     text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
-    text(fb,20,219,"START: PAUSA | DESLIZA 1/3",ink);
+    text(fb,20,219,"START: PAUSA | DESLIZA 1/4",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
 void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     (void)message;
-    text(fb,20,14,"MINIMAPA",ink);text(fb,164,14,"2/3",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
+    text(fb,20,14,"MINIMAPA",ink);text(fb,164,14,"2/4",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
     box(fb,192,25,1,116,gold);
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
@@ -149,7 +150,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     pair(1,0,stats.hits,stats.hitsMax);pair(1,1,stats.stamina,stats.staminaMax);pair(1,2,stats.mana,stats.manaMax);
     value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.luck));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
     value(3,0,std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv)));value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers)+"/"+std::to_string(stats.followersMax));
-    for(int row=0;row<5;++row)text(fb,ox+270,oy+18+row*12,std::to_string(stats.resistances[row]),ink,1,3);
+    for(int row=0;row<5;++row)text(fb,ox+270,oy+18+row*12,std::to_string(stats.resistance(inv,row)),ink,1,3);
 
 }
 
@@ -177,9 +178,34 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/2  >",true);
     button(18,214,130,16,inv.equipMode?"MODO: EQUIPAR":"MODO: TRANSFERIR",true);
     button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
+    bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
+    if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
+        std::string detail=d.name;if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
+        text(fb,18,29,detail,ink,1,47);}
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
         text(fb,18,29,inv.message,ink,1,46);
+}
+
+void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemIcons*icons){
+    drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={226,213,177};
+    text(fb,18,12,"MOCHILA",ink);text(fb,170,12,shop.title,ink,1,21);
+    text(fb,18,24,"ORO: "+std::to_string(PlayerStatus::gold(&inv)),ink);
+    text(fb,170,24,"TIENDA | 4/4",ink);
+    for(int side=0;side<2;++side)for(int n=0;n<12;++n){int x=(side?170:18)+n%3*44,y=38+n/3*38;
+        box(fb,x,y,41,35,ink);box(fb,x+1,y+1,39,33,paper);int type=-1;
+        if(side&&size_t(n)<shop.stock.size())type=int(shop.stock[n]);
+        if(!side&&size_t(n+shop.bagPage*12)<inv.backpack.size())type=inv.backpack[n+shop.bagPage*12].type;
+        if(type<0||type>=int(ItemTypes))continue;
+        if(shop.selected()==type&&shop.purchase()==bool(side)){box(fb,x+1,y+1,39,33,gold);}
+        if(icons&&icons->rgba.size()==ItemTypes*24*24*4)for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t at=(type*576+iy*24+ix)*4;if(icons->rgba[at+3]>127)pixel(fb,x+8+ix,y+1+iy,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
+        else text(fb,x+2,y+5,itemDefs[type].name,ink,1,6);
+        text(fb,x+2,y+26,shop.accepts(type)?std::to_string(shop.price(type,side!=0))+" O":"--",ink,1,6);
+    }
+    box(fb,18,194,130,16,gold);text(fb,22,198,"HOJA "+std::to_string(shop.bagPage+1)+"/2 >",ink);
+    box(fb,170,194,130,16,gold);text(fb,176,198,shop.selected()<0?"ELIGE OBJETO":shop.purchase()?"COMPRAR 1":"VENDER 1",ink);
+    text(fb,18,225,shop.message,ink,1,47);
+    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
 }
 
 void drawTitle(uint8_t*fb,bool loading){
@@ -200,7 +226,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.29.1";
+    const std::string version="CORELAB V0.30";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }

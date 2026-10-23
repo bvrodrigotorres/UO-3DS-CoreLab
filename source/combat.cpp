@@ -2,6 +2,7 @@
 #include "combat.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <cstring>
 #include <fstream>
 #include <cerrno>
@@ -56,9 +57,22 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     auto slot=std::find_if(corpses.begin(),corpses.end(),[](const Corpse&c){return !c.active;});
     if(slot==corpses.end())slot=std::min_element(corpses.begin(),corpses.end(),[](const Corpse&a,const Corpse&b){return a.decay<b.decay;});
     inv.closeExternal(&slot->loot);*slot=Corpse{};slot->active=true;slot->position=n.position;slot->style=n.style;slot->direction=n.direction;slot->decay=90;slot->name=n.name;
-    // Finite starter supplies using the existing eight-item inventory catalogue.
-    slot->loot={{0,uint16_t(roll(2,8))},{3,uint16_t(roll(1,2))}};
-    if(roll(0,2)==0)slot->loot.push_back({uint16_t(roll(1,2)),1});
+    // Local finite loot: passive fauna do not carry coins or manufactured gear.
+    std::string species=n.name;std::transform(species.begin(),species.end(),species.begin(),[](unsigned char c){return char(std::tolower(c));});
+    auto is=[&](const char*s){return species.find(s)!=std::string::npos;};
+    bool undead=is("skeleton")||is("zombie")||is("wraith")||is("spectre");
+    bool armed=is("orc")||is("ratman")||is("lizardman")||is("ogre")||is("ettin")||is("troll");
+    if(undead||armed||is("gazer")||is("gargoyle")||is("harpy")||is("mongbat")){
+        int tier=n.maximumHits>=150?3:n.maximumHits>=60?2:1;
+        slot->loot.push_back({0,uint16_t(roll(8*tier,20*tier))});
+        if(armed)slot->loot.push_back({3,1});
+        if(is("harpy"))slot->loot.push_back({24,uint16_t(roll(5,12))});
+        if(undead){slot->loot.push_back({25,uint16_t(roll(1,3))});slot->loot.push_back({3,uint16_t(roll(1,3))});if(roll(0,3)==0)slot->loot.push_back({4,1});}
+        if(armed||is("skeleton")){if(roll(0,2)==0)slot->loot.push_back({uint16_t(tier==1?5:roll(16,18)),1});
+            if(roll(0,3)==0)slot->loot.push_back({uint16_t(tier==1?19:tier==2?20:21),1});}
+    }else if(is("corpser")||is("reaper")){slot->loot={{3,uint16_t(roll(2,5))}};}
+    else {slot->loot={{22,uint16_t(roll(1,2))}};if(is("bird")||is("chicken"))slot->loot.push_back({24,uint16_t(roll(3,8))});
+        else if(is("cow")||is("bull")||is("sheep")||is("deer")||is("hind")||is("bear")||is("wolf")||is("goat"))slot->loot.push_back({23,uint16_t(roll(1,3))});}
     message="CRIATURA MUERTA | MOCHILA: ABRIR CADAVER";
     if(target==int(index)){target=-1;attacking=false;}
 }
@@ -81,7 +95,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     if(target>=0&&(target>=int(mob.size())||!attackable(npcs.all()[target])||distance(player,npcs.all()[target].position)>10)){target=-1;attacking=false;}
     if(attacking&&target>=0){auto&enemy=npcs.combatants()[target];if(!enemy.hostile)enemy.wait=0;enemy.hostile=true;}
     if(attacking&&target>=0&&!moving&&!npcs.all()[target].moving&&swing<=0&&meleeReach(w,player,npcs.all()[target].position)){
-        swing=.85f;
+        swing=status.attackDelay(&inv);
         if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];n.hostile=true;strike=.45f;--status.stamina;
             int dealt=std::min(v.hits,roll(status.damageMin(&inv),status.damageMax(&inv)));v.hits-=dealt;damageVisual(n.position,dealt,false,target);v.flash=.15f;
             status.healthVisible=6;
@@ -91,7 +105,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     for(size_t i=0;i<mob.size();++i){auto&n=npcs.combatants()[i];auto&v=mob[i];
         if((n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
         v.cooldown=1.25f;int damage=roll(n.meleeMin?n.meleeMin:n.name.find("dog")!=std::string::npos?4:2,n.meleeMax?n.meleeMax:n.name.find("dog")!=std::string::npos?7:4);
-        damage=std::max(1,damage*(100-std::max(0,std::min(70,status.resistances[0])))/100);
+        damage=std::max(1,damage*(100-status.resistance(&inv))/100);
         damage=std::min(status.hits,damage);status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){
             status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;status.recoveryGoal=0;

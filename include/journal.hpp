@@ -11,16 +11,16 @@ struct Journal {
 bool loadJournal(const std::string&path,const std::string&scene,Journal&,std::string&error);
 // One horizontal gesture changes one page; vertical drags and short taps do not.
 struct TouchPages {
-    int page=0,zoom=2,startX=0,startY=0,lastX=0,lastY=0;bool active=false;
+    int page=0,count=3,zoom=2,startX=0,startY=0,lastX=0,lastY=0;bool active=false;
     void begin(int x,int y){startX=lastX=x;startY=lastY=y;active=true;}
     void move(int x,int y){if(active){lastX=x;lastY=y;}}
     bool end(){
         if(!active)return false;
         active=false;
         int dx=lastX-startX,dy=lastY-startY;
-        if((dx>=40||dx<=-40)&&dx*dx>dy*dy){page=std::max(0,std::min(2,page+(dx<0?1:-1)));return true;}
+        if((dx>=40||dx<=-40)&&dx*dx>dy*dy){page=std::max(0,std::min(count-1,page+(dx<0?1:-1)));return true;}
         if(dx*dx+dy*dy<144){
-            if(page==0&&startY>=215&&startX>=190){page=(page+1)%3;return true;}
+            if(page==0&&startY>=215&&startX>=190){page=(page+1)%count;return true;}
             if(page==1&&startY>=JournalLayout::ZoomTop&&startY<=JournalLayout::ZoomTop+13){
                 if(startX>=20&&startX<=47&&zoom>1){--zoom;return true;}
                 if(startX>=147&&startX<=178&&zoom<4){++zoom;return true;}

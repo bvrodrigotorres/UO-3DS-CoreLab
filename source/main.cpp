@@ -5,6 +5,7 @@
 #include "performance.hpp"
 #include "npc_push.hpp"
 #include "combat.hpp"
+#include "commerce.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include "region_migration.hpp"
@@ -104,7 +105,7 @@ int main(){
 
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
-    lab::TouchPages pages;lab::Journal journal;std::string journalError;
+    lab::TouchPages pages;pages.count=4;lab::Journal journal;std::string journalError;
     bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
     const std::string saveRoot=worldRoot;
     lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
@@ -250,7 +251,7 @@ int main(){
         lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     }
     std::vector<lab::Actor>occupants;occupants.reserve(16);
-    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Combat combat;combat.reset(npcs);
+    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
     auto persistVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
     if(!lab::loadVitals(vitalsPath(),playerStatus))saveMessage="ESTADISTICAS: ARCHIVO INVALIDO";
@@ -311,7 +312,7 @@ int main(){
         if(down&(KEY_X|KEY_A|KEY_L))npcPush.reset();
         if(down&KEY_Y)roofs=lab::nextRoofMode(roofs);
         bool pageChanged=false;
-        if(down&KEY_R){pages.page=(pages.page+1)%3;pageChanged=true;}
+        if(down&KEY_R){pages.page=(pages.page+1)%4;pageChanged=true;}
         touchPosition touch;
         if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH)pages.begin(touch.px,touch.py);else pages.move(touch.px,touch.py);}
         if((hidKeysUp()&KEY_TOUCH)&&pages.active){
@@ -322,6 +323,7 @@ int main(){
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
                 int slot=lab::equipmentHit(pages.startX,pages.startY);if(slot>=0){inventory.toggleEquipment(slot);saveMessage=inventory.message;}
             }
+            if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)commerce.tap(*w,npcs,actor,inventory,pages.startX,pages.startY);
             pageChanged=true;
         }
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
@@ -365,6 +367,7 @@ int main(){
             const auto&enemy=npcs.all()[combat.target];int tx=(enemy.position.x>actor.x)-(enemy.position.x<actor.x),ty=(enemy.position.y>actor.y)-(enemy.position.y<actor.y);
             const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};for(int d=0;d<8;++d)if(xs[d]==tx&&ys[d]==ty)facing=(d+1)&7;
         }
+        if(authentic&&pages.page==3&&commerce.update(*w,npcs,actor))pageChanged=true;
         if(authentic&&pages.page==2&&combat.inspectNearest(*w,actor,inventory))pageChanged=true;
         if(animateThisFrame||sx||sy||(held&KEY_TOUCH)||down)positionCheckpoint().active(now);
         if(!moving&&positionCheckpoint().due(actor,now)){
@@ -414,6 +417,7 @@ int main(){
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt);
+            else if(pages.page==3)lab::drawCommerce(bottom,inventory,commerce,&itemIcons);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);

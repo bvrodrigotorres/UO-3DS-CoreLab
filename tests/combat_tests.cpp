@@ -14,7 +14,7 @@ int main(int argc,char**argv){
     assert(argc>=2);std::string folder=std::string(argv[1])+"/";
     World w;w.width=w.height=24;w.startX=w.startY=2;w.vertices.assign(625,0);w.land.resize(576);w.index();
     Npcs npcs;npcs.combatants().assign(3,Npc{});
-    auto&rat=npcs.combatants()[0];rat.position=rat.from=rat.home={8,8,0};rat.name="a rat";rat.animal=true;rat.wait=100;
+    auto&rat=npcs.combatants()[0];rat.position=rat.from=rat.home={8,8,0};rat.name="an orc";rat.maximumHits=18;rat.meleeMin=2;rat.meleeMax=4;rat.animal=true;rat.wait=100;
     npcs.combatants()[1].position=npcs.combatants()[1].from={18,18,0};npcs.combatants()[2].position=npcs.combatants()[2].from={19,18,0};
     Combat combat;combat.reset(npcs);Actor a{7,8,0};PlayerStatus stats;Inventory inv;inv.init(w,folder+"inventory.sav");inv.backpack.clear();
     combat.select(npcs,a);assert(combat.target==0);combat.toggle(npcs,a);assert(combat.attacking);
@@ -22,7 +22,7 @@ int main(int argc,char**argv){
     assert(!rat.alive&&ticks<200&&stats.hits<stats.hitsMax&&stats.healthVisible>0&&stats.stamina<stats.staminaMax);
     assert(!npcs.occupied(rat.position));auto draws=npcs.drawList(w,a,false);for(auto d:draws)assert(d.index!=0);
     int corpse=combat.nearestCorpse(w,a);assert(corpse>=0&&combat.corpses[corpse].active);auto&body=combat.corpses[corpse];unsigned loot=coins(body.loot);assert(loot>0);
-    assert(combat.openCorpse(w,a,inv)&&inv.opened==-2&&inv.containerName()=="a rat");
+    assert(combat.openCorpse(w,a,inv)&&inv.opened==-2&&inv.containerName()=="an orc");
     assert(inv.transfer(w,a,true,0));assert(PlayerStatus::gold(&inv)==loot&&coins(body.loot)==0);
     assert(!inv.transfer(w,a,false,0)&&PlayerStatus::gold(&inv)==loot);
     auto oldFile=read(folder+"inventory.sav");auto oldBody=body.loot;auto oldBag=inv.backpack;

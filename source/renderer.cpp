@@ -272,8 +272,8 @@ static void prepareNpcPages(const Npcs&npcs,const Combat*combat,const std::vecto
     }
 }
 bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
-    bool combatBank=(key&4096)!=0;unsigned mask=key&2047;
-    if((key&~6143u)||mask>2047||(!characterAppearance.enabled&&mask>7))return false;
+    bool combatBank=(key&4096)!=0;unsigned mask=key&EquipmentAppearanceMask;
+    if((key&~(EquipmentAppearanceMask|4096u))||(!characterAppearance.enabled&&mask>7))return false;
     std::vector<uint8_t>portrait;
     if(characterAppearance.enabled&&characterAssets&&art.currentKey!=mask&&!characterAssets->portrait(characterAppearance,mask,portrait))return false;
     if(auto cached=outfitCache.get(key)){outfit=cached;outfitMask=key;if(!portrait.empty()){art.currentDoll=std::move(portrait);art.currentKey=mask;}error.clear();return true;}

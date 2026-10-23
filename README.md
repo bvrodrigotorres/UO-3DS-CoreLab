@@ -173,3 +173,8 @@ Cambios e instalación de esta entrega: [v0.2](docs/v0.2.md).
 **v0.17:** nombres y profesiones con notoriedad, pausa con START y tejados conectados. [Instalación](docs/v0.17.md).
 
 **v0.18:** fuente original con colores y borde, ocultación de nombres tras dos segundos cerca y sombreros encima del pelo. [Instalación](docs/v0.18.md).
+
+## v0.30
+
+Armas con daño/cadencia y armaduras con protección física; botín por criatura y
+comerciantes cercanos en la cuarta página táctil. [Instalación y reglas](docs/v0.30.md).

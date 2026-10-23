@@ -5,7 +5,7 @@
 #include <array>
 #include <functional>
 namespace lab {
-constexpr size_t ItemTypes=16, BagSlots=24, ChestSlots=12, BagPageSlots=12;
+constexpr size_t ItemTypes=26, BagSlots=24, ChestSlots=12, BagPageSlots=12;
 struct InventoryLayout {
     static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
     static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
@@ -13,7 +13,10 @@ struct InventoryLayout {
     static bool mode(int x,int y){return x>=18&&x<148&&y>=214&&y<230;}
     static bool take(int x,int y){return x>=170&&x<300&&y>=194&&y<230;}
 };
-struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;};
+struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;
+    int damageMin=0,damageMax=0;float delay=.85f;int protection=0,weight=1,price=1;
+};
+constexpr unsigned EquipmentAppearanceMask=2047u|(3u<<13)|(3u<<15);
 extern const std::array<ItemDef,ItemTypes> itemDefs;
 uint32_t inventoryWorldId(const World&);
 struct ItemStack {uint16_t type=0,count=0;};
@@ -43,7 +46,7 @@ public:
     bool toggleEquipment(size_t,SaveRename=std::rename);
     Bag backpack;
     std::vector<Chest> chests;
-    int opened=-1,bagPage=0;
+    int opened=-1,bagPage=0,detailType=-1;
     bool hasContainer()const{return opened>=0||(opened==-2&&external);}
     const Bag&containerItems()const{static const Bag empty;return opened==-2&&external?*external:opened>=0&&size_t(opened)<chests.size()?chests[opened].items:empty;}
     std::string containerName()const{return opened==-2?externalTitle:"COFRE";}
@@ -60,6 +63,7 @@ public:
     void open(const World&,const Actor&);
     bool transfer(const World&,const Actor&,bool fromChest,size_t,SaveRename=std::rename);
     bool takeAll(const World&,const Actor&,SaveRename=std::rename);
+    bool trade(bool buy,unsigned type,unsigned price,SaveRename=std::rename);
     void tap(const World&,const Actor&,int x,int y);
 };
 }

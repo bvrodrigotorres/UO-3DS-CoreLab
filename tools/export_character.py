@@ -35,7 +35,7 @@ def sparse(values):
     return result
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--combat',action='store_true');p.add_argument('--client',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--graphics',type=int,nargs='+');p.add_argument('--combat',action='store_true');p.add_argument('--client',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
     if a.out.exists():raise FileExistsError(a.out)
     a.out.mkdir(parents=True)
     u=UopFile(a.client/'gumpartLegacyMUL.uop','build/gumpartlegacymul/{0:D8}.tga',has_extra=True)
@@ -55,7 +55,7 @@ def main():
     report=[]
     for sex in range(2):
         body=400+sex
-        for graphic in [body]+HAIR+([] if sex else BEARD)+CLOTH:
+        for graphic in (a.graphics if a.graphics else [body]+HAIR+([] if sex else BEARD)+CLOTH):
             samples=[]
             for armed in (False,True):
                 walk,run=(1,3) if armed else (0,2)

@@ -130,14 +130,15 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
     return true;
 }
 bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame,bool combat)const{
-    if(!ready()||!a.valid()||mask>2047||onlyFrame>71)return false;
+    if(!ready()||!a.valid()||(mask&~EquipmentAppearanceMask)||onlyFrame>71)return false;
     const size_t area=doll?260*237:96*112;int count=doll||onlyFrame>=0?1:72;out.assign(area*count,0);
     std::vector<std::pair<int,uint16_t>>layers;
     layers.push_back({400+a.female,color(a,2)});
     if(!a.realClothes&&a.shoes&&!(mask&4))layers.push_back({480,color(a,12)});
     if(mask&4)layers.push_back({(mask&1024)?480:477,color(a,12)});
     if((a.realClothes&&(mask&128))||(!a.realClothes&&a.pants))layers.push_back({a.realClothes?((mask&512)?449:430):(a.pants==1?430:449),color(a,10)});
-    if((a.realClothes&&(mask&32))||(!a.realClothes&&a.shirt))layers.push_back({a.realClothes?((mask&256)?435:434):(a.shirt==1?434:435),color(a,8)});
+    const unsigned armor=(mask>>15)&3;
+    if((a.realClothes&&(mask&32))||(!a.realClothes&&a.shirt))layers.push_back({a.realClothes?(armor?std::array<int,3>{{542,538,527}}[armor-1]:((mask&256)?435:434)):(a.shirt==1?434:435),uint16_t(armor>=2?0:color(a,8))});
     if(mask&16)layers.push_back({546,color(a,16)});
     if(mask&64)layers.push_back({545,color(a,17)});
     if(mask&2)layers.push_back({469,color(a,13)});
@@ -145,7 +146,7 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
     // In the paperdoll, keep bulky hair from protruding through the hat crown.
     if(a.hair&&!(doll&&(mask&8)))layers.push_back({(a.female?femaleHair:maleHair)[a.hair],color(a,4)});
     if(mask&8)layers.push_back({404,color(a,15)});
-    if(mask&1)layers.push_back({622,0});
+    if(mask&1)layers.push_back({std::array<int,4>{{622,618,631,653}}[(mask>>13)&3],0});
     // Read each checked sparse layer once, then compose requested poses.
     // overlay() validates each individual frame; files stay outside GPU memory.
     for(int i=0;i<count;++i){int frame=onlyFrame>=0?onlyFrame:i;int sample=doll?144:frame+((mask&1)?72:0);std::vector<uint16_t>canvas(area);

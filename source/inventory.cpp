@@ -6,7 +6,25 @@
 #include <fstream>
 #include <sys/stat.h>
 namespace lab {
-const std::array<ItemDef,ItemTypes> itemDefs={{{0xEED,"ORO",true},{0x9F1,"PAN",true},{0x9D0,"MANZANA",true},{0xE21,"VENDAS",true},{0xF0E,"POCION",false},{0xF51,"DAGA",false,0},{0x1F03,"TUNICA",false,1},{0x170B,"BOTAS",false,2},{0x1517,"CAMISA",false,5},{0x1EFD,"CAMISA ELEGANTE",false,5},{0x152F,"PANTALON",false,7},{0x1531,"FALDA",false,7},{0x170F,"ZAPATOS",false,2},{0x1713,"GORRO",false,3},{0x13C7,"GORJAL",false,4},{0x13C6,"GUANTES",false,6}}};
+const std::array<ItemDef,ItemTypes> itemDefs={{{0xEED,"ORO",true,-1,0,0,.85f,0,0,0},
+{0x103B,"PAN",true,-1,0,0,.85f,0,1,6},{0x9D0,"MANZANA",true,-1,0,0,.85f,0,1,4},
+{0xE21,"VENDAS",true,-1,0,0,.85f,0,1,8},{0xF0E,"POCION",false,-1,0,0,.85f,0,1,25},
+{0xF51,"DAGA",false,0,7,11,.65f,0,1,35},{0x1F03,"TUNICA",false,1,0,0,.85f,0,3,20},
+{0x170B,"BOTAS",false,2,0,0,.85f,2,2,18},{0x1517,"CAMISA",false,5,0,0,.85f,0,1,10},
+{0x1EFD,"CAMISA ELEGANTE",false,5,0,0,.85f,0,1,16},{0x152F,"PANTALON",false,7,0,0,.85f,0,2,12},
+{0x1531,"FALDA",false,7,0,0,.85f,0,2,12},{0x170F,"ZAPATOS",false,2,0,0,.85f,0,1,8},
+{0x1713,"GORRO",false,3,0,0,.85f,0,1,12},{0x13C7,"GORJAL",false,4,0,0,.85f,4,1,28},
+{0x13C6,"GUANTES",false,6,0,0,.85f,4,1,24},
+{0xF61,"ESPADA",false,0,11,17,1.05f,0,7,100},
+{0xF5C,"MAZA",false,0,14,20,1.35f,0,9,115},
+{0xF49,"HACHA",false,0,17,25,1.65f,0,10,140},
+{0x13CC,"PECHERA CUERO",false,5,0,0,.85f,12,6,90},
+{0x13BF,"COTA DE MALLA",false,5,0,0,.85f,24,12,180},
+{0x1415,"PECHERA PLACAS",false,5,0,0,.85f,36,18,300},
+{0x9F1,"CARNE CRUDA",true,-1,0,0,.85f,0,1,4},
+{0x1079,"PIELES",true,-1,0,0,.85f,0,1,8},
+{0x1BD1,"PLUMAS",true,-1,0,0,.85f,0,1,3},
+{0xF7E,"HUESOS",true,-1,0,0,.85f,0,1,5}}};
 namespace {
 uint32_t hash(const std::vector<uint8_t>&v){uint32_t h=2166136261u;for(auto b:v)h=(h^b)*16777619u;return h;}
 void put(std::vector<uint8_t>&b,uint32_t n){for(int i=0;i<4;++i)b.push_back(uint8_t(n>>(i*8)));}
@@ -87,6 +105,8 @@ unsigned Inventory::equipmentMask()const{
     if(equipment[5]==9)m|=256;
     if(equipment[7]==11)m|=512;
     if(equipment[2]==12)m|=1024;
+    if(equipment[0]>=16&&equipment[0]<=18)m|=unsigned(equipment[0]-15)<<13;
+    if(equipment[5]>=19&&equipment[5]<=21)m|=unsigned(equipment[5]-18)<<15;
     return m;
 }
 unsigned Inventory::prospectiveKey(size_t slot,int type)const{Inventory copy;copy.equipment=equipment;copy.equipment[slot]=type;return copy.equipmentMask();}
@@ -238,12 +258,29 @@ bool Inventory::takeAll(const World&w,const Actor&a,SaveRename renameFile){
     if(!persist(message,renameFile)){source=oldSource;backpack=oldBag;return false;}
     message=source.empty()?"TODO RECOGIDO - GUARDADO":"MOCHILA LLENA - QUEDA BOTIN";return true;
 }
+bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFile){
+    if(!writable||type==0||type>=ItemTypes||!price||price>65535){message="COMERCIO NO DISPONIBLE";return false;}
+    Bag next=backpack;
+    auto find=[&](unsigned t){return std::find_if(next.begin(),next.end(),[&](ItemStack v){return v.type==t;});};
+    if(buy){auto coins=find(0);if(coins==next.end()||coins->count<price){message="ORO INSUFICIENTE";return false;}
+        coins->count-=price;if(!coins->count)next.erase(coins);
+        auto item=find(type);if(itemDefs[type].stackable&&item!=next.end()){if(item->count==65535){message="PILA LLENA";return false;}++item->count;}
+        else {if(next.size()>=BagSlots){message="MOCHILA LLENA";return false;}next.push_back({uint16_t(type),1});}
+    }else{auto item=find(type);if(item==next.end()){message="OBJETO NO DISPONIBLE";return false;}
+        if(!--item->count)next.erase(item);
+        auto coins=find(0);if(coins!=next.end()){if(unsigned(coins->count)+price>65535){message="PILA DE ORO LLENA";return false;}coins->count+=price;}
+        else{if(next.size()>=BagSlots){message="MOCHILA LLENA";return false;}next.push_back({0,uint16_t(price)});}
+    }
+    Bag previous=backpack;backpack=std::move(next);
+    if(!persist(message,renameFile)){backpack=std::move(previous);return false;}
+    detailType=type;message=std::string(buy?"COMPRADO: ":"VENDIDO: ")+itemDefs[type].name;return true;
+}
 void Inventory::tap(const World&w,const Actor&a,int x,int y){
     if(InventoryLayout::page(x,y)){bagPage=1-bagPage;return;}
     if(InventoryLayout::mode(x,y)){equipMode=!equipMode;return;}
     if(InventoryLayout::take(x,y)){takeAll(w,a);return;}
     int left=InventoryLayout::slot(x,y,InventoryLayout::Left),right=InventoryLayout::slot(x,y,InventoryLayout::Right);
-    if(left>=0){size_t index=bagPage*BagPageSlots+left;if(equipMode)equip(index);else transfer(w,a,false,index);}
-    else if(right>=0)transfer(w,a,true,size_t(right));
+    if(left>=0){size_t index=bagPage*BagPageSlots+left;if(index<backpack.size())detailType=backpack[index].type;if(equipMode)equip(index);else transfer(w,a,false,index);}
+    else if(right>=0){if(size_t(right)<containerItems().size())detailType=containerItems()[right].type;transfer(w,a,true,size_t(right));}
 }
 }
