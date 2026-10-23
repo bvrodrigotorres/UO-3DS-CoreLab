@@ -11,7 +11,7 @@ struct Npc {
 };
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
 class Npcs {
-    bool occupancyActive=false;mutable bool occupancyDirty=true;mutable std::array<int,4096>occupancyHead{};mutable std::vector<int>occupancyNext;
+    bool occupancyActive=false;mutable bool occupancyDirty=true;mutable std::vector<int>occupancyHead=std::vector<int>(4096,-1);mutable std::vector<int>occupancyNext;
     void rebuildOccupancy()const;
     bool deathFrames=false;
     size_t routeCursor=0;unsigned routeNodes=0,routeSearches=0;

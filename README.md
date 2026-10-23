@@ -189,3 +189,8 @@ mangas y joyas con efectos. [Instalación y controles](docs/v0.31.md).
 L/R navegan las ventanas; el paperdoll abre Equipamiento pausado. Transferencias
 a cadáveres, arrastre, objetos temporales en Suelo y precios/cantidades claros.
 [Instalación y controles](docs/v0.32.md).
+
+## v0.33
+
+Corrección del desbordamiento de pila al abrir Equipamiento y menú Desarrollador
+con teletransporte seguro a puntos de interés. [Instalación y controles](docs/v0.33.md).

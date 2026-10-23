@@ -10,11 +10,11 @@ SOURCES := source
 INCLUDES := include
 ARCH := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 CFLAGS := -g -Wall -Wextra -Werror -O2 -ffunction-sections $(ARCH) $(INCLUDE) -D__3DS__
-CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-rtti -fno-exceptions
+CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-rtti -fno-exceptions -fstack-usage
 LDFLAGS := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lcitro2d -lcitro3d -lctru -lm
 LIBDIRS := $(CTRULIB) $(PORTLIBS)
-APP_TITLE := UO CoreLab v0.32
+APP_TITLE := UO CoreLab v0.33
 APP_DESCRIPTION := Independent scene and walking experiment
 APP_AUTHOR := bvrodrigotorres
 export TOPDIR := $(CURDIR)

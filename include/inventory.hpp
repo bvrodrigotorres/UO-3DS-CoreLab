@@ -41,7 +41,8 @@ public:
     bool healthy()const{return writable;}
     bool checkpoint(){if(!writable)return false;return persist(message,std::rename);}
     std::function<bool(unsigned)>prepareEquipment;
-    unsigned equipmentMask()const;
+    static unsigned appearanceKey(const std::array<int,11>&);
+    unsigned equipmentMask()const{return appearanceKey(equipment);}
     bool setOutfit(const std::array<int,11>&,SaveRename=std::rename);
     bool equip(size_t,SaveRename=std::rename);
     bool unequip(size_t,SaveRename=std::rename);

@@ -2,12 +2,14 @@
 #include "hud.hpp"
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
+#include "developer_menu.hpp"
 #include "inventory_drag.hpp"
 #include "character.hpp"
 #include "overhead_font.hpp"
 #include "combat.hpp"
 #include "exploration.hpp"
 #include <cmath>
+#include <memory>
 #include <cstdio>
 #include <algorithm>
 #include <array>
@@ -79,7 +81,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.32",ink,1,13);
+    text(fb,225,20,"C.LAB V0.33",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -195,10 +197,10 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
 void drawEquipmentMenu(uint8_t*top,uint8_t*bottom,const EquipmentMenu&e,const Appearance&a,const Inventory&bag,const PlayerStatus&status,const std::vector<uint16_t>&doll,const std::vector<uint16_t>&sprite){
     AppearanceEditor preview(a,false);preview.direction=e.direction;drawAppearance(top,bottom,preview,doll,sprite,false);
     const Color ink={55,37,22},paper={231,213,177},gold={174,131,64};
-    Inventory staged;staged.equipment=e.desired;staged.backpack=bag.backpack;
+    (void)bag;auto staged=std::make_unique<Inventory>();staged->equipment=e.desired;
     canvasWidth=400;box(top,112,13,268,16,paper);text(top,140,17,"EQUIPAMIENTO",ink);
-    box(top,218,178,158,41,{176,160,127});text(top,222,181,"DANO "+std::to_string(status.damageMin(&staged))+"-"+std::to_string(status.damageMax(&staged)),ink);
-    text(top,222,194,"PROTECCION "+std::to_string(status.resistance(&staged))+"%",ink);
+    box(top,218,178,158,41,{176,160,127});text(top,222,181,"DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get())),ink);
+    text(top,222,194,"PROTECCION "+std::to_string(status.resistance(staged.get()))+"%",ink);
     text(top,222,207,"X: GIRAR",ink);
     canvasWidth=320;drawHudFrame(bottom,{},false,true);text(bottom,18,15,"EQUIPAMIENTO",ink);text(bottom,18,31,"L/R: HOJA | PAD: ELEGIR / CAMBIAR",ink,1,48);
     box(bottom,249,25,54,17,gold);text(bottom,254,30,std::to_string(e.page()+1)+"/2 >",ink);
@@ -252,7 +254,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.32";
+    const std::string version="CORELAB V0.33";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }
@@ -265,11 +267,18 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
     box(fb,33,140,254*std::max(0,std::min(5,progress))/5,10,gold);
     box(fb,18,187,284,41,{218,195,148});text(fb,47,205,"ESPERA UN MOMENTO...",ink);
 }
+void drawDeveloperMenu(uint8_t*fb,const DeveloperMenu&m,const World&w){
+    drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
+    text(fb,18,15,"DESARROLLADOR",ink);text(fb,18,32,"TELETRANSPORTE | MUNDO PAUSADO",ink,1,38);box(fb,251,27,51,17,gold);text(fb,256,32,std::to_string(m.page()+1)+"/2 >",ink);
+    for(int row=0;row<5;++row){int index=m.page()*5+row;if(index>=int(m.destinations.size()))break;int y=49+row*28;const auto&d=m.destinations[index];box(fb,18,y,285,25,index==m.selected?gold:paper);text(fb,24,y+4,d.name,ink,1,44);text(fb,24,y+15,d.available?"XY "+std::to_string(d.target.x+w.originX)+","+std::to_string(d.target.y+w.originY)+" Z "+std::to_string(d.target.z):"NO DISPONIBLE EN ESTE MAPA",ink,1,44);}
+    text(fb,20,191,"PAD: ELEGIR | L/R: HOJA",ink);text(fb,20,202,m.message.empty()?"A / START: TELETRANSPORTAR":m.message,ink,1,46);
+    box(fb,18,215,132,19,gold);text(fb,37,221,"B: VOLVER",ink);box(fb,170,215,133,19,gold);text(fb,178,221,"TELETRANSPORTAR",ink);
+}
 void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
-    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
-    for(int i=0;i<5;++i){int y=52+i*26;box(fb,25,y,270,24,ink);box(fb,27,y+2,266,20,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO","DESARROLLADOR","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    for(int i=0;i<6;++i){int y=49+i*22;box(fb,25,y,270,20,ink);box(fb,27,y+2,266,16,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }

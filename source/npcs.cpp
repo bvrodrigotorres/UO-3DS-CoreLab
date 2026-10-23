@@ -79,7 +79,7 @@ void Npcs::reset(const World&w,const Actor&player){
     }
 }
 void Npcs::rebuildOccupancy()const{
-    occupancyHead.fill(-1);occupancyNext.assign(people.size()*2,-1);
+    std::fill(occupancyHead.begin(),occupancyHead.end(),-1);occupancyNext.assign(people.size()*2,-1);
     for(size_t i=0;i<people.size();++i)if(people[i].alive){
         for(int slot=0;slot<(people[i].moving?2:1);++slot){const auto&a=slot?people[i].from:people[i].position;unsigned bin=(unsigned(a.x)*73856093u^unsigned(a.y)*19349663u)&4095;int link=int(i*2+slot);occupancyNext[link]=occupancyHead[bin];occupancyHead[bin]=link;}
     }

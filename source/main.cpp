@@ -8,6 +8,7 @@
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
 #include "inventory_drag.hpp"
+#include "developer_menu.hpp"
 #include "exploration.hpp"
 #include "hud.hpp"
 #include "region_migration.hpp"
@@ -18,6 +19,10 @@
 #include <malloc.h>
 #include <fstream>
 #include <functional>
+#include <memory>
+
+// libctru main-thread stack: keep explicit headroom for SDK/iostream call chains.
+extern "C" { u32 __stacksize__=128*1024; }
 
 namespace {
 void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&stage="",int progress=0){
@@ -28,10 +33,21 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
     GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
     gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
 }
+bool developerEditor(const lab::World&w,const lab::Npcs&npcs,lab::Actor&landing){
+    auto menu=std::make_unique<lab::DeveloperMenu>(w,npcs);u64 repeat=0;
+    while(aptMainLoop()){
+        auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawDeveloperMenu(bottom,*menu,w);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+        hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();if(down&KEY_B)return false;
+        if(down&(KEY_L|KEY_R))menu->pageMove();
+        circlePosition pad;hidCircleRead(&pad);int vertical=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);if(!vertical)repeat=0;else if(now>=repeat){menu->move(vertical);repeat=now+170;}
+        bool confirm=down&(KEY_A|KEY_START);if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);int action=menu->tap(t.px,t.py);if(action<0)return false;confirm=confirm||action>0;}
+        if(confirm&&menu->resolve(w,npcs,landing))return true;
+    }return false;
+}
 bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearance,lab::Inventory&bag,const lab::PlayerStatus&status){
     C3D_FrameSync();lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
     while(aptMainLoop()){
-        if(changed){lab::Inventory staged;staged.equipment=editor.desired;unsigned key=staged.equipmentMask();valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";changed=false;}
+        if(changed){unsigned key=lab::Inventory::appearanceKey(editor.desired);valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";changed=false;}
         auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
         lab::drawEquipmentMenu(top,bottom,editor,appearance,bag,status,doll,sprite);
         GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
@@ -44,7 +60,7 @@ bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearanc
         bool apply=down&KEY_START;
         if(down&KEY_TOUCH){touchPosition touch;hidTouchRead(&touch);int action=editor.tap(touch.px,touch.py);if(action<0)return false;apply=apply||action>0;changed=true;}
         if(apply){
-            lab::Inventory staged;staged.equipment=editor.desired;unsigned key=staged.equipmentMask();
+            unsigned key=lab::Inventory::appearanceKey(editor.desired);
             valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);
             if(valid&&editor.apply(bag))return true;
             if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";
@@ -307,11 +323,20 @@ int main(){
                 else equipmentEditor(characterAssets,appearance,bag,playerStatus);
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
+            }else if(action==lab::PauseAction::Developer){
+                lab::Actor destination;if(developerEditor(*w,npcs,destination)){
+                    actor=destination;from=actor;moving=false;progress=1;animationPhase=0;alignCamera();npcPush.reset();inventoryDrag.cancel();inventory.closeContainer();combat.attacking=false;combat.target=-1;
+                    for(auto&n:npcs.combatants())n.hostile=false;
+                    lab::invalidateRenderList();saveMessage="TELETRANSPORTE COMPLETADO";
+                    bool saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();positionCheckpoint().result(actor,pauseAt,saved);
+                }
+                now=osGetTime();pausePad=0;frames=0;
+                lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
             }else if(action==lab::PauseAction::Customize){
                 auto&bag=authentic?inventory:demoInventory;
                 if(!characterAssets.ready()||!characterAssets.fullPaperdoll())pause.message="ACTUALIZA CHARACTER A V0.25";
                 else appearanceEditor(characterAssets,appearance,bag.equipmentMask(),false,[&](const lab::Appearance&a,const std::array<int,11>&outfit,std::string&message){
-                    const auto previous=appearance;lab::Inventory preview;preview.equipment=outfit;unsigned key=preview.equipmentMask();
+                    const auto previous=appearance;unsigned key=lab::Inventory::appearanceKey(outfit);
                     if(!lab::applyAppearance(characterAssets,a,equipmentArt,key,message))return false;
                     auto restore=[&](){std::string ignored;if(previous.enabled)lab::applyAppearance(characterAssets,previous,equipmentArt,bag.equipmentMask(),ignored);
                         else {lab::clearAppearance();equipmentArt.load(baseRoot+"equipment.bin");lab::prepareEquipment(bag.equipmentMask(),equipmentArt,ignored);}};

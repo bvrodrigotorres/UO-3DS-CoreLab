@@ -49,7 +49,7 @@ int main(int argc,char**argv){
     menu.back();drawStartMenu(bottom.data()+16,menu,true);ppm(root+"menu.ppm",bottom,320);
     for(int i=0;i<16;++i)assert(top[i]==0xA5&&top[top.size()-1-i]==0xA5&&bottom[i]==0xA5&&bottom[bottom.size()-1-i]==0xA5);
     PauseMenu pause;pause.open();std::vector<uint8_t>paused(320*240*3+32,0xCD);
-    for(int row=0;row<5;++row){pause.selected=row;drawPause(paused.data()+16,pause);}
+    for(int row=0;row<6;++row){pause.selected=row;drawPause(paused.data()+16,pause);}
     ppm(root+"pause.ppm",paused,320);
     for(int i=0;i<16;++i)assert(paused[i]==0xCD&&paused[paused.size()-1-i]==0xCD);
     std::cout<<"Startup: navigation, touch, cancellation, options, exact continue, safe new game, SD failure, legacy saves and framebuffer bounds passed\n";

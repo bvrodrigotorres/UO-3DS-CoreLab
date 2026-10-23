@@ -72,7 +72,7 @@ void AppearanceEditor::change(int delta){
     int f=field();
     if(wardrobe&&f>=19&&f<27){
         auto&types=owned[f-19];auto found=std::find(types.begin(),types.end(),outfit[f-19]);int n=int(types.size()),index=int(found-types.begin());
-        outfit[f-19]=types[(index+delta%n+n)%n];Inventory key;key.equipment=outfit;equipment=key.equipmentMask();message.clear();return;
+        outfit[f-19]=types[(index+delta%n+n)%n];equipment=Inventory::appearanceKey(outfit);message.clear();return;
     }
 if(!enabled(f)){message=(f==7||f==9||f==11||f==18)?"CAMBIA LAS PRENDAS EN INVENTARIO":"OPCION NO DISPONIBLE";return;}uint8_t*p=nullptr;int n=0;
     switch(f){case 1:p=&draft.female;n=2;break;case 2:p=&draft.skin;n=64;break;case 3:p=&draft.hair;n=10;break;case 4:p=&draft.hairColor;n=48;break;case 5:if(!draft.female){p=&draft.beard;n=8;}break;case 6:if(!draft.female){p=&draft.beardColor;n=48;}break;case 7:p=&draft.shirt;n=3;break;case 8:p=&draft.shirtColor;n=32;break;case 9:p=&draft.pants;n=3;break;case 10:p=&draft.pantsColor;n=32;break;case 11:p=&draft.shoes;n=2;break;case 12:p=&draft.bootsColor;n=32;break;case 13:p=&draft.robeColor;n=32;break;case 15:p=&draft.hatColor;n=32;break;case 16:p=&draft.neckColor;n=32;break;case 17:p=&draft.glovesColor;n=32;break;case 18:p=&draft.robe;n=2;break;default:break;}

@@ -2,6 +2,7 @@
 #pragma once
 #include "label_font.hpp"
 #include <array>
+#include <vector>
 #include <fstream>
 #include <cstring>
 #include <string>
@@ -13,7 +14,7 @@ class OverheadFont {
 public:
     OverheadFont(){advance.fill(6);for(unsigned c=0;c<128;++c)for(unsigned y=0;y<7;++y)for(unsigned x=0;x<5;++x)if(labelPixel(c,x,y))masks[c][y+1]|=1<<(14-x);}
     bool load(const std::string&path){
-        std::array<unsigned char,4240>b{};std::ifstream f(path,std::ios::binary);
+        std::vector<unsigned char>b(4240);std::ifstream f(path,std::ios::binary);
         if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UOF1",4)||b[4]!=1||b[5]||b[6]!=128||b[7])return false;
         auto u=[&](unsigned at){return uint32_t(b[at])|uint32_t(b[at+1])<<8|uint32_t(b[at+2])<<16|uint32_t(b[at+3])<<24;};
         uint32_t hash=2166136261;for(size_t i=16;i<b.size();++i)hash=(hash^b[i])*16777619;

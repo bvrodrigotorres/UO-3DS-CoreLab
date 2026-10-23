@@ -122,7 +122,7 @@ void Inventory::seedGear(){
     // One-time additions to old UIN1 and new games, never refill UIN2 saves.
     for(auto&c:chests)if(c.items.size()+2<=ChestSlots){c.items.push_back({6,1});c.items.push_back({7,1});}
 }
-unsigned Inventory::equipmentMask()const{
+unsigned Inventory::appearanceKey(const std::array<int,11>&equipment){
     unsigned m=0;for(size_t s=0;s<8;++s)if(equipment[s]>=0)m|=1u<<s;
     if(equipment[5]==9)m|=256;
     if(equipment[7]==11)m|=512;
@@ -134,7 +134,7 @@ unsigned Inventory::equipmentMask()const{
     if(equipment[10]>=0)m|=1u<<20;
     return m;
 }
-unsigned Inventory::prospectiveKey(size_t slot,int type)const{Inventory copy;copy.equipment=equipment;copy.equipment[slot]=type;return copy.equipmentMask();}
+unsigned Inventory::prospectiveKey(size_t slot,int type)const{auto next=equipment;next[slot]=type;return appearanceKey(next);}
 void Inventory::initialDress(int shirt,int pants,bool shoes,bool robe){
     if(dressed)return;
     if(equipment[5]<0&&shirt)equipment[5]=shirt==1?8:9;
@@ -161,8 +161,7 @@ bool Inventory::setOutfit(const std::array<int,11>&desired,SaveRename renameFile
         if(!--found->count)pool.erase(found);
     }
     if(pool.size()>BagSlots){message="MOCHILA LLENA: HAZ ESPACIO";return false;}
-    Inventory key;key.equipment=desired;
-    if(prepareEquipment&&!prepareEquipment(key.equipmentMask())){message="FALTAN RECURSOS DE EQUIPO";return false;}
+    if(prepareEquipment&&!prepareEquipment(appearanceKey(desired))){message="FALTAN RECURSOS DE EQUIPO";return false;}
     auto oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;
     backpack=std::move(pool);equipment=desired;
     for(size_t slot=0;slot<desired.size();++slot)if(desired[slot]>=0)lastEquipment[slot]=desired[slot];else if(oldEquipment[slot]>=0)lastEquipment[slot]=oldEquipment[slot];
