@@ -42,7 +42,9 @@ void Commerce::tap(const World&w,const Npcs&npcs,const Actor&a,Inventory&inv,int
         selectedType=type;buying=buy;message=std::string(buy?"COMPRAR ":"VENDER ")+itemDefs[type].name;return;}
     if(x>=170&&x<300&&y>=194&&y<210&&selectedType>0){
         // Re-evaluate proximity before every transaction; no cached vendor access.
-        inv.trade(buying,unsigned(selectedType),price(unsigned(selectedType),buying));message=inv.message;
+        unsigned cost=price(unsigned(selectedType),buying);
+        if(inv.trade(buying,unsigned(selectedType),cost))message=std::string(buying?"COMPRADO ":"VENDIDO ")+itemDefs[selectedType].name+(buying?" -$":" +$")+std::to_string(cost);
+        else message=inv.message;
     }
 }
 }

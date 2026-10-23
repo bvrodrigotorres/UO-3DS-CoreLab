@@ -24,7 +24,7 @@ int main(int argc,char**argv){
     int corpse=combat.nearestCorpse(w,a);assert(corpse>=0&&combat.corpses[corpse].active);auto&body=combat.corpses[corpse];unsigned loot=coins(body.loot);assert(loot>0);
     assert(combat.openCorpse(w,a,inv)&&inv.opened==-2&&inv.containerName()=="an orc");
     assert(inv.transfer(w,a,true,0));assert(PlayerStatus::gold(&inv)==loot&&coins(body.loot)==0);
-    assert(!inv.transfer(w,a,false,0)&&PlayerStatus::gold(&inv)==loot);
+    assert(inv.transfer(w,a,false,0)&&PlayerStatus::gold(&inv)==0&&coins(body.loot)==loot);assert(inv.transfer(w,a,true,body.loot.size()-1)&&PlayerStatus::gold(&inv)==loot);
     auto oldFile=read(folder+"inventory.sav");auto oldBody=body.loot;auto oldBag=inv.backpack;
     assert(!inv.transfer(w,a,true,0,fail));assert(body.loot.size()==oldBody.size()&&inv.backpack.size()==oldBag.size()&&read(folder+"inventory.sav")==oldFile);
     while(!body.loot.empty()){assert(inv.transfer(w,a,true,0));}

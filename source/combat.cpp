@@ -131,6 +131,12 @@ bool Combat::inspectNearest(const World&w,const Actor&a,Inventory&inv){
     if(body>=0&&chest>=0){const auto&c=corpses[body].position;const auto&o=w.objects[inv.chests[chest].object];
         int cd=(c.x-a.x)*(c.x-a.x)+(c.y-a.y)*(c.y-a.y),bd=(o.x-a.x)*(o.x-a.x)+(o.y-a.y)*(o.y-a.y);if(bd<cd)body=-1;
     }
+    int floor=inv.nearestGround(w,a);
+    if(floor>=0){const auto&p=inv.ground[floor].position;int dx=p.x-a.x,dy=p.y-a.y,distance=dx*dx+dy*dy;bool nearest=true;
+        if(body>=0){const auto&b=corpses[body].position;dx=b.x-a.x;dy=b.y-a.y;if(dx*dx+dy*dy<distance)nearest=false;}
+        if(chest>=0){const auto&b=w.objects[inv.chests[chest].object];dx=b.x-a.x;dy=b.y-a.y;if(dx*dx+dy*dy<distance)nearest=false;}
+        if(nearest)return inv.followGround(floor);
+    }
     if(body>=0){auto&c=corpses[body];if(inv.isExternal(&c.loot))return false;return inv.openExternal(w,a,c.loot,c.position,c.name);}
     if(chest>=0)return inv.followChest(chest);
     bool changed=inv.hasContainer();inv.closeContainer();return changed;

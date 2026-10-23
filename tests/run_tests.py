@@ -88,6 +88,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/performance_tests.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 
+    def test_drag_and_ground_inventory(self):
+        binary=Path(self.temp.name)/'inventory32_tests'
+        sources=['tests/inventory32_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp','source/character.cpp','source/hud.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_pause_equipment_and_jewelry(self):
         binary=Path(self.temp.name)/'equipment31_tests'
         sources=['tests/equipment31_tests.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/character.cpp','source/hud.cpp']

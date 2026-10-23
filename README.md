@@ -183,3 +183,9 @@ comerciantes cercanos en la cuarta página táctil. [Instalación y reglas](docs
 
 Menú de Equipamiento en pausa, once ranuras con selección de objetos propios,
 mangas y joyas con efectos. [Instalación y controles](docs/v0.31.md).
+
+## v0.32
+
+L/R navegan las ventanas; el paperdoll abre Equipamiento pausado. Transferencias
+a cadáveres, arrastre, objetos temporales en Suelo y precios/cantidades claros.
+[Instalación y controles](docs/v0.32.md).

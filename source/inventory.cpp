@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <cmath>
 #include <fstream>
 #include <sys/stat.h>
 namespace lab {
@@ -47,7 +48,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=false;dressed=accessories=false;
+    path=p;ground={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=false;dressed=accessories=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -67,7 +68,7 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4)||!std::memcmp(b.data(),"UIN5",4)||!std::memcmp(b.data(),"UIN6",4))&&get(b,4)==identity&&get(b,8)==chests.size();
+    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4)||!std::memcmp(b.data(),"UIN5",4)||!std::memcmp(b.data(),"UIN6",4)||!std::memcmp(b.data(),"UIN7",4))&&get(b,4)==identity&&get(b,8)==chests.size();
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
@@ -83,12 +84,14 @@ void Inventory::init(const World&w,const std::string&p){
     }
     bool legacy=b.size()>=4&&b[3]=='1';
     std::array<int,11>loaded;loaded.fill(-1);
-    bool expanded=b.size()>=4&&b[3]=='6';
+    bool hasGround=b.size()>=4&&b[3]=='7';
+    bool expanded=b.size()>=4&&(b[3]=='6'||hasGround);
     int slots=expanded?11:8;
     bool remembered=b.size()>=4&&(b[3]=='5'||expanded);
     bool extended=b.size()>=4&&(b[3]=='4'||remembered);
     if(ok&&!legacy){
-        if(pos+(expanded?92:remembered?68:extended?36:12)!=b.size()-4)ok=false;
+        size_t equipmentBytes=expanded?92:remembered?68:extended?36:12;
+        if((!hasGround&&pos+equipmentBytes!=b.size()-4)||(hasGround&&pos+equipmentBytes+4>b.size()-4))ok=false;
         else for(int slot=0;slot<(extended?slots:3);++slot){uint32_t value=get(b,pos);pos+=4;
             if(value==0xffffffffu)continue;
             if(value>=ItemTypes||itemDefs[value].slot!=slot){ok=false;break;}
@@ -97,7 +100,20 @@ void Inventory::init(const World&w,const std::string&p){
     }
     if(ok&&extended){uint32_t flags=get(b,pos);pos+=4;if(flags>3)ok=false;dressed=flags&1;accessories=flags&2;}
     if(ok&&remembered){for(int slot=0;slot<slots;++slot){uint32_t type=get(b,pos);pos+=4;if(type==0xffffffffu)continue;if(type>=ItemTypes||itemDefs[type].slot!=slot){ok=false;break;}lastEquipment[slot]=type;}}
-    if(!ok||pos!=b.size()-4){writable=false;backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
+    if(ok&&hasGround){
+        if(pos+4>b.size()-4)ok=false;
+        unsigned count=ok?get(b,pos):0;pos+=4;if(count>ground.size())ok=false;
+        for(unsigned n=0;ok&&n<count;++n){if(pos+16>b.size()-4){ok=false;break;}
+            auto&pile=ground[n];pile.position={int(int32_t(get(b,pos))),int(int32_t(get(b,pos+4))),int(int32_t(get(b,pos+8)))};unsigned size=get(b,pos+12);pos+=16;
+            if(!w.contains(pile.position.x,pile.position.y)||(pile.position.z< -512||pile.position.z>512)||!size||size>ChestSlots||pos+size*12>b.size()-4){ok=false;break;}
+            for(unsigned i=0;i<size;++i){unsigned type=get(b,pos),amount=get(b,pos+4),ms=get(b,pos+8);pos+=12;
+                if(type>=ItemTypes||!amount||amount>65535||(!itemDefs[type].stackable&&amount!=1)||!ms||ms>180000){ok=false;break;}
+                pile.items.push_back({uint16_t(type),uint16_t(amount)});pile.remaining.push_back(ms/1000.f);
+            }
+        }
+        groundFormat=true;
+    }
+    if(!ok||pos!=b.size()-4){writable=false;ground={};backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
     restored=true;equipment=loaded;if(legacy)seedGear();
     message=input==path?"INVENTARIO RESTAURADO":"INVENTARIO RECUPERADO";
@@ -210,6 +226,7 @@ bool Inventory::openExternal(const World&w,const Actor&a,Bag&bag,const Actor&pos
     external=&bag;externalPosition=position;externalTitle=title;opened=-2;message="CADAVER ABIERTO - TOCA EL BOTIN";return true;
 }
 void Inventory::update(const World&w,const Actor&a){
+    if(onGround()&&!meleeContainerReach(w,a,ground[-opened-3].position)){closeContainer();message="SUELO FUERA DE ALCANCE";}
     if((opened>=0&&!reachable(w,a,size_t(opened)))||(opened==-2&&!meleeContainerReach(w,a,externalPosition))){closeContainer();message="CONTENEDOR FUERA DE ALCANCE";}
 }
 void Inventory::open(const World&w,const Actor&a){
@@ -221,11 +238,17 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
     bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
     bool expanded=false;for(size_t s=8;s<11;++s)if(equipment[s]>=0||lastEquipment[s]>=0)expanded=true;
+    if(groundFormat)expanded=true;
     if(expanded){extended=true;remembered=true;}
     size_t slots=expanded?11:8;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    std::vector<uint8_t>b={'U','I','N',uint8_t(groundFormat?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
-    append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));put(b,hash(b));
+    append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));
+    if(groundFormat){unsigned count=0;for(const auto&pile:ground)if(!pile.items.empty())++count;put(b,count);
+        for(const auto&pile:ground)if(!pile.items.empty()){put(b,pile.position.x);put(b,pile.position.y);put(b,pile.position.z);put(b,pile.items.size());
+            for(size_t i=0;i<pile.items.size();++i){put(b,pile.items[i].type);put(b,pile.items[i].count);put(b,unsigned(std::max(1.f,std::min(180000.f,std::ceil(pile.remaining[i]*1000)))));}}
+    }
+    put(b,hash(b));
     std::string tmp=path+".tmp",bak=path+".bak";
     FILE*f=std::fopen(tmp.c_str(),"wb");if(!f){error="ERROR SD: NO SE MOVIO EL OBJETO";return false;}
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fclose(f))ok=false;
@@ -243,32 +266,57 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
 }
 bool Inventory::transfer(const World&w,const Actor&a,bool fromChest,size_t slot,SaveRename renameFile){
     update(w,a);if(!writable||!hasContainer()){message="ABRE UN COFRE CERCANO";return false;}
-    if(opened==-2&&!fromChest){message="CADAVER: SOLO RETIRAR BOTIN";return false;}
-    Bag&container=opened==-2?*external:chests[opened].items;
+    if(onGround()&&!fromChest)return drop(w,a,false,slot,renameFile);
+    Bag&container=onGround()?ground[-opened-3].items:opened==-2?*external:chests[opened].items;
     Bag&source=fromChest?container:backpack;Bag&dest=fromChest?backpack:container;
     if(slot>=source.size())return false;
     auto item=source[slot];if(item.type>=ItemTypes)return false;auto found=std::find_if(dest.begin(),dest.end(),[&](ItemStack s){return itemDefs[item.type].stackable&&s.type==item.type;});
     if((found==dest.end()&&dest.size()>=(fromChest?BagSlots:ChestSlots))||(found!=dest.end()&&unsigned(found->count)+item.count>65535)){message="SIN ESPACIO PARA ESA PILA";return false;}
+    int groundSlot=groundIndex();std::vector<float>oldTimes=groundSlot>=0?ground[groundSlot].remaining:std::vector<float>{};
     Bag oldSource=source,oldDest=dest;
     if(found==dest.end())dest.push_back(item);else found->count+=item.count;
-    source.erase(source.begin()+slot);
-    if(!persist(message,renameFile)){source=oldSource;dest=oldDest;return false;}
-    message=std::string(itemDefs[item.type].name)+(fromChest?" A MOCHILA - GUARDADO":" AL COFRE - GUARDADO");return true;
+    source.erase(source.begin()+slot);if(groundSlot>=0)ground[groundSlot].remaining.erase(ground[groundSlot].remaining.begin()+slot);
+    if(!persist(message,renameFile)){source=oldSource;dest=oldDest;if(groundSlot>=0)ground[groundSlot].remaining=oldTimes;return false;}
+    message=std::string(itemDefs[item.type].name)+(fromChest?" A MOCHILA - GUARDADO":" AL CONTENEDOR - GUARDADO");return true;
 }
 bool Inventory::takeAll(const World&w,const Actor&a,SaveRename renameFile){
     update(w,a);if(!writable||!hasContainer()){message="NO HAY BOTIN AL ALCANCE";return false;}
-    Bag&source=opened==-2?*external:chests[opened].items;
+    Bag&source=onGround()?ground[-opened-3].items:opened==-2?*external:chests[opened].items;
     if(source.empty()){message="CONTENEDOR VACIO";return false;}
+    int groundSlot=groundIndex();std::vector<float>oldTimes=groundSlot>=0?ground[groundSlot].remaining:std::vector<float>{};
     Bag oldSource=source,oldBag=backpack;size_t moved=0;
     for(size_t i=0;i<source.size();){auto item=source[i];if(item.type>=ItemTypes){++i;continue;}
         auto found=std::find_if(backpack.begin(),backpack.end(),[&](ItemStack s){return itemDefs[item.type].stackable&&s.type==item.type;});
         if((found==backpack.end()&&backpack.size()>=BagSlots)||(found!=backpack.end()&&unsigned(found->count)+item.count>65535)){++i;continue;}
         if(found==backpack.end())backpack.push_back(item);else found->count+=item.count;
-        source.erase(source.begin()+i);++moved;
+        source.erase(source.begin()+i);if(groundSlot>=0)ground[groundSlot].remaining.erase(ground[groundSlot].remaining.begin()+i);++moved;
     }
     if(!moved){message="MOCHILA LLENA";return false;}
-    if(!persist(message,renameFile)){source=oldSource;backpack=oldBag;return false;}
+    if(!persist(message,renameFile)){source=oldSource;backpack=oldBag;if(groundSlot>=0)ground[groundSlot].remaining=oldTimes;return false;}
     message=source.empty()?"TODO RECOGIDO - GUARDADO":"MOCHILA LLENA - QUEDA BOTIN";return true;
+}
+int Inventory::nearestGround(const World&w,const Actor&a)const{
+    int best=-1,distance=100000;for(size_t i=0;i<ground.size();++i){const auto&p=ground[i];if(p.items.empty()||!meleeContainerReach(w,a,p.position))continue;int dx=a.x-p.position.x,dy=a.y-p.position.y,d=dx*dx+dy*dy;if(d<distance){best=int(i);distance=d;}}return best;
+}
+bool Inventory::followGround(int index){if(index<0||size_t(index)>=ground.size())return false;int next=-index-3;if(opened==next)return false;closeContainer();opened=next;return true;}
+bool Inventory::drop(const World&w,const Actor&a,bool fromContainer,size_t slot,SaveRename renameFile){
+    update(w,a);if(!writable||!w.contains(a.x,a.y)||(fromContainer&&(!hasContainer()||onGround())))return false;
+    Bag&source=fromContainer?(opened==-2?*external:chests[opened].items):backpack;if(slot>=source.size())return false;
+    int target=-1;for(size_t i=0;i<ground.size();++i){auto&p=ground[i];if(!p.items.empty()&&p.position.x==a.x&&p.position.y==a.y&&p.position.z==a.z&&p.items.size()<ChestSlots){target=int(i);break;}}
+    if(target<0)for(size_t i=0;i<ground.size();++i)if(ground[i].items.empty()){target=int(i);break;}
+    if(target<0){message="SUELO LLENO: RECOGE OBJETOS";return false;}
+    Bag previous=source;auto previousPile=ground[target];bool previousFormat=groundFormat;auto item=source[slot];auto&pile=ground[target];pile.position=a;pile.items.push_back(item);pile.remaining.push_back(180);source.erase(source.begin()+slot);groundFormat=true;
+    if(!persist(message,renameFile)){source=std::move(previous);pile=std::move(previousPile);groundFormat=previousFormat;return false;}
+    detailType=item.type;message="OBJETO EN SUELO: 3 MINUTOS";return true;
+}
+void Inventory::tickGround(float dt,SaveRename renameFile){
+    if(dt<=0||!writable)return;
+    groundRetry=std::max(0.f,groundRetry-dt);bool expired=false;
+    for(auto&p:ground)for(float&t:p.remaining){t=std::max(0.f,t-dt);if(t<=0)expired=true;}
+    if(!expired||groundRetry>0)return;
+    auto before=ground;for(auto&p:ground)for(size_t i=0;i<p.items.size();)if(p.remaining[i]<=0){p.items.erase(p.items.begin()+i);p.remaining.erase(p.remaining.begin()+i);}else ++i;
+    if(!persist(message,renameFile))ground=std::move(before);
+    groundRetry=1;
 }
 bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFile){
     if(!writable||type==0||type>=ItemTypes||!price||price>65535){message="COMERCIO NO DISPONIBLE";return false;}

@@ -2,6 +2,7 @@
 #include "hud.hpp"
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
+#include "inventory_drag.hpp"
 #include "character.hpp"
 #include "overhead_font.hpp"
 #include "combat.hpp"
@@ -35,7 +36,7 @@ const Glyph alphabet[]={
  {':',"000C0C000C0C00"},{'-',"0000001F000000"},{'/',"01010204081010"},
  {'|',"04040404040404"},{'(',"02040808080402"},{')',"08040202020408"},
  {'+',"0004041F040400"},{'~',"00000916000000"},{'#',"0A0A1F0A1F0A0A"},
- {'@',"0E11171D17100F"},{'_',"0000000000001F"},{'?',"0E110102040004"},
+ {'$',"040F140E051E04"},{'@',"0E11171D17100F"},{'_',"0000000000001F"},{'?',"0E110102040004"},
  {'<',"01020408040201"},{'\'',"04040000000000"},{'>',"10080402040810"},{'=',"00001F001F0000"},{'!',"04040404040004"},{'%',"19190204081313"}
 };
 int hex(char c){return c<='9'?c-'0':c-'A'+10;}
@@ -78,7 +79,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.31",ink,1,13);
+    text(fb,225,20,"C.LAB V0.32",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -87,7 +88,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     box(fb,17,181,286,1,ink);box(fb,17,183,286,1,gold);
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: ROOFS | A: ATACAR | X: OBJ",ink);
-    text(fb,20,209,"SELECT: SAVE | L: RESTORE",ink);
+    text(fb,20,209,"SELECT: SAVE | L/R: PAGINAS",ink);
     text(fb,20,219,"START: PAUSA | DESLIZA 1/4",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
@@ -95,7 +96,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     (void)message;
-    text(fb,20,14,"MINIMAPA",ink);text(fb,164,14,"2/4",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
+    text(fb,20,14,"MINIMAPA",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
     box(fb,192,25,1,116,gold);
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
@@ -130,11 +131,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){size_t p=(y*j->dollWidth+x)*4;
             if(j->doll[p+3]>127)pixel(fb,ox+x,JournalLayout::MapTop+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
     }else text(fb,205,86,"SIN IMAGEN",ink);
-    const char*labels[]={"AR","TU","BO","GO","CU","PE","GU","PA"};
-    const int positions[8][2]={{284,30},{284,54},{284,102},{198,30},{198,54},{284,78},{198,78},{198,102}};
-    for(int slot=0;slot<8;++slot){int x=positions[slot][0],y=positions[slot][1];bool worn=inv&&inv->equipment[slot]>=0;
-        box(fb,x,y,20,20,ink);box(fb,x+1,y+1,18,18,worn?gold:Color{161,143,108});text(fb,x+4,y+6,labels[slot],ink);}
-    text(fb,198,JournalLayout::ZoomTop,inv&&inv->equipmentMask()?"TOCA: QUITA / PON":"SIN EQUIPO",ink,1,17);
+    text(fb,205,JournalLayout::ZoomTop,"TOCA: EQUIPO",ink,1,17);
     const PlayerStatus initial;const auto&stats=status?*status:initial;
     constexpr int ox=10,oy=146;
     if(statusArt&&statusArt->rgba.size()==300*82*4){
@@ -155,7 +152,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
 
 }
 
-void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons){
+void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag){
     (void)w;(void)a;drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
     text(fb,18,18,"MOCHILA "+std::to_string(inv.backpack.size())+"/24",ink);
@@ -177,7 +174,10 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     bag(inv.backpack,InventoryLayout::Left,inv.bagPage*BagPageSlots);bag(inv.containerItems(),InventoryLayout::Right,0);
     auto button=[&](int x,int y,int width,int height,const std::string&label,bool active){box(fb,x,y,width,height,ink);box(fb,x+1,y+1,width-2,height-2,active?gold:Color{161,143,108});text(fb,x+7,y+(height-7)/2,label,ink);};
     button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/2  >",true);
-    button(18,214,130,16,inv.equipMode?"MODO: EQUIPAR":"MODO: TRANSFERIR",true);
+    button(18,214,90,16,inv.equipMode?"EQUIPAR":"TRANSFERIR",true);
+    box(fb,116,214,32,17,ink);box(fb,118,216,28,13,{161,143,108});
+    box(fb,126,219,13,9,ink);box(fb,124,217,17,2,ink);box(fb,130,215,5,2,ink);
+    for(int x:{129,133,137})box(fb,x,221,1,5,{244,222,160});
     button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
     if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
@@ -186,6 +186,10 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
         text(fb,18,29,inv.message,ink,1,46);
+    if(drag&&drag->active&&drag->dragging){int x=std::max(0,std::min(295,drag->x-12)),y=std::max(0,std::min(215,drag->y-12));
+        box(fb,x,y,25,25,gold);if(icons&&icons->rgba.size()==ItemTypes*24*24*4&&drag->item.type<ItemTypes)for(int yy=0;yy<24;++yy)for(int xx=0;xx<24;++xx){size_t p=(drag->item.type*576+yy*24+xx)*4;if(icons->rgba[p+3]>127)pixel(fb,x+xx,y+yy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
+    }
+
 }
 
 void drawEquipmentMenu(uint8_t*top,uint8_t*bottom,const EquipmentMenu&e,const Appearance&a,const Inventory&bag,const PlayerStatus&status,const std::vector<uint16_t>&doll,const std::vector<uint16_t>&sprite){
@@ -208,7 +212,7 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={226,213,177};
     text(fb,18,12,"MOCHILA",ink);text(fb,170,12,shop.title,ink,1,21);
     text(fb,18,24,"ORO: "+std::to_string(PlayerStatus::gold(&inv)),ink);
-    text(fb,170,24,"TIENDA | 4/4",ink);
+    text(fb,170,24,"TIENDA",ink);
     for(int side=0;side<2;++side)for(int n=0;n<12;++n){int x=(side?170:18)+n%3*44,y=38+n/3*38;
         box(fb,x,y,41,35,ink);box(fb,x+1,y+1,39,33,paper);int type=-1;
         if(side&&size_t(n)<shop.stock.size())type=int(shop.stock[n]);
@@ -217,11 +221,16 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
         if(shop.selected()==type&&shop.purchase()==bool(side)){box(fb,x+1,y+1,39,33,gold);}
         if(icons&&icons->rgba.size()==ItemTypes*24*24*4)for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t at=(type*576+iy*24+ix)*4;if(icons->rgba[at+3]>127)pixel(fb,x+8+ix,y+1+iy,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
         else text(fb,x+2,y+5,itemDefs[type].name,ink,1,6);
-        text(fb,x+2,y+26,shop.accepts(type)?std::to_string(shop.price(type,side!=0))+" O":"--",ink,1,6);
+        unsigned count=0;for(auto owned:inv.backpack)if(owned.type==type)count+=owned.count;
+        std::string quantity=std::to_string(count);int qx=x+39-int(quantity.size())*6;box(fb,qx,y+1,int(quantity.size())*6,8,ink);text(fb,qx,y+2,quantity,{244,222,160},1,5);
+        text(fb,x+2,y+26,shop.accepts(type)?"$"+std::to_string(shop.price(type,side!=0)):"--",ink,1,6);
     }
     box(fb,18,194,130,16,gold);text(fb,22,198,"HOJA "+std::to_string(shop.bagPage+1)+"/2 >",ink);
     box(fb,170,194,130,16,gold);text(fb,176,198,shop.selected()<0?"ELIGE OBJETO":shop.purchase()?"COMPRAR 1":"VENDER 1",ink);
-    text(fb,18,225,shop.message,ink,1,47);
+    std::string message=shop.message;
+    if(shop.selected()>0)message=(shop.purchase()?"COMPRAR ":"VENDER ")+std::string(itemDefs[shop.selected()].name)+" POR $"+std::to_string(shop.price(unsigned(shop.selected()),shop.purchase()));
+    if(shop.message.find("COMPRADO")==0||shop.message.find("VENDIDO")==0||shop.message.find("NO DISPONIBLE")!=std::string::npos||shop.message.find("NO COMPRA")!=std::string::npos||shop.message.find("ERROR")!=std::string::npos||shop.message.find("INSUFICIENTE")!=std::string::npos||shop.message.find("LLENA")!=std::string::npos)message=shop.message;
+    text(fb,18,225,message,ink,1,47);
     if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
 }
 
@@ -243,7 +252,7 @@ void drawTitle(uint8_t*fb,bool loading){
     text(fb,173,125,"3DS",gold,3);
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
     text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.31";
+    const std::string version="CORELAB V0.32";
     text(fb,(400-int(version.size())*6)/2,217,version,gold);
     canvasWidth=320;
 }

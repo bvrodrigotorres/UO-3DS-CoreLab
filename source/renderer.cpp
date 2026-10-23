@@ -25,7 +25,8 @@ static DVLB_s* shader;
 static shaderProgram_s program;
 static C3D_Mtx projection;
 static int uniformProjection;
-static C3D_Tex white,labelFont;
+static C3D_Tex white,labelFont,groundIcons;
+static bool groundIconsReady=false;static std::array<Tex3DS_SubTexture,ItemTypes>groundFrames;
 static OverheadFont overheadFont;
 static std::vector<C2D_SpriteSheet> sheets;
 static bool streamed=false,textureFailure=false;
@@ -124,6 +125,16 @@ static void labelText(float x,float y,const std::string&text,bool outline,float 
     }
 }
 
+bool loadGroundIcons(const ItemIcons&icons){
+    if(icons.rgba.size()!=ItemTypes*24*24*4)return false;
+    C3D_FrameSync();if(groundIconsReady){C3D_TexDelete(&groundIcons);groundIconsReady=false;}
+    if(!C3D_TexInit(&groundIcons,256,128,GPU_RGBA5551))return false;
+    auto*pixels=static_cast<uint16_t*>(groundIcons.data);std::memset(pixels,0,groundIcons.size);
+    for(unsigned n=0;n<ItemTypes;++n){unsigned left=n%10*24,top=n/10*24;
+        groundFrames[n]={24,24,left/256.f,1-top/128.f,(left+24)/256.f,1-(top+24)/128.f};
+        for(unsigned y=0;y<24;++y)for(unsigned x=0;x<24;++x){size_t p=(n*576+y*24+x)*4;unsigned c=icons.rgba[p+3]>127?((icons.rgba[p]>>3)<<11)|((icons.rgba[p+1]>>3)<<6)|((icons.rgba[p+2]>>3)<<1)|1:0;pixels[characterTexel(left+x,top+y,256)]=c;}}
+    C3D_TexFlush(&groundIcons);C3D_TexSetFilter(&groundIcons,GPU_NEAREST,GPU_NEAREST);groundIconsReady=true;return true;
+}
 bool rendererInit(){
     buffer=(Vertex*)linearAlloc(sizeof(Vertex)*Capacity);if(!buffer)return false;
     shader=DVLB_ParseFile((u32*)world_shbin,world_shbin_size);if(!shader){linearFree(buffer);buffer=nullptr;return false;}
@@ -156,6 +167,7 @@ void rendererShutdown(){
     for(auto s:npcSheets)if(s)C2D_SpriteSheetFree(s);
     npcSheets.clear();if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);corpseSheet=nullptr;corpseBytes=0;
     if(bloodSheet){C2D_SpriteSheetFree(bloodSheet);}bloodSheet=nullptr;bloodBytes=0;
+    if(groundIconsReady){C3D_TexDelete(&groundIcons);groundIconsReady=false;}
     C3D_TexDelete(&labelFont);C3D_TexDelete(&white);if(buffer)linearFree(buffer);
     shaderProgramFree(&program);if(shader)DVLB_Free(shader);
 }
@@ -357,14 +369,14 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     }
 }
 bool rendererTextureError(){return textureFailure;}
-size_t textureBytes(){return bytes+npcBytes+corpseBytes+bloodBytes+outfitCache.bytes();}
+size_t textureBytes(){return bytes+npcBytes+corpseBytes+bloodBytes+outfitCache.bytes()+(groundIconsReady?groundIcons.size:0);}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status){
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status,const Inventory*inventory){
     used=0;objects=0;overflow=false;batches.clear();textureLoadsRemaining=2;textureFailure=false;
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
@@ -375,7 +387,10 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         if(c.active&&std::abs(c.position.x-actor.x)<=12&&std::abs(c.position.y-actor.y)<=12&&std::abs(c.position.z-actor.z)<16)npcList.push_back({Kind::Corpse,c.position.x,c.position.y,c.position.z,c.position.z,i,0xfffffe00u+(uint32_t)i});
     }
     for(size_t i=0;i<combat->blood.size();++i){const auto&p=combat->blood[i];if(p.active&&std::abs(p.position.x-actor.x)<=12&&std::abs(p.position.y-actor.y)<=12&&std::abs(p.position.z-actor.z)<16)npcList.push_back({Kind::Blood,p.position.x,p.position.y,p.position.z,p.position.z,i,0xfffffd00u+uint32_t(i)});}
-    std::stable_sort(npcList.begin(),npcList.end(),drawBefore);}
+    }
+    if(inventory)for(size_t i=0;i<inventory->ground.size();++i){const auto&pile=inventory->ground[i];if(std::abs(pile.position.x-actor.x)>12||std::abs(pile.position.y-actor.y)>12||std::abs(pile.position.z-actor.z)>=16)continue;
+        for(size_t j=0;j<pile.items.size();++j)npcList.push_back({Kind::Ground,pile.position.x,pile.position.y,pile.position.z,pile.position.z,i*ChestSlots+j,0xfffffc00u+uint32_t(i*ChestSlots+j)});}
+    std::stable_sort(npcList.begin(),npcList.end(),drawBefore);
     mergedDraws.clear();mergedDraws.reserve(list.size()+npcList.size());
     for(size_t wi=0,ni=0;wi<list.size()||ni<npcList.size();){
         bool takeNpc=ni<npcList.size()&&(wi==list.size()||drawBefore(npcList[ni],list[wi]));
@@ -465,6 +480,13 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                     if(alpha>0)quad(p,whiteUV,&white,rug?.18f:roof?.55f:.63f,rug?.3f:roof?.24f:.44f,rug?.8f:roof?.17f:.24f,alpha);
                 }
             }
+        }else if(d.kind==Kind::Ground){
+            if(!inventory)continue;
+            const auto&pile=inventory->ground[d.index/ChestSlots];size_t slot=d.index%ChestSlots;if(slot>=pile.items.size())continue;
+            unsigned type=pile.items[slot].type;if(type>=ItemTypes)continue;
+            float x=center.x-12+int(slot%3)*2-2,y=center.y-17+int(slot%2)*2;
+            if(groundIconsReady){C2D_Image image{&groundIcons,&groundFrames[type]};Point p[]={{x,y},{x+24,y},{x+24,y+24},{x,y+24}},uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);}
+            else rect(x+5,y+12,12,8,.55f,.36f,.13f);
         }else if(d.kind==Kind::Blood){
             const auto&pool=combat->blood[d.index];auto foot=project(pool.position.x,pool.position.y,pool.position.z);pixelMode=PixelMode::Translucent;float alpha=std::min(1.f,(3-pool.age)*2);
             if(bloodSheet){auto image=C2D_SpriteSheetGetImage(bloodSheet,pool.variant%7);float width=image.subtex->width,height=image.subtex->height;float left=foot.x-width/2,top=foot.y-height+5;

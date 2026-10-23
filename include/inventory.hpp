@@ -10,7 +10,8 @@ struct InventoryLayout {
     static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
     static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
     static bool page(int x,int y){return x>=18&&x<148&&y>=194&&y<210;}
-    static bool mode(int x,int y){return x>=18&&x<148&&y>=214&&y<230;}
+    static bool trash(int x,int y){return x>=114&&x<150&&y>=212&&y<233;}
+    static bool mode(int x,int y){return x>=18&&x<108&&y>=214&&y<230;}
     static bool take(int x,int y){return x>=170&&x<300&&y>=194&&y<230;}
 };
 struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;
@@ -22,11 +23,12 @@ uint32_t inventoryWorldId(const World&);
 struct ItemStack {uint16_t type=0,count=0;};
 using Bag=std::vector<ItemStack>;
 struct Chest {size_t object;Bag items;};
+struct GroundPile {Actor position;Bag items;std::vector<float>remaining;};
 struct ItemIcons {std::vector<uint8_t> rgba;bool load(const std::string&);};
 class Inventory {
     uint32_t identity=0;
     std::string path;
-    bool writable=true;
+    bool writable=true,groundFormat=false;float groundRetry=0;
     void seedGear();
     Bag*external=nullptr;Actor externalPosition;std::string externalTitle;
     bool persist(std::string&,SaveRename);
@@ -45,11 +47,19 @@ public:
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);
     Bag backpack;
+    std::array<GroundPile,32>ground;
     std::vector<Chest> chests;
     int opened=-1,bagPage=0,detailType=-1;
-    bool hasContainer()const{return opened>=0||(opened==-2&&external);}
-    const Bag&containerItems()const{static const Bag empty;return opened==-2&&external?*external:opened>=0&&size_t(opened)<chests.size()?chests[opened].items:empty;}
-    std::string containerName()const{return opened==-2?externalTitle:"COFRE";}
+    bool onGround()const{return opened<=-3&&size_t(-opened-3)<ground.size();}
+    int groundIndex()const{return onGround()?-opened-3:-1;}
+    bool hasContainer()const{return opened>=0||(opened==-2&&external)||onGround();}
+    const Bag&containerItems()const{static const Bag empty;return onGround()?ground[-opened-3].items:opened==-2&&external?*external:opened>=0&&size_t(opened)<chests.size()?chests[opened].items:empty;}
+    const Bag*containerIdentity()const{return hasContainer()?&containerItems():nullptr;}
+    std::string containerName()const{return onGround()?"SUELO":opened==-2?externalTitle:"COFRE";}
+    int nearestGround(const World&,const Actor&)const;
+    bool followGround(int);
+    bool drop(const World&,const Actor&,bool fromContainer,size_t,SaveRename=std::rename);
+    void tickGround(float,SaveRename=std::rename);
     bool isExternal(const Bag*bag)const{return opened==-2&&external==bag;}
     bool followChest(int index){if(index<0||size_t(index)>=chests.size()){bool changed=hasContainer();closeContainer();return changed;}if(opened==index&&index>=0)return false;closeContainer();opened=index;return true;}
     void closeContainer(){opened=-1;external=nullptr;}
