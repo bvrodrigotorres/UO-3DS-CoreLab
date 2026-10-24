@@ -6,6 +6,7 @@
 #include "npc_push.hpp"
 #include "combat.hpp"
 #include "session_save.hpp"
+#include "save_queue.hpp"
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
 #include "inventory_drag.hpp"
@@ -124,7 +125,7 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
 }
 
 int main(){
-    gfxInitDefault();
+    gfxInitDefault();bool new3ds=false;APT_CheckNew3DS(&new3ds);
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
@@ -292,20 +293,32 @@ int main(){
         lab::warmEquipment(inventory.equipmentMask(),equipmentArt);
         lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     }
-    std::vector<lab::Actor>occupants;occupants.reserve(16);
+    std::vector<lab::Actor>occupants;occupants.reserve(npcs.all().size()*2+2);
     lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);combat.locate(actor);
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
-    auto persistVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
+    lab::AsyncSaves*asyncWriter=nullptr;
+    auto persistVitals=[&](){if(asyncWriter&&!asyncWriter->flush()){saveMessage="ERROR SD: GUARDADO PENDIENTE";return false;}bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
     inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";return used;};
     if(!lab::loadVitals(vitalsPath(),playerStatus)){menu.back();menu.message="ESTADISTICAS INVALIDAS: PARTIDA CONSERVADA";continue;}
+    auto saves=std::make_unique<lab::AsyncSaves>();bool asyncReady=saves->start();
+    lab::SaveSink sink;if(asyncReady){asyncWriter=saves.get();sink=[&](const std::string&path,std::vector<uint8_t>b){return saves->enqueue(path,std::move(b));};inventory.saveSink=sink;demoInventory.saveSink=sink;}
+    auto queueVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus,std::rename,sink);if(!ok)saveMessage="ERROR SD: ESTADISTICAS PENDIENTES";return ok;};
+    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";return used;};
     lab::SkillsMenu skillsMenu;
     playerStatus.skills.start((authentic?inventory:demoInventory).equipment[0]);
+    if(authentic){u64 warmUntil=osGetTime()+3000;unsigned readyFrames=0;while(aptMainLoop()&&osGetTime()<warmUntil&&readyFrames<2){
+        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,0,true,false,false,hasNpcs?&npcs:nullptr,&combat,&playerStatus,&inventory);
+        readyFrames=lab::rendererResourceWaits()||lab::rendererTextureError()?0:readyFrames+1;startupFrame(nullptr,false,"PREPARANDO LA REGION",5);
+    }}
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
-    auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
+    auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool drained=saves->flush();bool ok=drained&&lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage);if(!saves->flush())ok=false;if(!ok)saveMessage="ERROR SD: GUARDADO PENDIENTE";positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
+    lab::FramePacer framePacer;lab::FrameStats frameStats;u64 lastHud=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
-        u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
+        if(!new3ds&&!pause.active){auto delay=framePacer.delay(osGetTime()*1000);if(delay)svcSleepThread(delay*1000);}else framePacer.reset();
+        u64 now=osGetTime();frameStats.observe(float(now-last));float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
+        auto saveState=saves->status();bool saveNotice=inventory.savePending!=(saveState.pending>0)||inventory.saveFailed!=saveState.error;inventory.savePending=saveState.pending>0;inventory.saveFailed=saveState.error;if(saveState.error)saveMessage="ERROR SD: GUARDADO PENDIENTE";
         combat.locate(actor);
         bool wasPaused=pause.active;
         if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();saveAtPause(now);now=osGetTime();}
@@ -363,6 +376,7 @@ int main(){
                 auto&bag=authentic?inventory:demoInventory;
                 if(saved&&bag.healthy())saved=bag.checkpoint();
                 if(saved)saved=persistVitals();
+                if(!saves->flush())saved=false;
                 if(saved){inventory.closeContainer();C3D_FrameSync();quit=action==lab::PauseAction::Exit;menu.back();menu.selected=1;canContinue=true;moving=false;break;}
                 pause.message="ERROR SD: NO SE PUDO GUARDAR";
             }
@@ -373,7 +387,7 @@ int main(){
         }
         if(down&(KEY_X|KEY_A))npcPush.reset();
         if(down&KEY_SELECT)roofs=lab::nextRoofMode(roofs);
-        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";saveMessage=inventory.message;}
+        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";saveMessage=inventory.message;}
         bool pageChanged=false;
         if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:pages.count-1))%pages.count;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
         touchPosition touch;
@@ -383,7 +397,7 @@ int main(){
             bool dragged=false,changed=false;
             if(inventoryDrag.active){dragged=inventoryDrag.finish(*w,actor,inventory);pages.active=false;}
             else changed=pages.end();
-            if(!dragged&&!changed&&oldPage==2&&authentic&&(inventory.useMode||!moving||lab::equipmentTouchWhileMoving(inventory.equipMode,pages.startX,pages.startY))&&dx*dx+dy*dy<144)
+            if(!dragged&&!changed&&oldPage==2&&authentic&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
                 if(lab::characterPaperdollHit(pages.startX,pages.startY)){
@@ -445,7 +459,7 @@ int main(){
         if(authentic&&!inventoryDrag.active&&pages.page==2&&combat.inspectNearest(*w,actor,inventory))pageChanged=true;
         if(animateThisFrame||sx||sy||(held&KEY_TOUCH)||down)positionCheckpoint().active(now);
         if(!moving&&positionCheckpoint().due(actor,now)){
-            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();
+            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&queueVitals();
             positionCheckpoint().result(actor,now,ok);
         }
         if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
@@ -458,8 +472,10 @@ int main(){
         }
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
-        if(frames==1||frames%12==0||down||pageChanged){
+        if(frames==1||now-lastHud>=200||down||pageChanged||saveNotice){
+            lastHud=now;
             lab::HudInfo hud{authentic?(w->width>32?"BRITAIN "+std::to_string(w->width)+"X"+std::to_string(w->height):"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
+            if(pages.page==0){
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};
             std::snprintf(line,sizeof(line),"XY %d,%d   Z %d | %s",actor.x+w->originX,actor.y+w->originY,actor.z,blocked);add();
@@ -490,6 +506,9 @@ int main(){
             if(authentic&&!npcError.empty())hud.lines.push_back(npcError);
             if(lab::rendererTextureError())hud.lines.emplace_back("TEXTURAS: ERROR SD/MEMORIA");
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
+            std::snprintf(line,sizeof(line),"P95 %.0fMS SD %u %.0fMS",frameStats.p95(),saveState.pending,saveState.lastMilliseconds);add();
+            if(saveState.error)hud.lines.emplace_back("ERROR SD: GUARDADO PENDIENTE");
+            }
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==4)lab::drawSkills(bottom,playerStatus.skills,skillsMenu,combat.meditating);
             else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt);
@@ -502,7 +521,8 @@ int main(){
     }
     inventory.closeContainer();
     if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
-    persistVitals();
+    if(saves->flush())persistVitals();
+    inventory.saveSink={};demoInventory.saveSink={};
     }
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
 }

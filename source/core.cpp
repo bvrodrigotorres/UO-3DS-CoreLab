@@ -47,6 +47,7 @@ std::vector<Draw> renderList(const World&w,const Actor&a,bool cutaway){
         const auto&o=w.objects[i];
         if(o.z>a.z+14&&(o.flags&(Roof|Surface)))ceiling=std::min(ceiling,o.z);
     }
+    std::vector<Draw> column;column.reserve(24);
     const int left=std::max(0,a.x-12),right=std::min(w.width-1,a.x+12);
     const int top=std::max(0,a.y-12),bottom=std::min(w.height-1,a.y+12);
     for(int sum=left+top;sum<=right+bottom;++sum)for(int x=left;x<=right;++x){
@@ -54,7 +55,7 @@ std::vector<Draw> renderList(const World&w,const Actor&a,bool cutaway){
         size_t cell=y*w.width+x;
         if(std::abs(x-a.x)>12||std::abs(y-a.y)>12)continue;
         auto h=heights(w,x,y);
-        std::vector<Draw> column;
+        column.clear();
         column.push_back({Kind::Land,x,y,h.top,priority(Kind::Land,h.top,0,0,h.average,h.slope),cell,0});
         for(size_t i:w.cells[cell]){
             const auto&o=w.objects[i];
@@ -62,20 +63,22 @@ std::vector<Draw> renderList(const World&w,const Actor&a,bool cutaway){
             column.push_back({Kind::Static,x,y,o.z,priority(Kind::Static,o.z,o.height,o.flags,0,false),i,o.order+1});
         }
         if(x==a.x&&y==a.y)column.push_back({Kind::Actor,x,y,a.z,a.z+1,0,0xffffffffu});
-        std::stable_sort(column.begin(),column.end(),[](const Draw&p,const Draw&q){
+        const auto before=[](const Draw&p,const Draw&q){
             if(p.priority!=q.priority)return p.priority<q.priority;
             if((p.kind==Kind::Land)!=(q.kind==Kind::Land))return p.kind==Kind::Land;
             return p.order<q.order;
-        });
+        };
+        if(column.size()>64)std::stable_sort(column.begin(),column.end(),before);
+        else for(size_t i=1;i<column.size();++i){auto value=column[i];size_t j=i;while(j&&before(value,column[j-1])){column[j]=column[j-1];--j;}column[j]=value;}
         out.insert(out.end(),column.begin(),column.end());
     }
     return out;
 }
-bool solveCandidates(std::vector<Candidate> list,int currentZ,int minZ,int maxZ,int& nextZ){
+static bool solveCandidateBuffer(std::vector<Candidate>&list,int currentZ,int minZ,int maxZ,int&nextZ){
     if(list.empty())return false;
-    std::stable_sort(list.begin(),list.end(),[](const Candidate&a,const Candidate&b){
-        return a.z!=b.z?a.z<b.z:a.height<b.height;
-    });
+    const auto before=[](const Candidate&a,const Candidate&b){return a.z!=b.z?a.z<b.z:a.height<b.height;};
+    if(list.size()>64)std::stable_sort(list.begin(),list.end(),before);
+    else for(size_t i=1;i<list.size();++i){auto value=list[i];size_t j=i;while(j&&before(value,list[j-1])){list[j]=list[j-1];--j;}list[j]=value;}
     list.push_back({1,128,128,128});
     int z=std::max(currentZ,minZ),result=-128,best=1000000,current=-128;
     for(size_t i=0;i<list.size();++i){
@@ -94,8 +97,9 @@ bool solveCandidates(std::vector<Candidate> list,int currentZ,int minZ,int maxZ,
     if(result==-128)return false;
     nextZ=result;return true;
 }
-static std::vector<Candidate> candidates(const World&w,int x,int y){
-    std::vector<Candidate> list;if(!w.contains(x,y))return list;
+bool solveCandidates(std::vector<Candidate>list,int currentZ,int minZ,int maxZ,int&nextZ){return solveCandidateBuffer(list,currentZ,minZ,maxZ,nextZ);}
+static void candidates(const World&w,int x,int y,std::vector<Candidate>&list){
+    list.clear();if(!w.contains(x,y))return;
     auto h=heights(w,x,y);const auto&land=w.land[y*w.width+x];
     if((land.art<0x1ae&&land.art!=2)||(land.art>0x1b5&&land.art!=0x1db))
         list.push_back({unsigned((land.flags&Impassable)?1:7),h.minimum,h.average,h.average-h.minimum,true});
@@ -105,13 +109,13 @@ static std::vector<Candidate> candidates(const World&w,int x,int y){
         if(!(o.flags&Impassable)){if(o.flags&Surface)f|=2;if(o.flags&Bridge)f|=4;}
         if(f)list.push_back({f,o.z,o.z+((o.flags&Bridge)?o.height/2:o.height),o.height});
     }
-    return list;
 }
 static bool probe(const World&w,const Actor&a,int x,int y,int direction,int&z){
     if(!w.contains(x,y)||!w.contains(a.x,a.y))return false;
     int minimum=-128,maximum=a.z;
     auto h=heights(w,a.x,a.y);
-    auto source=candidates(w,a.x,a.y);
+    static thread_local std::vector<Candidate>source,destination;
+    candidates(w,a.x,a.y,source);
     for(size_t i=0;i<source.size();++i){
         const auto&o=source[i];
         if(o.terrain&&h.slope&&o.average<=a.z){
@@ -122,7 +126,7 @@ static bool probe(const World&w,const Actor&a,int x,int y,int direction,int&z){
             if((o.flags&4)&&a.z==o.average){maximum=std::max(maximum,o.z+o.height);minimum=std::min(minimum,o.z);}
         }
     }
-    return solveCandidates(candidates(w,x,y),a.z,minimum,maximum+2,z);
+    candidates(w,x,y,destination);return solveCandidateBuffer(destination,a.z,minimum,maximum+2,z);
 }
 bool step(const World&w,const Actor&a,int direction,Actor&result,int&actualDirection){
     if(direction<0||direction>7)return false;

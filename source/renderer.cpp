@@ -6,6 +6,8 @@
 #include "character_depth.hpp"
 #include "performance.hpp"
 #include "view.hpp"
+#include "save_queue.hpp"
+#include <memory>
 #include "roof_cutaway.hpp"
 #include "overhead_font.hpp"
 #include "world_shbin.h"
@@ -77,7 +79,9 @@ static bool overflow;
 static std::vector<Batch> batches;
 static RenderCache renderCache;
 static RoofCutaway roofCutaway;
-static std::vector<Draw>mergedDraws;
+static std::vector<Draw>mergedDraws,visibleDraws;
+static std::vector<unsigned char>neededWorld;
+static std::unique_ptr<AsyncResources>resourceReader;static unsigned resourceWaits=0,resourceUploads=0;
 static constexpr int Capacity=65536;
 static void push(Vertex v,C3D_Tex*texture){
     if(used>=Capacity){overflow=true;return;}
@@ -158,9 +162,11 @@ bool rendererInit(){
     if(avatar&&C2D_SpriteSheetCount(avatar)<40){C2D_SpriteSheetFree(avatar);avatar=nullptr;}
     runVerified=avatar&&C2D_SpriteSheetCount(avatar)==72&&verifyRunAtlas(
         "sdmc:/3ds/UO-3DS-CoreLab/player_anim.t3x","sdmc:/3ds/UO-3DS-CoreLab/player_anim.meta");
+    resourceReader.reset(new AsyncResources);if(!resourceReader->start())resourceReader.reset();
     batches.reserve(512);return true;
 }
 void rendererShutdown(){
+    resourceReader.reset();
     C3D_FrameSync();for(auto s:sheets)if(s)C2D_SpriteSheetFree(s);sheets.clear();
     if(avatar)C2D_SpriteSheetFree(avatar);
     clearOutfits();
@@ -265,22 +271,24 @@ static void prepareNpcPages(const Npcs&npcs,const Combat*combat,const std::vecto
     bool cold=false;for(size_t i=0;i<needed.size();++i)if(needed[i]&&!npcSheets[i]&&textureLoadsRemaining&&now>=npcRetry[i])cold=true;
     if(cold)C3D_FrameSync();
     for(size_t i=0;i<needed.size();++i)if(needed[i]){npcUsed[i]=++npcClock;if(npcSheets[i])continue;
-        if(!textureLoadsRemaining||now<npcRetry[i]){textureFailure=true;continue;}
+        if(!textureLoadsRemaining){++resourceWaits;continue;}if(now<npcRetry[i]){textureFailure=true;continue;}
         size_t estimate=1;while(estimate<=npcMeta[i].bytes/2)estimate*=2; // Uncompressed T3X pixels plus a small header.
         while(npcBytes+estimate>6*1024*1024||linearSpaceFree()<estimate+2*1024*1024){
             int victim=-1;for(size_t j=0;j<npcSheets.size();++j)if(npcSheets[j]&&!needed[j]&&(victim<0||npcUsed[j]<npcUsed[victim]))victim=int(j);
             if(victim<0)break;
             auto image=C2D_SpriteSheetGetImage(npcSheets[victim],0);npcBytes-=image.tex->size;C2D_SpriteSheetFree(npcSheets[victim]);npcSheets[victim]=nullptr;
         }
-        while(linearSpaceFree()<estimate+2*1024*1024){int victim=outfitCache.victim(outfitMask);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
+        while(linearSpaceFree()<estimate+2*1024*1024){int victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
         if(linearSpaceFree()<estimate+2*1024*1024){textureFailure=true;npcRetry[i]=now+1000;continue;}
         char name[32];std::snprintf(name,sizeof name,"pop_%02u.t3x",unsigned(i));auto path=npcRoot+name;
+        ResourceRead file;
+        if(resourceReader){resourceReader->request(path,npcMeta[i].bytes,npcMeta[i].checksum);if(!resourceReader->take(path,file)){++resourceWaits;continue;}}
         --textureLoadsRemaining;
-        if(!npcVerified[i])npcVerified[i]=equipmentChecksum(path,npcMeta[i].checksum);
-        auto sheet=npcVerified[i]?C2D_SpriteSheetLoad(path.c_str()):nullptr;
+        if(!resourceReader&&!npcVerified[i])npcVerified[i]=equipmentChecksum(path,npcMeta[i].checksum);
+        auto sheet=resourceReader?(file.valid?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):(npcVerified[i]?C2D_SpriteSheetLoad(path.c_str()):nullptr);
         if(!sheet||C2D_SpriteSheetCount(sheet)!=npcFrameCount){if(sheet)C2D_SpriteSheetFree(sheet);textureFailure=true;npcRetry[i]=now+1000;continue;}
         npcRetry[i]=0;
-        auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);npcBytes+=image.tex->size;npcSheets[i]=sheet;
+        auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);npcBytes+=image.tex->size;npcSheets[i]=sheet;++resourceUploads;break;
     }
 }
 bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
@@ -301,7 +309,7 @@ bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
     C3D_FrameSync();
     constexpr size_t required=2*1024*1024,reserve=2*1024*1024;
     while(outfitCache.full()||linearSpaceFree()<required+reserve||(streamed&&outfitCache.bytes()>=8*1024*1024)){
-        int victim=outfitCache.victim(outfitMask);if(victim<0)break;
+        int victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;
         freeOutfit(outfitCache.remove(unsigned(victim)));
     }
     if(linearSpaceFree()<required+reserve){error="EQUIPO: MEMORIA RESERVADA";return false;}
@@ -322,7 +330,7 @@ bool applyAppearance(const CharacterAssets&assets,const Appearance&a,EquipmentAr
     C3D_FrameSync();
     // Editor transitions may discard streamed world pages, never world data.
     if(streamed){for(auto&sheet:sheets)if(sheet){C2D_SpriteSheetFree(sheet);sheet=nullptr;}bytes=0;}
-    while(linearSpaceFree()<4*1024*1024){int victim=outfitCache.victim(outfitMask);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
+    while(linearSpaceFree()<4*1024*1024){int victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
     auto*next=customOutfit(pixels);if(!next){error="PERSONALIZACION: SIN MEMORIA";return false;}
     clearOutfits();
     characterAssets=&assets;characterAppearance=a;art.currentDoll=std::move(dolls);art.currentKey=mask;art.playerName=a.name;
@@ -331,17 +339,13 @@ bool applyAppearance(const CharacterAssets&assets,const Appearance&a,EquipmentAr
 void warmEquipment(unsigned current,const EquipmentArt&art){
     std::string ignored;
     if(!prepareEquipment(current,art,ignored))return;
-    const unsigned order[]={current^1u,current^2u,current^4u,current^3u,current^5u,current^6u,current^7u};
-    for(unsigned mask:order){
-        if(linearSpaceFree()<4*1024*1024||(streamed&&outfitCache.bytes()>=8*1024*1024))break;
-        prepareEquipment(mask,art,ignored);
-    }
+    if(characterAppearance.enabled&&linearSpaceFree()>=6*1024*1024)prepareEquipment(current|4096u,art,ignored);
     prepareEquipment(current,art,ignored);
 }
 static void prepareWorldPages(const std::vector<unsigned char>&needed,int images){
     if(!streamed)return;
     ++textureClock;size_t incoming=0;bool cold=false;const uint64_t now=osGetTime();
-    for(size_t i=0;i<sheets.size();++i)if(needed[i]){sheetUsed[i]=textureClock;if(!sheets[i]){cold=true;incoming+=sheetCosts[i];}}
+    for(size_t i=0;i<sheets.size();++i)if(needed[i]){sheetUsed[i]=textureClock;if(!sheets[i]){cold=true;size_t estimate=1;while(estimate<=sheetCosts[i]/2)estimate*=2;incoming+=estimate;}}
     if(!cold)return;
     C3D_FrameSync();
     while(bytes+incoming>WorldTextureBudget){
@@ -351,23 +355,27 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
         C2D_SpriteSheetFree(sheets[victim]);sheets[victim]=nullptr;
     }
     for(size_t i=0;i<sheets.size();++i)if(needed[i]&&!sheets[i]){
-        if(!textureLoadsRemaining||now<worldRetry[i]){textureFailure=true;continue;}
+        if(!textureLoadsRemaining){++resourceWaits;continue;}if(now<worldRetry[i]){textureFailure=true;continue;}
         while(linearSpaceFree()<sheetCosts[i]+2*1024*1024){
             int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&(victim<0||sheetUsed[j]<sheetUsed[victim]))victim=int(j);
             if(victim>=0){auto image=C2D_SpriteSheetGetImage(sheets[victim],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[victim]);sheets[victim]=nullptr;continue;}
-            victim=outfitCache.victim(outfitMask);if(victim<0)break;
+            victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;
             freeOutfit(outfitCache.remove(unsigned(victim)));
         }
         if(linearSpaceFree()<sheetCosts[i]+2*1024*1024){textureFailure=true;worldRetry[i]=now+1000;continue;}
         char name[32];std::snprintf(name,sizeof name,"atlas_%02u.t3x",unsigned(i));
+        ResourceRead file;auto path=atlasRoot+name;
+        if(resourceReader){resourceReader->request(path,sheetCosts[i]);if(!resourceReader->take(path,file)){++resourceWaits;continue;}}
         --textureLoadsRemaining;
-        auto sheet=C2D_SpriteSheetLoad((atlasRoot+name).c_str());
+        auto sheet=resourceReader?(file.valid?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):C2D_SpriteSheetLoad(path.c_str());
         if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(32,images-int(i)*32))){if(sheet)C2D_SpriteSheetFree(sheet);textureFailure=true;worldRetry[i]=now+1000;continue;}
         worldRetry[i]=0;
         auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);
-        sheets[i]=sheet;bytes+=image.tex->size;
+        sheets[i]=sheet;bytes+=image.tex->size;++resourceUploads;break;
     }
 }
+unsigned rendererResourceWaits(){return resourceWaits;}
+unsigned rendererUploads(){return resourceUploads;}
 bool rendererTextureError(){return textureFailure;}
 size_t textureBytes(){return bytes+npcBytes+corpseBytes+bloodBytes+outfitCache.bytes()+(groundIconsReady?groundIcons.size:0);}
 size_t drawnObjects(){return objects;}
@@ -377,7 +385,7 @@ unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
                RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status,const Inventory*inventory){
-    used=0;objects=0;overflow=false;batches.clear();textureLoadsRemaining=2;textureFailure=false;
+    used=0;objects=0;overflow=false;batches.clear();resourceWaits=resourceUploads=0;textureLoadsRemaining=1;textureFailure=false;
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
     roofCutaway.update(w,actor,roofs);
@@ -400,10 +408,11 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         if(d.kind==Kind::Static&&(roofCutaway.hidden(w,d.index,actor,roofs)||(roofs==RoofMode::Hidden&&w.objects[d.index].z>=footZ+14)))return false;
         return !streamed||worldVisible(w,d,cameraX,cameraY,footZ,imageSizes);
     };
+    visibleDraws.clear();visibleDraws.reserve(mergedDraws.size());for(const auto&d:mergedDraws)if(visible(d))visibleDraws.push_back(d);
     if(npcs)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ,false);
     if(authentic&&streamed){
-        std::vector<unsigned char>needed(sheets.size());
-        for(const auto&d:mergedDraws)if(visible(d)){
+        neededWorld.assign(sheets.size(),0);auto&needed=neededWorld;
+        for(const auto&d:visibleDraws){
             unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;
             if(id!=NoImage&&id/32<needed.size())needed[id/32]=1;
         }
@@ -425,8 +434,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         }
         pixelMode=saved;
     };
-    for(const auto&d:mergedDraws){
-        if(!visible(d))continue;
+    for(const auto&d:visibleDraws){
         pixelMode=d.kind==Kind::Actor?PixelMode::Character:
             afterActor&&supportingFragment(w,d,actor,footZ)?PixelMode::Support:PixelMode::World;
         auto center=project(d.x,d.y,d.z);

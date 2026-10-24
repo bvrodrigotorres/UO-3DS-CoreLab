@@ -79,12 +79,20 @@ void Npcs::reset(const World&w,const Actor&player){
     }
 }
 void Npcs::rebuildOccupancy()const{
-    std::fill(occupancyHead.begin(),occupancyHead.end(),-1);occupancyNext.assign(people.size()*2,-1);
+    ++occupancyBuilds;std::fill(occupancyHead.begin(),occupancyHead.end(),-1);occupancyNext.assign(people.size()*2,-1);
     for(size_t i=0;i<people.size();++i)if(people[i].alive){
         for(int slot=0;slot<(people[i].moving?2:1);++slot){const auto&a=slot?people[i].from:people[i].position;unsigned bin=(unsigned(a.x)*73856093u^unsigned(a.y)*19349663u)&4095;int link=int(i*2+slot);occupancyNext[link]=occupancyHead[bin];occupancyHead[bin]=link;}
     }
     occupancyDirty=false;
 }
+void Npcs::occupancyMoved(size_t index,const Actor&before,const Actor&from,bool wasMoving){
+    if(occupancyDirty)return;
+    auto&n=people[index];if(n.position.x==before.x&&n.position.y==before.y&&n.position.z==before.z&&n.moving==wasMoving)return;
+    auto remove=[&](const Actor&a,int link){unsigned bin=(unsigned(a.x)*73856093u^unsigned(a.y)*19349663u)&4095;int*current=&occupancyHead[bin];while(*current>=0&&*current!=link)current=&occupancyNext[*current];if(*current==link)*current=occupancyNext[link];};
+    remove(before,int(index*2));if(wasMoving)remove(from,int(index*2+1));
+    for(int slot=0;slot<(n.moving?2:1);++slot){const auto&a=slot?n.from:n.position;unsigned bin=(unsigned(a.x)*73856093u^unsigned(a.y)*19349663u)&4095;int link=int(index*2+slot);occupancyNext[link]=occupancyHead[bin];occupancyHead[bin]=link;}
+}
+void Npcs::beginMove(size_t index,const Actor&to,int direction){auto&n=people[index];Actor before=n.position;n.from=before;n.position=to;n.progress=0;n.moving=true;n.direction=(direction+1)&7;occupancyMoved(index,before,before,false);}
 bool Npcs::occupied(const Actor&a,int except)const{
     if(!occupancyActive){for(size_t i=0;i<people.size();++i)if(int(i)!=except&&people[i].alive&&(same(a,people[i].position)||(people[i].moving&&same(a,people[i].from))))return true;return false;}
     if(occupancyDirty)rebuildOccupancy();
@@ -96,7 +104,7 @@ void Npcs::addOccupants(std::vector<Actor>&out)const{
     for(const auto&n:people)if(n.alive){out.push_back(n.position);if(n.moving)out.push_back(n.from);}
 }
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
-    routeNodes=routeSearches=0;
+    routeNodes=routeSearches=occupancyBuilds=0;
     if(dt<=0||people.empty())return;
     struct IndexScope{bool&active;~IndexScope(){active=false;}}scope{occupancyActive};occupancyActive=true;occupancyDirty=true;
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
@@ -111,7 +119,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
         if(!n.hostile)n.aggressionOrder=0;
         if(n.moving){
             n.progress=std::min(1.f,n.progress+dt/.45f);n.animation=std::fmod(n.animation+dt*8,4.f);
-            if(n.progress>=1){occupancyDirty=true;n.moving=false;n.wait=n.hostile?0:1.0f+(random%20)/10.f;}
+            if(n.progress>=1){n.moving=false;occupancyMoved(i,n.position,n.from,true);n.wait=n.hostile?0:1.0f+(random%20)/10.f;}
             continue;
         }
 
@@ -129,7 +137,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
                 for(int d=0;d<8;++d)if(dx[d]==aimX&&dy[d]==aimY){Actor next;int actual;
                     if(step(w,n.position,d,next,actual)&&!same(next,player)&&!(playerMoving&&same(next,from))&&!occupied(next,int(i))&&std::abs(next.x-n.home.x)<=12&&std::abs(next.y-n.home.y)<=12&&std::max(std::abs(next.x-player.x),std::abs(next.y-player.y))<std::max(std::abs(px),std::abs(py))){
                         bool clear=true;if(actual&1){Actor s1{n.position.x+dx[actual],n.position.y,n.position.z},s2{n.position.x,n.position.y+dy[actual],n.position.z};clear=!occupied(s1,int(i))&&!occupied(s2,int(i))&&!same(s1,player)&&!same(s2,player);}
-                        if(clear){n.from=n.position;n.position=next;n.progress=0;n.moving=true;occupancyDirty=true;n.direction=(actual+1)&7;direct=true;}
+                        if(clear){beginMove(i,next,actual);direct=true;}
                     }
                 }
                 if(direct)continue;
@@ -146,7 +154,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
                         if(canHit(next)){route=node;found=true;break;}
                     }
                 }
-                if(found){n.from=n.position;n.position=route.first;n.progress=0;n.moving=true;occupancyDirty=true;n.direction=(route.direction+1)&7;}else n.wait=.75f;
+                if(found){beginMove(i,route.first,route.direction);}else n.wait=.75f;
                 continue;
             }
         }
@@ -167,7 +175,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
             Actor s1{n.position.x+dx[actual],n.position.y,n.position.z},s2{n.position.x,n.position.y+dy[actual],n.position.z};
             if(occupied(s1,(int)i)||occupied(s2,(int)i)||same(s1,player)||same(s2,player))continue;
         }
-        n.from=n.position;n.position=next;n.progress=0;n.moving=true;occupancyDirty=true;n.direction=(actual+1)&7;
+        beginMove(i,next,actual);
     }
 }
 std::string Npcs::greeting(const Actor&a)const{

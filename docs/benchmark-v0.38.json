@@ -1,0 +1,68 @@
+{
+  "before": {
+    "geometry": {
+      "runs": 20000.0,
+      "ms": 4.95679,
+      "allocations": 200000.0
+    },
+    "render_lists": {
+      "runs": 500.0,
+      "ms": 14.5777,
+      "allocations": 670560.0
+    },
+    "crowd_525": {
+      "runs": 1500.0,
+      "ms": 29.2784,
+      "allocations": 774522.0
+    },
+    "britain_512_npc": {
+      "runs": 1000.0,
+      "ms": 0.912958,
+      "allocations": 7731.0
+    },
+    "britain_512_draw": {
+      "runs": 200.0,
+      "ms": 3.71879,
+      "allocations": 163400.0
+    },
+    "loot_10_with_40ms_storage": {
+      "runs": 10.0,
+      "ms": 494.463,
+      "allocations": 91.0
+    },
+    "character_ms": 50.3147
+  },
+  "after": {
+    "geometry": {
+      "runs": 20000.0,
+      "ms": 0.871291,
+      "allocations": 0.0
+    },
+    "render_lists": {
+      "runs": 500.0,
+      "ms": 3.40067,
+      "allocations": 1000.0
+    },
+    "crowd_525": {
+      "runs": 1500.0,
+      "ms": 10.4194,
+      "allocations": 1396.0
+    },
+    "britain_512_npc": {
+      "runs": 1000.0,
+      "ms": 0.82375,
+      "allocations": 1.0
+    },
+    "britain_512_draw": {
+      "runs": 200.0,
+      "ms": 1.06621,
+      "allocations": 400.0
+    },
+    "loot_10_with_40ms_storage": {
+      "runs": 10.0,
+      "ms": 0.0095,
+      "allocations": 66.0
+    },
+    "character_ms": 44.1675
+  }
+}

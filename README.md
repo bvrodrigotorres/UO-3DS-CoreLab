@@ -217,3 +217,9 @@ catálogo clásico de 49 con sistemas pendientes identificados.
 
 MISS amarillo/rojo para los fallos de ambos bandos y curación real en celeste
 sobre el jugador. [Instalación y detalles](docs/v0.37.md).
+
+## v0.38
+
+Perfil Old 3DS con objetivo de 30 FPS, inventario y recursos con I/O en segundo
+plano, colisiones incrementales, menos reservas y cachés de ropa/minimapa.
+[Informe de optimización, medidas e instalación](docs/v0.38.md).

@@ -93,7 +93,7 @@ std::string AppearanceEditor::value(int f)const{
 }
 int AppearanceEditor::hit(int x,int y)const{if(x<12||x>=308)return -1;if(y>=27&&y<49)return 10+std::min(3,(x-12)/74);if(y>=57&&y<182){int r=(y-57)/step();if(r>=rowCount())return -1;return y<57+r*step()+step()-2?r:-1;}if(y>=207&&y<231)return x<160?20:21;return -1;}
 bool CharacterAssets::load(const std::string&p){
-    std::ifstream f(p+"hues.bin",std::ios::binary);std::vector<uint8_t>b(16+3000*64);palettes.clear();cache.clear();
+    std::ifstream f(p+"hues.bin",std::ios::binary);std::vector<uint8_t>b(16+3000*64);palettes.clear();cache.clear();cacheUsed.clear();cacheClock=cacheBytes=0;layerScratch.clear();
     if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UHP1",4)||get(b,4)!=3000||get(b,8)!=3000*64||get(b,12)!=hash(b.data()+16,b.size()-16))return false;
     palettes.resize(3000*32);for(size_t i=0;i<palettes.size();++i)palettes[i]=b[16+i*2]|uint16_t(b[17+i*2])<<8;root=p;return true;
 }
@@ -110,14 +110,14 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
         std::ifstream f(root+file,std::ios::binary|std::ios::ate);if(!f||f.tellg()<604||f.tellg()>8*1024*1024)return false;
         std::vector<uint8_t>b(size_t(f.tellg()));f.seekg(0);f.read((char*)b.data(),b.size());
         if(!f||(std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4)&&std::memcmp(b.data(),"UAP3",4))||b[8]!=144||b[9]||b[10]||b[11]||get(b,12)!=b.size()-20||get(b,16)!=hash(b.data()+20,b.size()-20))return false;
-        if(cache.size()>=24)cache.clear();
-        found=cache.emplace(file,std::move(b)).first;
+        while(!cache.empty()&&(cache.size()>=32||cacheBytes+b.size()>8*1024*1024)){auto oldest=std::min_element(cacheUsed.begin(),cacheUsed.end(),[](const auto&a,const auto&b){return a.second<b.second;});auto victim=cache.find(oldest->first);cacheBytes-=victim->second.size();cache.erase(victim);cacheUsed.erase(oldest);}
+        cacheBytes+=b.size();found=cache.emplace(file,std::move(b)).first;
     }
-    const auto&b=found->second;
+    cacheUsed[file]=++cacheClock;const auto&b=found->second;
     if(sample<0||sample>144||hue>3000)return false;
     uint32_t begin=get(b,20+sample*4),end=get(b,24+sample*4);if(begin>end||end>b.size()-604)return false;
     bool full=b[3]=='3',extended=b[3]=='2';
-    std::vector<uint16_t>layer(sample==144?(full?260*237:106*(extended?198:174)):96*112);
+    auto&layer=layerScratch;layer.assign(sample==144?(full?260*237:106*(extended?198:174)):96*112,0);
     if(!sparse(b,604+begin,604+end,layer))return false;
     if(sample==144&&!full){
         if(out.size()!=260*237)return false;
@@ -154,8 +154,9 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
     if(mask&1)layers.push_back({std::array<int,4>{{622,618,631,653}}[(mask>>13)&3],0});
     // Read each checked sparse layer once, then compose requested poses.
     // overlay() validates each individual frame; files stay outside GPU memory.
-    for(int i=0;i<count;++i){int frame=onlyFrame>=0?onlyFrame:i;int sample=doll?144:frame+((mask&1)?72:0);std::vector<uint16_t>canvas(area);
-        auto order=layers;
+    std::vector<uint16_t>canvas(area);auto order=layers;
+    for(int i=0;i<count;++i){int frame=onlyFrame>=0?onlyFrame:i;int sample=doll?144:frame+((mask&1)?72:0);std::fill(canvas.begin(),canvas.end(),0);
+        order=layers;
         static const int originalDirections[]={3,2,1,0,1,2,3,4};int d=originalDirections[frame<40?frame/5:(frame-40)/4];
         if(!doll&&(mask&1)&&d>=3){auto weapon=order.back();order.pop_back();order.insert(order.begin(),weapon);}
         for(auto l:order)if(!overlay(canvas,(combat&&!doll?"combat/":"")+std::to_string(a.female)+"-"+std::to_string(l.first)+".bin",sample,l.second)){out.clear();return false;}

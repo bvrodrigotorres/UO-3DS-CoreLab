@@ -208,8 +208,9 @@ bool loadVitals(const std::string&path,PlayerStatus&status){
     unsigned h=get(b.data()+4),m=get(b.data()+8),s=get(b.data()+12);if(h==0||h>unsigned(status.hitsMax)||m>unsigned(status.manaMax)||s>unsigned(status.staminaMax))return false;
     status.skills=std::move(book);status.lastHealing=last;status.hits=h;if(status.hits<status.hitsMax)status.tookDamage();status.mana=m;status.stamina=s;return true;
 }
-bool saveVitals(const std::string&path,const PlayerStatus&status,SaveRename renameFile){
+bool saveVitals(const std::string&path,const PlayerStatus&status,SaveRename renameFile,const SaveSink&sink){
     std::vector<uint8_t>b(20);std::memcpy(b.data(),"UVT3",4);put(b.data()+4,status.hits);put(b.data()+8,status.mana);put(b.data()+12,status.stamina);put(b.data()+16,status.lastHealing);status.skills.encode(b);unsigned payload=b.size();b.resize(payload+4);put(b.data()+payload,hash(b.data(),payload));
+    if(sink&&renameFile==std::rename)return sink(path,std::move(b));
     std::string tmp=path+".tmp",bak=path+".bak";FILE*f=std::fopen(tmp.c_str(),"wb");if(!f)return false;
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fclose(f))ok=false;if(!ok){std::remove(tmp.c_str());return false;}
     bool had=std::ifstream(path).good();if(had&&((std::remove(bak.c_str())&&errno!=ENOENT)||renameFile(path.c_str(),bak.c_str()))){std::remove(tmp.c_str());return false;}

@@ -44,6 +44,7 @@ class CharacterAssets {
     std::string root;
     std::vector<uint16_t>palettes;
     mutable std::map<std::string,std::vector<uint8_t>>cache;
+    mutable std::map<std::string,uint64_t>cacheUsed;mutable uint64_t cacheClock=0;mutable size_t cacheBytes=0;mutable std::vector<uint16_t>layerScratch;
     bool overlay(std::vector<uint16_t>&,const std::string&,int sample,uint16_t hue,bool partial=false)const;
 public:
     bool load(const std::string&);
@@ -56,6 +57,6 @@ public:
     uint16_t color(const Appearance&,int field)const;
 };
 // RGB5551 pixels are row-major; GPU storage uses 8x8 Morton tiles.
-inline size_t characterTexel(unsigned x,unsigned y,unsigned width){unsigned n=0;for(unsigned b=0;b<3;++b){n|=((x>>b)&1)<<(2*b);n|=((y>>b)&1)<<(2*b+1);}return ((y/8)*(width/8)+x/8)*64+n;}
+inline size_t characterTexel(unsigned x,unsigned y,unsigned width){static constexpr unsigned bits[]={0,1,4,5,16,17,20,21};return (y&~7u)*width+(x&~7u)*8+bits[x&7u]+(bits[y&7u]<<1);}
 void drawAppearance(uint8_t*top,uint8_t*bottom,const AppearanceEditor&,const std::vector<uint16_t>&doll,const std::vector<uint16_t>&sprite,bool fresh);
 }

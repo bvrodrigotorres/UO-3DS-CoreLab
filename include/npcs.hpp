@@ -12,13 +12,17 @@ struct Npc {
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
 class Npcs {
     bool occupancyActive=false;mutable bool occupancyDirty=true;mutable std::vector<int>occupancyHead=std::vector<int>(4096,-1);mutable std::vector<int>occupancyNext;
+    mutable unsigned occupancyBuilds=0;
     void rebuildOccupancy()const;
+    void occupancyMoved(size_t,const Actor&,const Actor&,bool);
+    void beginMove(size_t,const Actor&,int);
     bool deathFrames=false;
     uint64_t aggressionClock=0;size_t routeCursor=0;unsigned routeNodes=0,routeSearches=0;
     std::vector<Npc> people,original;std::vector<NpcStyle>art;uint32_t random=12345;
 public:
     bool loadPopulation(const std::string&,const std::string&scene,const World&,std::string&);
     bool loadNames(const std::string&,const std::string&scene,const std::string&population,std::string&);
+    unsigned lastOccupancyBuilds()const{return occupancyBuilds;}
     unsigned lastRouteNodes()const{return routeNodes;}
     unsigned lastRouteSearches()const{return routeSearches;}
     unsigned frameCount()const{return deathFrames?48:40;}

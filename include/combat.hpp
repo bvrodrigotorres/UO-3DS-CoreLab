@@ -43,6 +43,6 @@ public:
 };
 bool meleeReach(const World&,const Actor&,const Actor&);
 bool loadVitals(const std::string&,PlayerStatus&);
-bool saveVitals(const std::string&,const PlayerStatus&,SaveRename=std::rename);
+bool saveVitals(const std::string&,const PlayerStatus&,SaveRename=std::rename,const SaveSink& = {});
 struct StatusArt {std::vector<uint8_t>rgba;bool load(const std::string&);};
 }

@@ -81,7 +81,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.37",ink,1,13);
+    text(fb,225,20,"C.LAB V0.38",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -119,6 +119,9 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
     float scale=float(std::max(1,std::min(4,zoom)));
+    struct RadarCache{const Journal*j=nullptr;const World*w=nullptr;const uint8_t*data=nullptr;Actor actor{};int zoom=0;bool valid=false;std::array<uint8_t,166*(JournalLayout::MapBottom-JournalLayout::MapTop)*3>pixels{};};
+    static RadarCache radar;
+    if(!radar.valid||radar.j!=j||radar.w!=&w||radar.data!=(j?j->map.data():nullptr)||radar.actor.x!=a.x||radar.actor.y!=a.y||radar.actor.z!=a.z||radar.zoom!=zoom){
     for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){
         float sx=(x-103.f)/scale,sy=(y-float(JournalLayout::MapCenter))/scale;
         int wx=int(std::floor(a.x+w.originX+(sx+sy)*.5f));
@@ -131,8 +134,11 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
             char tile=mapCell(w,a,wx-w.originX,wy-w.originY);
             c=tile=='~'?Color{45,83,126}:tile=='#'?Color{108,100,89}:tile=='+'?Color{156,119,72}:Color{83,113,63};
         }
-        pixel(fb,x,y,c);
+        size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;radar.pixels[at]=c.b;radar.pixels[at+1]=c.g;radar.pixels[at+2]=c.r;
     }
+        radar.j=j;radar.w=&w;radar.data=j?j->map.data():nullptr;radar.actor=a;radar.zoom=zoom;radar.valid=true;
+    }
+    for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;pixel(fb,x,y,{radar.pixels[at+2],radar.pixels[at+1],radar.pixels[at]});}
     for(int d=-4;d<=4;++d){pixel(fb,103+d,JournalLayout::MapCenter,gold);pixel(fb,103,JournalLayout::MapCenter+d,gold);}
     box(fb,102,JournalLayout::MapCenter-1,3,3,{220,38,28});text(fb,175,JournalLayout::MapTop+2,"N",{244,222,160});
     text(fb,23,JournalLayout::ZoomTop,"-",ink);text(fb,153,JournalLayout::ZoomTop,"+",ink);
@@ -205,6 +211,8 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
         text(fb,18,29,inv.message,ink,1,46);
+    if(inv.saveFailed){box(fb,18,28,282,9,{231,213,177});text(fb,18,29,"ERROR SD: CAMBIOS PENDIENTES",{170,25,20});}
+    else if(inv.savePending)box(fb,145,19,4,5,gold);
     if(drag&&drag->active&&drag->dragging){int x=std::max(0,std::min(295,drag->x-12)),y=std::max(0,std::min(215,drag->y-12));
         box(fb,x,y,25,25,gold);if(icons&&icons->rgba.size()==ItemTypes*24*24*4&&drag->item.type<ItemTypes)for(int yy=0;yy<24;++yy)for(int xx=0;xx<24;++xx){size_t p=(drag->item.type*576+yy*24+xx)*4;if(icons->rgba[p+3]>127)pixel(fb,x+xx,y+yy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
     }

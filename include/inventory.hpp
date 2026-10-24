@@ -2,6 +2,7 @@
 #pragma once
 #include "core.hpp"
 #include "exploration.hpp"
+#include "save_dispatch.hpp"
 #include <array>
 #include <functional>
 namespace lab {
@@ -43,6 +44,7 @@ public:
     bool checkpoint(){if(!writable)return false;return persist(message,std::rename);}
     std::function<bool(unsigned)>prepareEquipment;
     std::function<bool(size_t)>useItem;
+    SaveSink saveSink;bool savePending=false,saveFailed=false;
     static unsigned appearanceKey(const std::array<int,11>&);
     unsigned equipmentMask()const{return appearanceKey(equipment);}
     bool setOutfit(const std::array<int,11>&,SaveRename=std::rename);

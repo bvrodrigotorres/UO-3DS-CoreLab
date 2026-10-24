@@ -166,7 +166,7 @@ bool Inventory::setOutfit(const std::array<int,11>&desired,SaveRename renameFile
     backpack=std::move(pool);equipment=desired;
     for(size_t slot=0;slot<desired.size();++slot)if(desired[slot]>=0)lastEquipment[slot]=desired[slot];else if(oldEquipment[slot]>=0)lastEquipment[slot]=oldEquipment[slot];
     if(!persist(message,renameFile)){backpack=std::move(oldBag);equipment=oldEquipment;lastEquipment=oldLast;if(prepareEquipment)prepareEquipment(equipmentMask());return false;}
-    message="EQUIPO GUARDADO";return true;
+    message=saveSink?"EQUIPO ACTUALIZADO":"EQUIPO GUARDADO";return true;
 }
 bool Inventory::equip(size_t index,SaveRename renameFile){
     if(!writable){message="ERROR INVENTARIO: ARCHIVO INTACTO";return false;}
@@ -180,7 +180,7 @@ bool Inventory::equip(size_t index,SaveRename renameFile){
     if(equipment[slot]>=0)backpack.push_back({uint16_t(equipment[slot]),1});
     equipment[slot]=item.type;lastEquipment[slot]=item.type;
     if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;if(prepareEquipment)prepareEquipment(equipmentMask());return false;}
-    message=std::string(itemDefs[item.type].name)+" EQUIPADO - GUARDADO";return true;
+    message=std::string(itemDefs[item.type].name)+(saveSink?" EQUIPADO":" EQUIPADO - GUARDADO");return true;
 }
 bool Inventory::unequip(size_t slot,SaveRename renameFile){
     if(!writable||slot>=equipment.size()||equipment[slot]<0)return false;
@@ -190,7 +190,7 @@ bool Inventory::unequip(size_t slot,SaveRename renameFile){
     Bag oldBag=backpack;auto oldEquipment=equipment;auto oldLast=lastEquipment;int type=equipment[slot];
     backpack.push_back({uint16_t(type),1});equipment[slot]=-1;lastEquipment[slot]=type;
     if(!persist(message,renameFile)){backpack=oldBag;equipment=oldEquipment;lastEquipment=oldLast;if(prepareEquipment)prepareEquipment(equipmentMask());return false;}
-    message=std::string(itemDefs[type].name)+" A MOCHILA - GUARDADO";return true;
+    message=std::string(itemDefs[type].name)+(saveSink?" A MOCHILA":" A MOCHILA - GUARDADO");return true;
 }
 bool Inventory::toggleEquipment(size_t slot,SaveRename renameFile){
     if(slot>=equipment.size()||!writable)return false;
@@ -241,6 +241,7 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
     if(expanded){extended=true;remembered=true;}
     size_t slots=expanded?11:8;
     std::vector<uint8_t>b={'U','I','N',uint8_t(groundFormat?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    size_t capacity=128+backpack.size()*8;for(const auto&c:chests)capacity+=4+c.items.size()*8;for(const auto&p:ground)capacity+=16+p.items.size()*12;b.reserve(capacity);
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
     append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));
     if(groundFormat){unsigned count=0;for(const auto&pile:ground)if(!pile.items.empty())++count;put(b,count);
@@ -248,6 +249,7 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
             for(size_t i=0;i<pile.items.size();++i){put(b,pile.items[i].type);put(b,pile.items[i].count);put(b,unsigned(std::max(1.f,std::min(180000.f,std::ceil(pile.remaining[i]*1000)))));}}
     }
     put(b,hash(b));
+    if(saveSink&&renameFile==std::rename){if(saveSink(path,std::move(b)))return true;error="GUARDADO OCUPADO: REINTENTA";return false;}
     std::string tmp=path+".tmp",bak=path+".bak";
     FILE*f=std::fopen(tmp.c_str(),"wb");if(!f){error="ERROR SD: NO SE MOVIO EL OBJETO";return false;}
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fclose(f))ok=false;
@@ -276,7 +278,7 @@ bool Inventory::transfer(const World&w,const Actor&a,bool fromChest,size_t slot,
     if(found==dest.end())dest.push_back(item);else found->count+=item.count;
     source.erase(source.begin()+slot);if(groundSlot>=0)ground[groundSlot].remaining.erase(ground[groundSlot].remaining.begin()+slot);
     if(!persist(message,renameFile)){source=oldSource;dest=oldDest;if(groundSlot>=0)ground[groundSlot].remaining=oldTimes;return false;}
-    message=std::string(itemDefs[item.type].name)+(fromChest?" A MOCHILA - GUARDADO":" AL CONTENEDOR - GUARDADO");return true;
+    message=std::string(itemDefs[item.type].name)+(fromChest?(saveSink?" A MOCHILA":" A MOCHILA - GUARDADO"):(saveSink?" AL CONTENEDOR":" AL CONTENEDOR - GUARDADO"));return true;
 }
 bool Inventory::takeAll(const World&w,const Actor&a,SaveRename renameFile){
     update(w,a);if(!writable||!hasContainer()){message="NO HAY BOTIN AL ALCANCE";return false;}
@@ -292,7 +294,7 @@ bool Inventory::takeAll(const World&w,const Actor&a,SaveRename renameFile){
     }
     if(!moved){message="MOCHILA LLENA";return false;}
     if(!persist(message,renameFile)){source=oldSource;backpack=oldBag;if(groundSlot>=0)ground[groundSlot].remaining=oldTimes;return false;}
-    message=source.empty()?"TODO RECOGIDO - GUARDADO":"MOCHILA LLENA - QUEDA BOTIN";return true;
+    message=source.empty()?(saveSink?"TODO RECOGIDO":"TODO RECOGIDO - GUARDADO"):"MOCHILA LLENA - QUEDA BOTIN";return true;
 }
 int Inventory::nearestGround(const World&w,const Actor&a)const{
     int best=-1,distance=100000;for(size_t i=0;i<ground.size();++i){const auto&p=ground[i];if(p.items.empty()||!meleeContainerReach(w,a,p.position))continue;int dx=a.x-p.position.x,dy=a.y-p.position.y,d=dx*dx+dy*dy;if(d<distance){best=int(i);distance=d;}}return best;
