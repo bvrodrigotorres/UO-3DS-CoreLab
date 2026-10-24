@@ -413,7 +413,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0xffffffff);
     C3D_FrameDrawOn(target);
     auto bloodBurst=[&](const Draw&draw){if(!combat)return;const auto saved=pixelMode;pixelMode=PixelMode::Translucent;
-        for(const auto&e:combat->damage)if(e.active&&e.age<.38f&&std::abs(e.position.z-actor.z)<16){
+        for(const auto&e:combat->damage)if(e.active&&e.kind==CombatText::Damage&&e.age<.38f&&std::abs(e.position.z-actor.z)<16){
             bool victim=e.player?draw.kind==Kind::Actor:draw.kind==Kind::Npc&&int(draw.index)==e.npc;
             if(!victim&&!e.player&&draw.kind==Kind::Corpse&&npcs&&e.npc>=0&&size_t(e.npc)<npcs->all().size()&&!npcs->all()[e.npc].alive)victim=draw.x==e.position.x&&draw.y==e.position.y&&draw.z==e.position.z;
             if(!victim)continue;
@@ -553,12 +553,12 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             if(p.x>=0&&p.x<400&&p.y>=0&&p.y<260){float pivot=npcs->hasPopulation()?npcs->styles()[n.style].pivotY:64;const auto&v=combat->vitals()[combat->target];healthBar(p.x,p.y-pivot-7,v.hits,v.maximum,true);rect(p.x-10,p.y+3,20,2,.95f,.75f,.1f);}
         }
     }
-    if(combat)for(const auto&e:combat->damage)if(e.active&&std::abs(e.position.z-actor.z)<16){
-        auto p=project(e.position.x,e.position.y,e.position.z);if(p.x<0||p.x>400||p.y< -20||p.y>280)continue;
+    if(combat)for(const auto&e:combat->damage)if(e.active&&((e.kind==CombatText::Healing&&e.player)||std::abs(e.position.z-actor.z)<16)){
+        auto p=e.kind==CombatText::Healing&&e.player?project(cameraX,cameraY,footZ):project(e.position.x,e.position.y,e.position.z);if(p.x<0||p.x>400||p.y< -20||p.y>280)continue;
         float pivot=e.player?82.f:64.f;
         if(!e.player&&npcs&&e.npc>=0&&size_t(e.npc)<npcs->all().size()&&npcs->hasPopulation()){int style=npcs->all()[e.npc].style;if(style>=0&&size_t(style)<npcs->styles().size())pivot=npcs->styles()[style].pivotY+14.f;}
-        std::string value=std::to_string(e.amount);float x=overheadPixelOrigin(p.x-overheadFont.width(value)/2.f+int(e.seed%9)-4),y=overheadPixelOrigin(p.y-pivot-10-e.age*25),alpha=std::min(1.f,(1.2f-e.age)*4);
-        labelText(x+1,y+1,value,false,0,0,0,alpha);labelText(x,y,value,true,0,0,0,alpha);labelText(x,y,value,false,1,e.player?.18f:.9f,e.player?.12f:.2f,alpha);
+        std::string value=combatText(e);const auto color=combatTextColor(e);float x=overheadPixelOrigin(p.x-overheadFont.width(value)/2.f+int(e.seed%9)-4),y=overheadPixelOrigin(p.y-pivot-10-e.age*25),alpha=std::min(1.f,(1.2f-e.age)*4);
+        labelText(x+1,y+1,value,false,0,0,0,alpha);labelText(x,y,value,true,0,0,0,alpha);labelText(x,y,value,false,color[0],color[1],color[2],alpha);
     }
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);

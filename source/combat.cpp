@@ -22,18 +22,19 @@ bool meleeReach(const World&w,const Actor&a,const Actor&b){
     return false;
 }
 int Combat::roll(int lo,int hi){random=random*1664525u+1013904223u;return lo+int((random>>16)%unsigned(hi-lo+1));}
-void Combat::damageVisual(const Actor&position,int amount,bool player,int npc){
-    if(amount<=0)return;
+void Combat::damageVisual(const Actor&position,int amount,bool player,int npc,CombatText kind){
+    if(amount<=0&&kind!=CombatText::Miss)return;
     auto slot=std::find_if(damage.begin(),damage.end(),[](const DamageVisual&e){return !e.active;});
     if(slot==damage.end())slot=std::max_element(damage.begin(),damage.end(),[](const DamageVisual&a,const DamageVisual&b){return a.age<b.age;});
-    *slot={true,player,position,npc,amount,0,unsigned(roll(0,65535))};
+    unsigned seed=kind==CombatText::Damage?unsigned(roll(0,65535)):++visualSerial*7919u;
+    *slot={true,player,position,npc,amount,0,seed,kind};
 }
 void Combat::reset(const Npcs&npcs){
     mob.clear();for(const auto&n:npcs.all()){MobVitals v;v.hits=v.maximum=maximum(n);mob.push_back(v);}
     for(auto&c:corpses)c=Corpse{};
     for(auto&e:damage)e=DamageVisual{};
     for(auto&p:blood)p=BloodPool{};
-    meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=0;swing=regen=strike=0;message.clear();
+    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=0;swing=regen=strike=0;message.clear();
 }
 void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
     automaticDefense=false;
@@ -97,6 +98,7 @@ bool Combat::useHealing(Inventory&inv,size_t index,PlayerStatus&status,SaveRenam
     if(healCooldown>0){inv.message="ESPERA PARA CURARTE";return false;}
     if(!inv.consume(index,renameFile))return false;
     int recovered=std::min(amount,status.hitsMax-status.hits);status.hits+=recovered;status.lastHealing=type;status.healthVisible=6;status.recovered();healCooldown=3;
+    damageVisual(playerPosition,recovered,true,-1,CombatText::Healing);
     if(type==3){status.skills.practice(Skill::Healing,std::min(1000,500+(status.hitsMax-status.hits+recovered)*10));status.skills.practice(Skill::Anatomy,750);}
     inv.message=std::string(itemDefs[type].name)+": +"+std::to_string(recovered)+" VIDA";return true;
 }
@@ -112,6 +114,7 @@ bool Combat::repeatHealing(Inventory&inv,PlayerStatus&status,SaveRename renameFi
 }
 bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,PlayerStatus&status,Inventory&inv){
     if(mob.size()!=npcs.all().size())reset(npcs);
+    playerPosition=player;
     if(dt<=0)return false;
     healCooldown=std::max(0.f,healCooldown-dt);status.skills.tick(dt);
     if(moving||attacking||inv.equipment[5]==21||inv.equipment[8]==27)meditating=false;
@@ -138,7 +141,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
             bool hit=!status.skills.ready||roll(0,999)<status.skills.hitChance(weapon,difficulty);
             status.skills.practice(weapon,difficulty,hit);
             if(hit){int dealt=std::min(v.hits,roll(status.damageMin(&inv),status.damageMax(&inv)));v.hits-=dealt;damageVisual(n.position,dealt,false,target);v.flash=.15f;status.skills.practice(Skill::Tactics,difficulty);status.skills.practice(Skill::Anatomy,difficulty);}
-            else message="FALLASTE EL GOLPE";
+            else {message="FALLASTE EL GOLPE";damageVisual(n.position,0,false,target,CombatText::Miss);}
             status.healthVisible=6;
             if(v.hits==0)kill(size_t(target),npcs,inv);
         }
@@ -148,7 +151,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if((n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
         v.cooldown=1.25f;int damage=roll(n.meleeMin?n.meleeMin:n.name.find("dog")!=std::string::npos?4:2,n.meleeMax?n.meleeMax:n.name.find("dog")!=std::string::npos?7:4);
         if(status.skills.ready){int difficulty=std::max(100,std::min(1000,v.maximum*5+n.meleeMax*15));int chance=std::max(100,std::min(950,(difficulty+500)*1000/(2*(int(status.skills.value(weaponSkill(inv.equipment[0])))+500))));
-            if(roll(0,999)>=chance){message="ESQUIVAS EL GOLPE";status.skills.practice(weaponSkill(inv.equipment[0]),difficulty,false);continue;}}
+            if(roll(0,999)>=chance){message="ESQUIVAS EL GOLPE";damageVisual(player,0,true,-1,CombatText::Miss);status.skills.practice(weaponSkill(inv.equipment[0]),difficulty,false);continue;}}
         damage=std::max(1,damage*(100-status.resistance(&inv))/100);
         damage=std::min(status.hits,damage);meditating=false;suppressDefense=false;status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){

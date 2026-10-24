@@ -212,3 +212,8 @@ Progresión por uso, límites 100.0/700.0, modos Subir/Bajar/Bloquear y pantalla
 de habilidades. Ocho habilidades conectadas a combate, vendas y meditación;
 catálogo clásico de 49 con sistemas pendientes identificados.
 [Instalación y reglas](docs/v0.36.md).
+
+## v0.37
+
+MISS amarillo/rojo para los fallos de ambos bandos y curación real en celeste
+sobre el jugador. [Instalación y detalles](docs/v0.37.md).

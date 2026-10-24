@@ -293,7 +293,7 @@ int main(){
         lab::prepareEquipment(inventory.equipmentMask(),equipmentArt,equipmentError);
     }
     std::vector<lab::Actor>occupants;occupants.reserve(16);
-    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);
+    lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);combat.locate(actor);
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
     auto persistVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
     inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";return used;};
@@ -306,6 +306,7 @@ int main(){
     while(aptMainLoop()){
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
+        combat.locate(actor);
         bool wasPaused=pause.active;
         if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();saveAtPause(now);now=osGetTime();}
         else if((down&KEY_START)&&pause.active)pause.active=false;
