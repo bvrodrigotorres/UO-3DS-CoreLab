@@ -16,7 +16,10 @@ static std::vector<uint8_t>read(const std::string&p){std::ifstream f(p,std::ios:
 int main(int argc,char**argv){
  assert(argc==2);std::string root=std::string(argv[1])+"/";
  std::atomic<bool>entered{false},release{false};AsyncSaves queue([&](const std::string&p,const std::vector<uint8_t>&b,std::string&e){entered=true;while(!release)std::this_thread::sleep_for(std::chrono::milliseconds(1));return atomicSaveBytes(p,b,e);});assert(queue.start());assert(queue.enqueue(root+"coalesced.sav",{0}));wait([&]{return entered.load();});
- for(unsigned n=1;n<=100;++n)assert(queue.enqueue(root+"coalesced.sav",{uint8_t(n)}));assert(queue.status().pending==2&&read(root+"coalesced.sav").empty());release=true;assert(queue.flush());assert(read(root+"coalesced.sav")==std::vector<uint8_t>{100}&&queue.status().writes==2&&!queue.status().error);
+ for(unsigned n=1;n<=100;++n){
+     assert(queue.enqueue(root+"coalesced.sav",{uint8_t(n)}));
+ }
+ assert(queue.status().pending==2&&read(root+"coalesced.sav").empty());release=true;assert(queue.flush());assert(read(root+"coalesced.sav")==std::vector<uint8_t>{100}&&queue.status().writes==2&&!queue.status().error);
  // Failure retains the newest queued snapshot, never an older failed snapshot.
  std::atomic<bool>recover{false};AsyncSaves failing([&](const std::string&p,const std::vector<uint8_t>&b,std::string&e){return recover?atomicSaveBytes(p,b,e):false;});assert(failing.start());assert(failing.enqueue(root+"retry.sav",{1}));wait([&]{return failing.status().failures>0;});assert(failing.enqueue(root+"retry.sav",{9}));assert(!failing.flush()&&failing.status().error&&read(root+"retry.sav").empty());recover=true;assert(failing.flush()&&read(root+"retry.sav")==std::vector<uint8_t>{9}&&!failing.status().error);assert(!failing.enqueue(root+"huge.sav",std::vector<uint8_t>(524289)));
  World w;w.width=w.height=32;w.land.resize(1024);w.vertices.resize(1089);Object chest;chest.x=10;chest.y=9;chest.art=0xE40;w.objects.push_back(chest);w.index();Actor player{10,10,0};Inventory inv;inv.init(w,root+"inventory.sav");inv.backpack.clear();inv.chests[0].items={{1,3},{3,5},{4,1}};assert(inv.checkpoint());auto original=read(root+"inventory.sav");
