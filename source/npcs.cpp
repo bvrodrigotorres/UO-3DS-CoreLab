@@ -130,7 +130,10 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
                 if(n.wait>0){n.wait-=dt;continue;}
                 auto canHit=[&](const Actor&a){
                     if(std::abs(a.z-player.z)>8||std::max(std::abs(a.x-player.x),std::abs(a.y-player.y))>1)return false;
-                    for(int d=0;d<8;++d){Actor next;int actual;if(step(w,a,d,next,actual)&&next.x==player.x&&next.y==player.y&&std::abs(next.z-player.z)<=8)return true;}return same(a,player);
+                    if(same(a,player))return true;
+                    int tx=(player.x>a.x)-(player.x<a.x),ty=(player.y>a.y)-(player.y<a.y);
+                    for(int d=0;d<8;++d)if(dx[d]==tx&&dy[d]==ty){Actor next;int actual;return step(w,a,d,next,actual)&&next.x==player.x&&next.y==player.y&&std::abs(next.z-player.z)<=8;}
+                    return false;
                 };
                 if(canHit(n.position)){int x=(px>0)-(px<0),y=(py>0)-(py<0);for(int d=0;d<8;++d)if(dx[d]==x&&dy[d]==y)n.direction=(d+1)&7;n.wait=.2f;continue;}
                 int aimX=(px>0)-(px<0),aimY=(py>0)-(py<0);bool direct=false;

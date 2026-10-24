@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "character.hpp"
+#include "mount.hpp"
 #include <algorithm>
 #include <fstream>
 #include <cstring>
@@ -104,34 +105,38 @@ bool CharacterAssets::fullPaperdoll()const{
     return ready();
 }
 uint16_t CharacterAssets::color(const Appearance&a,int field)const{switch(field){case 15:return clothColors[a.hatColor];case 16:return clothColors[a.neckColor];case 17:return clothColors[a.glovesColor];case 2:return skins[a.skin];case 4:return hairColors[a.hairColor]+1;case 6:return hairColors[a.beardColor]+1;case 8:return clothColors[a.shirtColor];case 10:return clothColors[a.pantsColor];case 12:return clothColors[a.bootsColor];case 13:return clothColors[a.robeColor];default:return 0;}}
-bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,int sample,uint16_t hue,bool partial)const{
+bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,int sample,uint16_t hue,bool partial,size_t destination)const{
     auto found=cache.find(file);
     if(found==cache.end()){
         std::ifstream f(root+file,std::ios::binary|std::ios::ate);if(!f||f.tellg()<604||f.tellg()>8*1024*1024)return false;
         std::vector<uint8_t>b(size_t(f.tellg()));f.seekg(0);f.read((char*)b.data(),b.size());
-        if(!f||(std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4)&&std::memcmp(b.data(),"UAP3",4))||b[8]!=144||b[9]||b[10]||b[11]||get(b,12)!=b.size()-20||get(b,16)!=hash(b.data()+20,b.size()-20))return false;
+        bool mount=!std::memcmp(b.data(),"UAM1",4);
+        if(!f||(!mount&&std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4)&&std::memcmp(b.data(),"UAP3",4))||
+           (b[8]|unsigned(b[9])<<8)!=(mount?256u:144u)||b[10]||b[11]||b.size()<(mount?1048u:604u)||get(b,12)!=b.size()-20||get(b,16)!=hash(b.data()+20,b.size()-20))return false;
         while(!cache.empty()&&(cache.size()>=32||cacheBytes+b.size()>8*1024*1024)){auto oldest=std::min_element(cacheUsed.begin(),cacheUsed.end(),[](const auto&a,const auto&b){return a.second<b.second;});auto victim=cache.find(oldest->first);cacheBytes-=victim->second.size();cache.erase(victim);cacheUsed.erase(oldest);}
         cacheBytes+=b.size();found=cache.emplace(file,std::move(b)).first;
     }
     cacheUsed[file]=++cacheClock;const auto&b=found->second;
-    if(sample<0||sample>144||hue>3000)return false;
-    uint32_t begin=get(b,20+sample*4),end=get(b,24+sample*4);if(begin>end||end>b.size()-604)return false;
+    bool mount=!std::memcmp(b.data(),"UAM1",4);size_t header=mount?1048:604;
+    if(sample<0||sample>(mount?255:144)||hue>3000)return false;
+    uint32_t begin=get(b,20+sample*4),end=get(b,24+sample*4);if(begin>end||end>b.size()-header)return false;
     bool full=b[3]=='3',extended=b[3]=='2';
-    auto&layer=layerScratch;layer.assign(sample==144?(full?260*237:106*(extended?198:174)):96*112,0);
-    if(!sparse(b,604+begin,604+end,layer))return false;
-    if(sample==144&&!full){
+    auto&layer=layerScratch;layer.assign(mount?128*128:sample==144?(full?260*237:106*(extended?198:174)):96*112,0);
+    if(!sparse(b,header+begin,header+end,layer))return false;
+    if(!mount&&sample==144&&!full){
         if(out.size()!=260*237)return false;
         std::vector<uint16_t>expanded(260*237);int y0=extended?28:52,h=extended?198:174;
         for(int y=0;y<h;++y)std::copy(layer.begin()+y*106,layer.begin()+(y+1)*106,expanded.begin()+(y+y0)*260+38);
         layer=std::move(expanded);
     }
-    if(out.size()!=layer.size())return false;
-    for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue&&(!partial||((c>>11)==(c>>6&31)&&(c>>11)==(c>>1&31)))){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[i]=c;}
+    if(destination>out.size()||out.size()-destination<layer.size())return false;
+    for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue&&(!partial||((c>>11)==(c>>6&31)&&(c>>11)==(c>>1&31)))){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[destination+i]=c;}
     return true;
 }
 bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame,bool combat)const{
-    if(!ready()||!a.valid()||(mask&~EquipmentAppearanceMask)||onlyFrame>71)return false;
-    const size_t area=doll?260*237:96*112;int count=doll||onlyFrame>=0?1:72;out.assign(area*count,0);
+    bool mounted=!doll&&(mask&MountedBank);mask&=~MountedBank;
+    if(!ready()||!a.valid()||(mask&~EquipmentAppearanceMask)||onlyFrame>int(mounted?MountedFrames-1:71))return false;
+    const size_t area=doll?260*237:mounted?128*128:96*112;int count=doll||onlyFrame>=0?1:mounted?MountedFrames:72;out.assign(area*count,0);
     std::vector<std::pair<int,uint16_t>>layers;
     layers.push_back({400+a.female,color(a,2)});
     if(!a.realClothes&&a.shoes&&!(mask&4))layers.push_back({480,color(a,12)});
@@ -152,16 +157,22 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
     if(a.hair&&!(doll&&(mask&8)))layers.push_back({(a.female?femaleHair:maleHair)[a.hair],color(a,4)});
     if(mask&8)layers.push_back({404,color(a,15)});
     if(mask&1)layers.push_back({std::array<int,4>{{622,618,631,653}}[(mask>>13)&3],0});
-    // Read each checked sparse layer once, then compose requested poses.
-    // overlay() validates each individual frame; files stay outside GPU memory.
-    std::vector<uint16_t>canvas(area);auto order=layers;
-    for(int i=0;i<count;++i){int frame=onlyFrame>=0?onlyFrame:i;int sample=doll?144:frame+((mask&1)?72:0);std::fill(canvas.begin(),canvas.end(),0);
-        order=layers;
-        static const int originalDirections[]={3,2,1,0,1,2,3,4};int d=originalDirections[frame<40?frame/5:(frame-40)/4];
-        if(!doll&&(mask&1)&&d>=3){auto weapon=order.back();order.pop_back();order.insert(order.begin(),weapon);}
-        for(auto l:order)if(!overlay(canvas,(combat&&!doll?"combat/":"")+std::to_string(a.female)+"-"+std::to_string(l.first)+".bin",sample,l.second)){out.clear();return false;}
-        std::copy(canvas.begin(),canvas.end(),out.begin()+i*area);
-    }
+    // Layer-major composition keeps each source resident even for mounted atlases.
+    // Weapon goes behind the rider in rear views, but always in front of the horse.
+    auto rear=[&](int frame){static const int directions[]={3,2,1,0,1,2,3,4};unsigned d=mounted?(frame<88?frame/11:(frame-88)/5):frame<40?frame/5:(frame-40)/4;return !doll&&directions[d]>=3;};
+    auto paint=[&](int graphic,uint16_t hue,int weaponPass=0){
+        for(int i=0;i<count;++i){int frame=onlyFrame>=0?onlyFrame:i;
+            if(weaponPass&&(rear(frame)!=(weaponPass<0)))continue;
+            int sample=doll?144:frame+((mask&1)?(mounted?128:72):0);
+            const std::string folder=mounted?"mounted/":combat&&!doll?"combat/":"";
+            int sex=graphic==200&&mounted?0:a.female;
+            if(!overlay(out,folder+std::to_string(sex)+"-"+std::to_string(graphic)+".bin",sample,hue,false,i*area))return false;
+        }return true;
+    };
+    if(mounted&&!paint(200,0)){out.clear();return false;}
+    std::pair<int,uint16_t>weapon{};if(mask&1){weapon=layers.back();layers.pop_back();if(!paint(weapon.first,weapon.second,-1)){out.clear();return false;}}
+    for(auto l:layers)if(!paint(l.first,l.second)){out.clear();return false;}
+    if((mask&1)&&!paint(weapon.first,weapon.second,1)){out.clear();return false;}
     return true;
 }
 bool CharacterAssets::portrait(const Appearance&a,unsigned key,std::vector<uint8_t>&out)const{

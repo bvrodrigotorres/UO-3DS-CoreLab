@@ -1,0 +1,42 @@
+{
+  "before": {
+    "samples": [
+      {
+        "character_ms": 78.1956,
+        "pixels": 12879264.0,
+        "hash": 1632325691.0
+      },
+      {
+        "character_ms": 44.6037,
+        "pixels": 12879264.0,
+        "hash": 1632325691.0
+      },
+      {
+        "character_ms": 43.6388,
+        "pixels": 12879264.0,
+        "hash": 1632325691.0
+      }
+    ],
+    "median_ms": 44.6037
+  },
+  "after": {
+    "samples": [
+      {
+        "character_ms": 56.1816,
+        "pixels": 12879264.0,
+        "hash": 1632325691.0
+      },
+      {
+        "character_ms": 43.0775,
+        "pixels": 12879264.0,
+        "hash": 1632325691.0
+      },
+      {
+        "character_ms": 42.4144,
+        "pixels": 12879264.0,
+        "hash": 1632325691.0
+      }
+    ],
+    "median_ms": 43.0775
+  }
+}

@@ -26,7 +26,7 @@ int main(int argc,char**argv){
  // Cancellation does not touch bag/equipment; arrows/pages remain within all slots.
  for(int n=0;n<100;++n){empty.move(1);assert(empty.row>=0&&empty.row<11);empty.change(-1);}assert(loaded.equipment==previous);
  empty.row=0;assert(empty.tap(250,30)==0&&empty.page()==1);assert(empty.tap(30,220)==-1&&empty.tap(200,220)==1);
- PauseMenu pause;pause.open();pause.selected=2;assert(pause.activate()==PauseAction::Equipment&&pause.hit(60,99)==2);pause.move(1);assert(pause.activate()==PauseAction::Developer);pause.move(1);assert(pause.activate()==PauseAction::MainMenu);pause.move(1);assert(pause.activate()==PauseAction::Exit);
+ PauseMenu pause;pause.open();pause.selected=2;assert(pause.activate()==PauseAction::Equipment&&pause.hit(60,99)==2);pause.move(1);assert(pause.activate()==PauseAction::Options);pause.move(1);assert(pause.activate()==PauseAction::MainMenu);pause.move(1);assert(pause.activate()==PauseAction::Exit);
  // Both full screen renderers stay inside their framebuffers for all 11 rows.
  std::vector<uint8_t>top(400*240*3+32,0xa5),bottom(320*240*3+32,0xa5);Appearance a;a.enabled=a.realClothes=true;for(int row=0;row<11;++row){empty.row=row;drawEquipmentMenu(top.data()+16,bottom.data()+16,empty,a,loaded,status,{},{});}for(int i=0;i<16;++i){assert(top[i]==0xa5&&top[top.size()-1-i]==0xa5&&bottom[i]==0xa5&&bottom[bottom.size()-1-i]==0xa5);}
  if(argc==3){CharacterAssets assets;assert(assets.load(argv[2]));for(int sex=0;sex<2;++sex){a.female=sex;for(unsigned sleeve=1;sleeve<=2;++sleeve){unsigned key=1|32|64|(1u<<19)|(1u<<20)|(sleeve<<17);std::vector<uint16_t>pixels;assert(assets.compose(a,key,pixels,true));assert(assets.compose(a,key,pixels,false,-1,false));assert(assets.compose(a,key,pixels,false,-1,true));}}}

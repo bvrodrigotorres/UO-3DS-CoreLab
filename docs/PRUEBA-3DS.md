@@ -142,3 +142,24 @@ colores; comprobar un cofre que ya se hubiera saqueado y no se debe rellenar.
 Salir y continuar sin que se importe de nuevo. Caminar al cementerio y exteriores
 del norte/oeste, comprobar agresión, colisiones, muertes, botín y reaparición.
 Revisar mapa, puertas, pisos y la primera carga de nuevas especies desde SD.
+
+## Actualización v0.39: caballo y pausa inmediata
+
+Copiar **toda** la carpeta `3ds` del ZIP privado sobre la SD. Además del ejecutable
+actualizado, se agrega `3ds/UO-3DS-CoreLab/character/mounted/` (68 capas originales
+más su manifiesto). No borrar `character`, mapas, objetos ni partidas. No hace
+falta Nuevo Juego. El arte privado del caballo no se incluye en GitHub Actions.
+
+En la página del minimapa/personaje, tocar el icono de caballo en Estado del
+personaje estando detenido: montar; tocarlo de nuevo: desmontar. Pad para caminar,
+B + pad para galopar. Se conserva la montura al continuar una partida. Al morir,
+se regresa a pie al punto inicial y se puede volver a montar desde el icono.
+
+START muestra la pausa antes de iniciar el guardado. «GUARDANDO PARTIDA...» cambia
+a «PARTIDA GUARDADA» cuando termina la cola. En pausa, Opciones ocupa el lugar de
+Desarrollador; mantener L+R dos segundos revela Desarrollador hasta cerrar la pausa.
+
+Pruebas en consola: andar/galopar en ocho direcciones, atacar con/sin armas,
+montar con distintas prendas y cuerpos, escaleras/puertas, equipar y personalizar
+montado, guardar/salir/continuar, y varios enemigos simultáneos. Ver también
+`docs/v0.39.md` para alcance y validación.

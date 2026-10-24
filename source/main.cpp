@@ -3,6 +3,7 @@
 #include "renderer.hpp"
 #include "character_depth.hpp"
 #include "performance.hpp"
+#include "mount.hpp"
 #include "npc_push.hpp"
 #include "combat.hpp"
 #include "session_save.hpp"
@@ -34,6 +35,16 @@ void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&s
     if(menu)lab::drawStartMenu(bottom,*menu,canContinue);else lab::drawLoading(bottom,stage,progress);
     GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);
     gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+}
+void optionsEditor(lab::GameOptions&options,const std::string&path){
+    lab::StartMenu menu;menu.page=lab::MenuPage::Options;menu.options=options;u64 repeat=0;
+    while(aptMainLoop()){
+        auto fb=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawStartMenu(fb,menu,true);GSPGPU_FlushDataCache(fb,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+        hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();if(down&(KEY_B|KEY_START))return;
+        circlePosition pad;hidCircleRead(&pad);int d=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);if(!d)repeat=0;else if(now>=repeat){menu.move(d);repeat=now+180;}
+        bool accept=down&KEY_A;if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);int row=menu.hit(t.px,t.py);if(row>=0){menu.selected=row;accept=true;}}
+        if(accept){if(menu.selected==3)return;auto previous=menu.options;menu.activate(true);std::string error;if(menu.options.save(path,error)){options=menu.options;menu.message="OPCIONES GUARDADAS";}else{menu.options=previous;menu.message=error;}}
+    }
 }
 bool developerEditor(const lab::World&w,const lab::Npcs&npcs,lab::Actor&landing){
     auto menu=std::make_unique<lab::DeveloperMenu>(w,npcs);u64 repeat=0;
@@ -271,7 +282,6 @@ int main(){
     startupFrame(nullptr,false,"ENTRANDO EN BRITANNIA",5);
     roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;
     if(hasNpcs)npcs.reset(privateWorld,actor);
-    inventory.prepareEquipment=[&](unsigned mask){return lab::prepareEquipment(mask,equipmentArt,equipmentError);};
     if(appearance.enabled&&characterAssets.ready()){
         auto&bag=authentic?inventory:demoInventory;
         if(!bag.dressed||!bag.accessories){
@@ -298,12 +308,13 @@ int main(){
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
     lab::AsyncSaves*asyncWriter=nullptr;
     auto persistVitals=[&](){if(asyncWriter&&!asyncWriter->flush()){saveMessage="ERROR SD: GUARDADO PENDIENTE";return false;}bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
-    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";return used;};
     if(!lab::loadVitals(vitalsPath(),playerStatus)){menu.back();menu.message="ESTADISTICAS INVALIDAS: PARTIDA CONSERVADA";continue;}
     auto saves=std::make_unique<lab::AsyncSaves>();bool asyncReady=saves->start();
     lab::SaveSink sink;if(asyncReady){asyncWriter=saves.get();sink=[&](const std::string&path,std::vector<uint8_t>b){return saves->enqueue(path,std::move(b));};inventory.saveSink=sink;demoInventory.saveSink=sink;}
     auto queueVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus,std::rename,sink);if(!ok)saveMessage="ERROR SD: ESTADISTICAS PENDIENTES";return ok;};
     inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";return used;};
+    inventory.prepareEquipment=[&](unsigned mask){unsigned key=mask|(playerStatus.mounted?lab::MountedBank:0);if(!lab::prepareEquipment(key,equipmentArt,equipmentError))return false;lab::warmEquipment(key,equipmentArt);return true;};
+    if(playerStatus.mounted&&!inventory.prepareEquipment(inventory.equipmentMask())){playerStatus.mounted=false;saveMessage="CABALLO: ACTUALIZA LA CARPETA CHARACTER/MOUNTED";}
     lab::SkillsMenu skillsMenu;
     playerStatus.skills.start((authentic?inventory:demoInventory).equipment[0]);
     if(authentic){u64 warmUntil=osGetTime()+3000;unsigned readyFrames=0;while(aptMainLoop()&&osGetTime()<warmUntil&&readyFrames<2){
@@ -311,7 +322,8 @@ int main(){
         readyFrames=lab::rendererResourceWaits()||lab::rendererTextureError()?0:readyFrames+1;startupFrame(nullptr,false,"PREPARANDO LA REGION",5);
     }}
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
-    auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool drained=saves->flush();bool ok=drained&&lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage);if(!saves->flush())ok=false;if(!ok)saveMessage="ERROR SD: GUARDADO PENDIENTE";positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
+    auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage,sink);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
+    auto presentPause=[&](){auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawPause(bottom,pause);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();if(pause.presented())saveAtPause(pauseAt);};
     lab::FramePacer framePacer;lab::FrameStats frameStats;u64 lastHud=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
@@ -321,9 +333,13 @@ int main(){
         auto saveState=saves->status();bool saveNotice=inventory.savePending!=(saveState.pending>0)||inventory.saveFailed!=saveState.error;inventory.savePending=saveState.pending>0;inventory.saveFailed=saveState.error;if(saveState.error)saveMessage="ERROR SD: GUARDADO PENDIENTE";
         combat.locate(actor);
         bool wasPaused=pause.active;
-        if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();saveAtPause(now);now=osGetTime();}
+        if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();presentPause();last=osGetTime();continue;}
         else if((down&KEY_START)&&pause.active)pause.active=false;
         if(pause.active||wasPaused){
+            pause.holdDeveloper((held&(KEY_L|KEY_R))==(KEY_L|KEY_R),now);
+            if(saveState.pending&&!saveState.error&&(pause.message.empty()||pause.message=="PARTIDA GUARDADA"))pause.message="GUARDANDO PARTIDA...";
+            if(pause.message=="GUARDANDO PARTIDA..."&&!saveState.pending&&!saveState.error)pause.message="PARTIDA GUARDADA";
+            if(saveState.error)pause.message="ERROR SD: GUARDADO PENDIENTE";
             lab::PauseAction action=lab::PauseAction::None;
             if(!pause.active||(down&KEY_B))action=lab::PauseAction::Resume;
             if(pause.active){
@@ -342,12 +358,17 @@ int main(){
                 else equipmentEditor(characterAssets,appearance,bag,playerStatus);
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
+            }else if(action==lab::PauseAction::Options){
+                menu.options.roofs=int(roofs);menu.options.zoom=pages.zoom;menu.options.page=pages.page;
+                optionsEditor(menu.options,saveRoot+"options.sav");roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;lab::invalidateRenderList();
+                now=osGetTime();pausePad=0;frames=0;
+                lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
             }else if(action==lab::PauseAction::Developer){
                 lab::Actor destination;if(developerEditor(*w,npcs,destination)){
                     actor=destination;from=actor;moving=false;progress=1;animationPhase=0;alignCamera();npcPush.reset();inventoryDrag.cancel();inventory.closeContainer();combat.attacking=false;combat.target=-1;
                     for(auto&n:npcs.combatants())n.hostile=false;
                     lab::invalidateRenderList();saveMessage="TELETRANSPORTE COMPLETADO";
-                    bool saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&persistVitals();positionCheckpoint().result(actor,pauseAt,saved);
+                    bool saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink)&&persistVitals();positionCheckpoint().result(actor,pauseAt,saved);
                 }
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
@@ -358,7 +379,9 @@ int main(){
                     const auto previous=appearance;unsigned key=lab::Inventory::appearanceKey(outfit);
                     if(!lab::applyAppearance(characterAssets,a,equipmentArt,key,message))return false;
                     auto restore=[&](){std::string ignored;if(previous.enabled)lab::applyAppearance(characterAssets,previous,equipmentArt,bag.equipmentMask(),ignored);
-                        else {lab::clearAppearance();equipmentArt.load(baseRoot+"equipment.bin");lab::prepareEquipment(bag.equipmentMask(),equipmentArt,ignored);}};
+                        else {lab::clearAppearance();equipmentArt.load(baseRoot+"equipment.bin");lab::prepareEquipment(bag.equipmentMask(),equipmentArt,ignored);}
+                        lab::warmEquipment(bag.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0),equipmentArt);};
+                    if(playerStatus.mounted&&!lab::prepareEquipment(key|lab::MountedBank,equipmentArt,message)){restore();return false;}
                     const auto appearancePath=saveRoot+savePrefix+"appearance.sav";
                     if(!a.save(appearancePath,message)){restore();return false;}
                     if(!bag.setOutfit(outfit)){
@@ -366,13 +389,13 @@ int main(){
                         if(!previous.save(appearancePath,rollback))message="ERROR SD: REVISA GUARDADO DE ASPECTO";
                         restore();return false;
                     }
-                    appearance=a;hasEquipment=true;lab::warmEquipment(bag.equipmentMask(),equipmentArt);return true;
+                    appearance=a;hasEquipment=true;lab::warmEquipment(bag.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0),equipmentArt);return true;
                 },&bag);
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
             }else if(action==lab::PauseAction::MainMenu||action==lab::PauseAction::Exit){
                 bool saved=true;
-                if(positionCheckpoint().dirty(actor)){saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);positionCheckpoint().result(actor,pauseAt,saved);}
+                if(positionCheckpoint().dirty(actor)){saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink);positionCheckpoint().result(actor,pauseAt,saved);}
                 auto&bag=authentic?inventory:demoInventory;
                 if(saved&&bag.healthy())saved=bag.checkpoint();
                 if(saved)saved=persistVitals();
@@ -381,8 +404,7 @@ int main(){
                 pause.message="ERROR SD: NO SE PUDO GUARDAR";
             }
             last=sample=now;sampleFrames=0;
-            auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawPause(bottom,pause);
-            GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+            presentPause();
             continue;
         }
         if(down&(KEY_X|KEY_A))npcPush.reset();
@@ -400,8 +422,18 @@ int main(){
             if(!dragged&&!changed&&oldPage==2&&authentic&&dx*dx+dy*dy<144)
                 inventory.tap(*w,actor,pages.startX,pages.startY);
             if(!changed&&oldPage==1&&authentic&&dx*dx+dy*dy<144){
-                if(lab::characterPaperdollHit(pages.startX,pages.startY)){
-                    pause.open();pause.selected=2;pauseAt=now;saveAtPause(now);
+                if(lab::horseIconHit(pages.startX,pages.startY)){
+                    if(moving)saveMessage="DETENTE PARA MONTAR O DESMONTAR";
+                    else if(!appearance.enabled)saveMessage="PERSONALIZA EL PERSONAJE PRIMERO";
+                    else {
+                        auto fb=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawLoading(fb,"PREPARANDO CABALLO",4);GSPGPU_FlushDataCache(fb,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+                        bool mounted=!playerStatus.mounted;unsigned key=inventory.equipmentMask()|(mounted?lab::MountedBank:0);
+                        if(lab::prepareEquipment(key,equipmentArt,equipmentError)){playerStatus.mounted=mounted;lab::warmEquipment(key,equipmentArt);animationPhase=0;queueVitals();saveMessage=mounted?"A CABALLO | B: GALOPAR":"HAS DESMONTADO";}
+                        else saveMessage="CABALLO: REVISA CHARACTER/MOUNTED";
+                        last=sample=osGetTime();frames=0;
+                    }
+                }else if(lab::characterPaperdollHit(pages.startX,pages.startY)){
+                    pause.open();pause.selected=2;pauseAt=now;presentPause();
                     if(appearance.enabled&&characterAssets.ready())equipmentEditor(characterAssets,appearance,inventory,playerStatus);
                     else pause.message="PERSONALIZA EL PERSONAJE PRIMERO";
                     now=osGetTime();last=sample=now;pausePad=0;frames=0;
@@ -446,10 +478,10 @@ int main(){
             }else {npcPush.reset();blocked="BLOCKED";}
         }
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
-        if(moving){progress+=dt/(running?.20f:.40f);if(progress>=1){progress=1;moving=false;}
+        if(moving){progress+=dt/lab::movementSeconds(running,playerStatus.mounted);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
         if(authentic&&hasNpcs&&combat.update(*w,npcs,actor,moving,dt,playerStatus,inventory)){
-            actor={w->startX,w->startY,w->startZ};moving=false;alignCamera();npcPush.reset();frames=0;animateThisFrame=false;
+            actor={w->startX,w->startY,w->startZ};moving=false;alignCamera();npcPush.reset();frames=0;animateThisFrame=false;lab::warmEquipment(inventory.equipmentMask(),equipmentArt);
         }
         if(combat.attacking&&combat.target>=0&&!moving){
             const auto&enemy=npcs.all()[combat.target];int tx=(enemy.position.x>actor.x)-(enemy.position.x<actor.x),ty=(enemy.position.y>actor.y)-(enemy.position.y<actor.y);
@@ -459,16 +491,17 @@ int main(){
         if(authentic&&!inventoryDrag.active&&pages.page==2&&combat.inspectNearest(*w,actor,inventory))pageChanged=true;
         if(animateThisFrame||sx||sy||(held&KEY_TOUCH)||down)positionCheckpoint().active(now);
         if(!moving&&positionCheckpoint().due(actor,now)){
-            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage)&&queueVitals();
+            bool ok=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink)&&queueVitals();
             positionCheckpoint().result(actor,now,ok);
         }
-        if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(running?13.f:8.f),4.f);
+        if(animateThisFrame)animationPhase=std::fmod(animationPhase+dt*(playerStatus.mounted?(running?15.f:10.f):(running?13.f:8.f)),playerStatus.mounted?5.f:4.f);
         int animation=(int)animationPhase;
         if(authentic&&hasEquipment){
-            unsigned key=inventory.equipmentMask();
-            if(combat.combatPose()&&!moving&&appearance.enabled){
-                if(!lab::prepareEquipment(key|4096,equipmentArt,equipmentError))lab::prepareEquipment(key,equipmentArt,equipmentError);
-            }else lab::prepareEquipment(key,equipmentArt,equipmentError);
+            unsigned key=inventory.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0);
+            // No SD reads, CPU composition or GPU allocations in an attack frame.
+            if(combat.combatPose()&&!moving&&appearance.enabled&&!playerStatus.mounted){
+                if(!lab::selectEquipment(key|4096))lab::selectEquipment(key);
+            }else lab::selectEquipment(key);
         }
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
@@ -520,9 +553,9 @@ int main(){
         }
     }
     inventory.closeContainer();
-    if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage);
+    if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink);
     if(saves->flush())persistVitals();
-    inventory.saveSink={};demoInventory.saveSink={};
+    inventory.saveSink={};demoInventory.saveSink={};inventory.prepareEquipment={};inventory.useItem={};
     }
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;
 }

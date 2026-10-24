@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
+#include "mount.hpp"
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
 #include "developer_menu.hpp"
@@ -81,7 +82,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.38",ink,1,13);
+    text(fb,225,20,"C.LAB V0.39",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -171,7 +172,8 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     value(0,0,std::to_string(stats.strength));value(0,1,std::to_string(stats.dexterity));value(0,2,std::to_string(stats.intelligence));
     pair(1,0,stats.hits,stats.hitsMax);pair(1,1,stats.stamina,stats.staminaMax);pair(1,2,stats.mana,stats.manaMax);
     value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.luck));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
-    value(3,0,std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv)));value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers)+"/"+std::to_string(stats.followersMax));
+    value(3,0,std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv)));value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers+(stats.mounted?1:0))+"/"+std::to_string(stats.followersMax));
+    if(stats.mounted){box(fb,199,204,58,1,gold);box(fb,199,222,58,1,gold);}
     for(int row=0;row<5;++row)text(fb,ox+270,oy+18+row*12,std::to_string(stats.resistance(inv,row)),ink,1,3);
 
 }
@@ -302,7 +304,7 @@ void drawDeveloperMenu(uint8_t*fb,const DeveloperMenu&m,const World&w){
 void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
-    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO","DESARROLLADOR","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO",m.developer?"DESARROLLADOR":"OPCIONES","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
     for(int i=0;i<6;++i){int y=49+i*22;box(fb,25,y,270,20,ink);box(fb,27,y+2,266,16,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);

@@ -45,7 +45,7 @@ class CharacterAssets {
     std::vector<uint16_t>palettes;
     mutable std::map<std::string,std::vector<uint8_t>>cache;
     mutable std::map<std::string,uint64_t>cacheUsed;mutable uint64_t cacheClock=0;mutable size_t cacheBytes=0;mutable std::vector<uint16_t>layerScratch;
-    bool overlay(std::vector<uint16_t>&,const std::string&,int sample,uint16_t hue,bool partial=false)const;
+    bool overlay(std::vector<uint16_t>&,const std::string&,int sample,uint16_t hue,bool partial=false,size_t destination=0)const;
 public:
     bool load(const std::string&);
     bool ready()const{return !palettes.empty();}

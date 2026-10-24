@@ -34,6 +34,6 @@ jobs:
           sha256sum UO-3DS-CoreLab.3dsx > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: UO-3DS-CoreLab-v0.38
+          name: UO-3DS-CoreLab-v0.39
           path: dist/
           if-no-files-found: error

@@ -223,3 +223,11 @@ sobre el jugador. [Instalación y detalles](docs/v0.37.md).
 Perfil Old 3DS con objetivo de 30 FPS, inventario y recursos con I/O en segundo
 plano, colisiones incrementales, menos reservas y cachés de ropa/minimapa.
 [Informe de optimización, medidas e instalación](docs/v0.38.md).
+
+## v0.39
+
+Caballo clásico desde el icono de Estado del personaje: paso, galope con B y
+combate montado con equipo visible. Pausa visible antes del guardado asíncrono;
+Opciones ocupa el lugar de Desarrollador, que se revela con L+R durante dos
+segundos en pausa. Se optimizan composición de ropa, alcance de NPC y esperas de
+atlas. [Instalación, controles, límites y validación](docs/v0.39.md).

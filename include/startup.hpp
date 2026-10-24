@@ -18,13 +18,15 @@ struct Campaign {
     uint32_t unusedGeneration()const;
     bool commit(uint32_t,std::string&,SaveRename=std::rename);
 };
-enum class PauseAction {None,Resume,Customize,Equipment,Developer,MainMenu,Exit};
+enum class PauseAction {None,Resume,Customize,Equipment,Options,Developer,MainMenu,Exit};
 struct PauseMenu {
-    bool active=false;int selected=0;std::string message;
-    void open(){active=true;selected=0;message.clear();}
+    bool active=false,developer=false,saveOnPresent=false;int selected=0;uint64_t unlockSince=0;std::string message;
+    void open(){active=true;selected=0;developer=false;unlockSince=0;saveOnPresent=true;message="GUARDANDO PARTIDA...";}
+    bool presented(){bool save=saveOnPresent;saveOnPresent=false;return save;}
+    void holdDeveloper(bool both,uint64_t now){if(!both){unlockSince=0;return;}if(!unlockSince)unlockSince=now;if(now-unlockSince>=2000)developer=true;}
     void move(int delta){selected=(selected+delta+6)%6;}
     int hit(int x,int y)const{if(x<25||x>=295)return -1;for(int i=0;i<6;++i)if(y>=49+i*22&&y<69+i*22)return i;return -1;}
-    PauseAction activate()const{return selected==0?PauseAction::Resume:selected==1?PauseAction::Customize:selected==2?PauseAction::Equipment:selected==3?PauseAction::Developer:selected==4?PauseAction::MainMenu:PauseAction::Exit;}
+    PauseAction activate()const{return selected==0?PauseAction::Resume:selected==1?PauseAction::Customize:selected==2?PauseAction::Equipment:selected==3?(developer?PauseAction::Developer:PauseAction::Options):selected==4?PauseAction::MainMenu:PauseAction::Exit;}
 };
 enum class MenuPage {Main,Options,Confirm};
 enum class MenuAction {None,NewGame,Continue,Exit};

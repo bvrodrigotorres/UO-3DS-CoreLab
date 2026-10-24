@@ -13,6 +13,7 @@ struct PlayerStatus {
     std::array<int,5>resistances{{0,0,0,0,0}};
     float healthVisible=0,flash=0;
     int recoveryGoal=0;
+    bool mounted=false;
     unsigned lastHealing=0; // Item type, never a backpack index.
     bool showHealth()const{return healthVisible>0||(recoveryGoal>0&&hits<recoveryGoal);}
     void tookDamage(){recoveryGoal=std::min(hitsMax,hits+(hitsMax+3)/4);healthVisible=6;}

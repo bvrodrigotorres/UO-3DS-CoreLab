@@ -24,11 +24,12 @@ World positionSnapshot(const World&w,size_t objects){
 }
 static void put(unsigned char*p,uint32_t n){for(int i=0;i<4;++i)p[i]=(n>>(i*8))&255;}
 static uint32_t get(const unsigned char*p){return uint32_t(p[0])|uint32_t(p[1])<<8|uint32_t(p[2])<<16|uint32_t(p[3])<<24;}
-bool savePosition(const std::string&path,const World&w,const Actor&a,std::string&error,SaveRename renameFile){
+bool savePosition(const std::string&path,const World&w,const Actor&a,std::string&error,SaveRename renameFile,const SaveSink&sink){
     if(!w.contains(a.x,a.y)||a.z< -127||a.z>127){error="Invalid position";return false;}
     std::array<unsigned char,28>b{};b[0]='U';b[1]='L';b[2]='S';b[3]='1';
     put(b.data()+4,worldId(w));put(b.data()+8,a.x);put(b.data()+12,a.y);put(b.data()+16,a.z);put(b.data()+20,1);
     put(b.data()+24,hashBytes(b.data(),24));
+    if(sink&&renameFile==std::rename){bool ok=sink(path,{b.begin(),b.end()});error=ok?"GUARDANDO PARTIDA...":"ERROR SD: POSICION PENDIENTE";return ok;}
     std::string tmp=path+".tmp";
     FILE*f=std::fopen(tmp.c_str(),"wb");if(!f){error="Cannot open save";return false;}
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();

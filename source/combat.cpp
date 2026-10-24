@@ -155,7 +155,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         damage=std::max(1,damage*(100-status.resistance(&inv))/100);
         damage=std::min(status.hits,damage);meditating=false;suppressDefense=false;status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){
-            status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;status.recoveryGoal=0;
+            status.mounted=false;status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;status.recoveryGoal=0;
             for(auto&other:npcs.combatants()){other.hostile=false;other.aggressionOrder=0;}
             attacking=automaticDefense=suppressDefense=false;target=-1;strike=0;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
         }
@@ -200,16 +200,18 @@ bool StatusArt::load(const std::string&path){
 }
 bool loadVitals(const std::string&path,PlayerStatus&status){
     std::ifstream f(path,std::ios::binary);if(!f){f.open(path+".bak",std::ios::binary);if(!f)return true;}
-    std::vector<uint8_t>b(25+Skills::WireSize);f.read((char*)b.data(),b.size());b.resize(size_t(f.gcount()));
+    std::vector<uint8_t>b(29+Skills::WireSize);f.read((char*)b.data(),b.size());b.resize(size_t(f.gcount()));
     bool legacy=b.size()==20&&!std::memcmp(b.data(),"UVT1",4),current=b.size()==24&&!std::memcmp(b.data(),"UVT2",4),skills=b.size()==24+Skills::WireSize&&!std::memcmp(b.data(),"UVT3",4);
-    if((!legacy&&!current&&!skills)||get(b.data()+b.size()-4)!=hash(b.data(),b.size()-4))return false;
-    Skills book;if(skills&&!book.decode(b.data()+20,Skills::WireSize))return false;
-    unsigned last=(current||skills)?get(b.data()+16):0;if(last&&!itemHealing(last))return false;
+    bool mount=b.size()==28+Skills::WireSize&&!std::memcmp(b.data(),"UVT4",4);
+    if((!legacy&&!current&&!skills&&!mount)||get(b.data()+b.size()-4)!=hash(b.data(),b.size()-4))return false;
+    Skills book;if((skills||mount)&&!book.decode(b.data()+20,Skills::WireSize))return false;
+    unsigned last=(current||skills||mount)?get(b.data()+16):0;if(last&&!itemHealing(last))return false;
     unsigned h=get(b.data()+4),m=get(b.data()+8),s=get(b.data()+12);if(h==0||h>unsigned(status.hitsMax)||m>unsigned(status.manaMax)||s>unsigned(status.staminaMax))return false;
-    status.skills=std::move(book);status.lastHealing=last;status.hits=h;if(status.hits<status.hitsMax)status.tookDamage();status.mana=m;status.stamina=s;return true;
+    unsigned mounted=mount?get(b.data()+20+Skills::WireSize):0;if(mounted>1)return false;
+    status.mounted=mounted;status.skills=std::move(book);status.lastHealing=last;status.hits=h;if(status.hits<status.hitsMax)status.tookDamage();status.mana=m;status.stamina=s;return true;
 }
 bool saveVitals(const std::string&path,const PlayerStatus&status,SaveRename renameFile,const SaveSink&sink){
-    std::vector<uint8_t>b(20);std::memcpy(b.data(),"UVT3",4);put(b.data()+4,status.hits);put(b.data()+8,status.mana);put(b.data()+12,status.stamina);put(b.data()+16,status.lastHealing);status.skills.encode(b);unsigned payload=b.size();b.resize(payload+4);put(b.data()+payload,hash(b.data(),payload));
+    std::vector<uint8_t>b(20);std::memcpy(b.data(),"UVT4",4);put(b.data()+4,status.hits);put(b.data()+8,status.mana);put(b.data()+12,status.stamina);put(b.data()+16,status.lastHealing);status.skills.encode(b);unsigned flags=b.size();b.resize(flags+4);put(b.data()+flags,status.mounted?1:0);unsigned payload=b.size();b.resize(payload+4);put(b.data()+payload,hash(b.data(),payload));
     if(sink&&renameFile==std::rename)return sink(path,std::move(b));
     std::string tmp=path+".tmp",bak=path+".bak";FILE*f=std::fopen(tmp.c_str(),"wb");if(!f)return false;
     bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fclose(f))ok=false;if(!ok){std::remove(tmp.c_str());return false;}

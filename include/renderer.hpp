@@ -13,6 +13,7 @@ bool rendererInit();
 bool loadGroundIcons(const ItemIcons&);
 void rendererShutdown();
 bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
+bool selectEquipment(unsigned);
 void clearAppearance();
 bool applyAppearance(const CharacterAssets&,const Appearance&,EquipmentArt&,unsigned,std::string&);
 void warmEquipment(unsigned,const EquipmentArt&);
