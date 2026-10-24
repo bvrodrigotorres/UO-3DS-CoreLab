@@ -100,6 +100,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
+    def test_skills_progression_and_persistence(self):
+        binary=Path(self.temp.name)/'skills36_tests'
+        sources=['tests/skills36_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp','source/hud.cpp','source/character.cpp','source/startup.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_developer_teleport_and_stack_keys(self):
         binary=Path(self.temp.name)/'developer33_tests'
         sources=['tests/developer33_tests.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp','source/character.cpp','source/hud.cpp']

@@ -147,7 +147,7 @@ int main(){
 
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
-    lab::TouchPages pages;pages.count=4;lab::Journal journal;std::string journalError;
+    lab::TouchPages pages;pages.count=5;lab::Journal journal;std::string journalError;
     bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
     const std::string saveRoot=worldRoot;
     lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
@@ -297,7 +297,9 @@ int main(){
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
     auto persistVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
     inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";return used;};
-    if(!lab::loadVitals(vitalsPath(),playerStatus))saveMessage="ESTADISTICAS: ARCHIVO INVALIDO";
+    if(!lab::loadVitals(vitalsPath(),playerStatus)){menu.back();menu.message="ESTADISTICAS INVALIDAS: PARTIDA CONSERVADA";continue;}
+    lab::SkillsMenu skillsMenu;
+    playerStatus.skills.start((authentic?inventory:demoInventory).equipment[0]);
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
     auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
@@ -372,7 +374,7 @@ int main(){
         if(down&KEY_SELECT)roofs=lab::nextRoofMode(roofs);
         if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!persistVitals())inventory.message="CURADO | ERROR SD: VIDA NO GUARDADA";saveMessage=inventory.message;}
         bool pageChanged=false;
-        if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:3))%4;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
+        if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:pages.count-1))%pages.count;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
         touchPosition touch;
         if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH){pages.begin(touch.px,touch.py);if(pages.page==2&&authentic)inventoryDrag.begin(inventory,touch.px,touch.py);}else {pages.move(touch.px,touch.py);if(inventoryDrag.active)inventoryDrag.move(touch.px,touch.py);}}
         if((hidKeysUp()&KEY_TOUCH)&&pages.active){
@@ -391,6 +393,12 @@ int main(){
                     lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
                     continue;
                 }
+            }
+            if(!changed&&oldPage==4&&dx*dx+dy*dy<144){
+                unsigned selected=unsigned(skillsMenu.selected);auto previous=playerStatus.skills.entries;int action=skillsMenu.tap(playerStatus.skills,pages.startX,pages.startY);
+                if(action==1){if(!persistVitals()){playerStatus.skills.entries=previous;skillsMenu.message="ERROR SD: CAMBIO CANCELADO";}else skillsMenu.message.clear();}
+                else if(action==2){if(moving)skillsMenu.message="DETENTE PARA MEDITAR";else {if(combat.meditate(playerStatus,inventory))skillsMenu.message.clear();else skillsMenu.message=combat.message;}}
+                else if(selected!=unsigned(skillsMenu.selected))skillsMenu.message.clear();
             }
             if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)commerce.tap(*w,npcs,actor,inventory,pages.startX,pages.startY);
             pageChanged=true;
@@ -473,6 +481,7 @@ int main(){
             }
             if(!combatArtError.empty())hud.lines.push_back(combatArtError);
             if(!combat.message.empty())hud.lines.push_back(combat.message);
+            if(playerStatus.skills.notice>0)hud.lines.push_back(playerStatus.skills.message);
             if(!saveMessage.empty())hud.lines.push_back(saveMessage);
             if(authentic&&!equipmentError.empty())hud.lines.push_back(equipmentError);
             if(!available)hud.lines.push_back(error);
@@ -481,9 +490,10 @@ int main(){
             if(lab::rendererTextureError())hud.lines.emplace_back("TEXTURAS: ERROR SD/MEMORIA");
             if(lab::rendererOverflow())hud.lines.emplace_back("ERROR: VERTEX BUDGET EXCEEDED");
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
-            if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt);
+            if(pages.page==4)lab::drawSkills(bottom,playerStatus.skills,skillsMenu,combat.meditating);
+            else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt);
             else if(pages.page==3)lab::drawCommerce(bottom,inventory,commerce,&itemIcons);
-            else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons,&inventoryDrag);
+            else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons,&inventoryDrag,&playerStatus);
             else lab::drawHud(bottom,hud);
             GSPGPU_FlushDataCache(bottom,320*240*3);
             gfxScreenSwapBuffers(GFX_BOTTOM,false);

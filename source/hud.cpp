@@ -81,7 +81,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.34",ink,1,13);
+    text(fb,225,20,"C.LAB V0.36",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -91,9 +91,25 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: CURAR | A: ATACAR | X: OBJ",ink);
     text(fb,20,209,"SELECT: TECHOS | L/R: PAGINAS",ink);
-    text(fb,20,219,"START: PAUSA | DESLIZA 1/4",ink);
+    text(fb,20,219,"START: PAUSA | DESLIZA 1/5",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
+void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool meditating){
+    drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},muted={118,108,92};
+    text(fb,20,14,"HABILIDADES",ink,2);text(fb,20,34,"TOTAL "+skillValue(skills.total())+" / 700.0",ink);text(fb,216,34,"MAX 100.0",ink);
+    auto rows=menu.list();for(int row=0;row<6;++row){unsigned entry=unsigned(menu.sheet*6+row);if(entry>=rows.size())break;unsigned i=rows[entry];auto&s=skills.entries[i];int y=45+row*20;
+        if(int(i)==menu.selected)box(fb,18,y,284,19,{224,204,159});
+        const Color c=skillDefs[i].active?ink:muted;text(fb,21,y+6,skillDefs[i].name,c,1,21);
+        box(fb,153,y+8,49,4,{174,160,134});box(fb,153,y+8,int(s.value)*49/1000,4,gold);
+        text(fb,211,y+6,skillValue(s.value),c);text(fb,281,y+4,s.lock==SkillLock::Up?"+":s.lock==SkillLock::Down?"-":"=",c,2);
+    }
+    box(fb,18,167,284,1,gold);unsigned selected=unsigned(std::max(0,std::min(int(SkillCount)-1,menu.selected)));
+    text(fb,20,173,skillDefs[selected].original,ink,1,46);text(fb,20,184,skillDefs[selected].help,ink,1,46);
+    std::string info=!menu.message.empty()?menu.message:skills.notice>0?skills.message:meditating?"MEDITANDO: QUIETO, SIN COMBATE":skills.entries[selected].value>=1000?"GRAN MAESTRO | + SUBIR - BAJAR = FIJO":"TOCA MODO: + SUBIR - BAJAR = FIJO";
+    text(fb,20,195,info,ink,1,46);
+    box(fb,18,207,85,24,gold);box(fb,107,207,105,24,gold);box(fb,216,207,86,24,gold);
+    text(fb,24,215,menu.all?"VER ACTIVAS":"VER TODAS",ink);text(fb,114,215,meditating?"MEDITANDO":"MEDITAR",ink);text(fb,222,215,"HOJA "+std::to_string(menu.sheet+1)+"/"+std::to_string(menu.sheets()),ink);
+}
 void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
@@ -154,7 +170,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
 
 }
 
-void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag){
+void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag,const PlayerStatus*status){
     (void)w;(void)a;drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
     text(fb,18,18,"MOCHILA "+std::to_string(inv.backpack.size())+"/24",ink);
@@ -184,7 +200,7 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
     if(!failed&&inv.useMode){text(fb,18,29,inv.message,ink,1,47);}
     else if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
-        std::string detail=d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(itemHealing(unsigned(inv.detailType)))+" VIDA";else if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
+        std::string detail=d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(inv.detailType==3&&status?status->skills.bandageAmount():itemHealing(unsigned(inv.detailType)))+" VIDA";else if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
         text(fb,18,29,detail,ink,1,47);}
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
@@ -288,7 +304,7 @@ void drawStartMenu(uint8_t*fb,const StartMenu&m,bool canContinue){
     drawHud(fb,{"ULTIMA ONLINE 3DS",opts?"OPCIONES":confirm?"NUEVA PARTIDA":"INICIO",{}});
     const Color ink={55,37,22},gold={174,131,64};
     std::vector<std::string>rows;
-    if(opts){const char*roofs[]={"AUTO","OCULTOS","COMPLETOS"};const char*pages[]={"DIAGNOSTICO","MAPA","INVENTARIO"};
+    if(opts){const char*roofs[]={"AUTO","OCULTOS","COMPLETOS"};const char*pages[]={"DIAGNOSTICO","MAPA","INVENTARIO","COMERCIO","HABILIDADES"};
         rows={std::string("TECHOS: ")+roofs[m.options.roofs],"ZOOM DEL MAPA: "+std::to_string(m.options.zoom)+"X",std::string("PAGINA: ")+pages[m.options.page],"VOLVER"};
     }else if(confirm)rows={"CANCELAR","SI, NUEVO JUEGO"};
     else rows={"NUEVO JUEGO",canContinue?"CONTINUAR":"CONTINUAR - SIN PARTIDA","OPCIONES","SALIR DEL JUEGO"};

@@ -205,3 +205,10 @@ vendas, pan y manzanas. [Instalación y controles](docs/v0.34.md).
 SELECT cambia techos, Y repite la última curación y pausar guarda la partida.
 Corrección de foco defensivo ante objetivos anteriores y agresores alejados del
 origen. [Instalación y controles](docs/v0.35.md).
+
+## v0.36
+
+Progresión por uso, límites 100.0/700.0, modos Subir/Bajar/Bloquear y pantalla
+de habilidades. Ocho habilidades conectadas a combate, vendas y meditación;
+catálogo clásico de 49 con sistemas pendientes identificados.
+[Instalación y reglas](docs/v0.36.md).
