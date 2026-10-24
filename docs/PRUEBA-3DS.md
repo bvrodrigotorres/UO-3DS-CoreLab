@@ -163,3 +163,11 @@ Pruebas en consola: andar/galopar en ocho direcciones, atacar con/sin armas,
 montar con distintas prendas y cuerpos, escaleras/puertas, equipar y personalizar
 montado, guardar/salir/continuar, y varios enemigos simultáneos. Ver también
 `docs/v0.39.md` para alcance y validación.
+
+## v0.40
+
+Actualizar ejecutable y SMDH sobre v0.39, conservando la carpeta de animaciones
+`character/mounted`. Probar paso/galope y ataque en las ocho direcciones: el
+caballo debe mirar hacia donde avanza. El minimapa añade puntos rojos para
+hostiles, grises para criaturas neutrales, amarillos para humanos y celeste para
+el jugador. Probar movimiento, zoom, hostilidad al atacar, muerte y respawn.

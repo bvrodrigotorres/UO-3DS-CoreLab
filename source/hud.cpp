@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "hud.hpp"
 #include "mount.hpp"
+#include "radar_markers.hpp"
 #include "commerce.hpp"
 #include "equipment_menu.hpp"
 #include "developer_menu.hpp"
@@ -82,7 +83,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.39",ink,1,13);
+    text(fb,225,20,"C.LAB V0.40",ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -111,7 +112,7 @@ void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool medita
     box(fb,18,207,85,24,gold);box(fb,107,207,105,24,gold);box(fb,216,207,86,24,gold);
     text(fb,24,215,menu.all?"VER ACTIVAS":"VER TODAS",ink);text(fb,114,215,meditating?"MEDITANDO":"MEDITAR",ink);text(fb,222,215,"HOJA "+std::to_string(menu.sheet+1)+"/"+std::to_string(menu.sheets()),ink);
 }
-void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt){
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt,const Npcs*npcs){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     (void)message;
@@ -140,8 +141,17 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         radar.j=j;radar.w=&w;radar.data=j?j->map.data():nullptr;radar.actor=a;radar.zoom=zoom;radar.valid=true;
     }
     for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;pixel(fb,x,y,{radar.pixels[at+2],radar.pixels[at+1],radar.pixels[at]});}
+    // Dynamic markers overlay the cached terrain; no map rebuild or texture upload.
+    if(npcs)for(int priority=0;priority<3;++priority)for(const auto&n:npcs->all()){
+        RadarMarker m;if(!radarMarker(n,a,zoom,m)||m.priority!=priority)continue;
+        for(int y=-2;y<=2;++y)for(int x=-2;x<=2;++x){int px=m.x+x,py=m.y+y;
+            if(px<20||px>=186||py<JournalLayout::MapTop||py>=JournalLayout::MapBottom)continue;
+            bool center=std::abs(x)<=1&&std::abs(y)<=1;
+            pixel(fb,px,py,center?Color{m.color[0],m.color[1],m.color[2]}:dark);
+        }
+    }
     for(int d=-4;d<=4;++d){pixel(fb,103+d,JournalLayout::MapCenter,gold);pixel(fb,103,JournalLayout::MapCenter+d,gold);}
-    box(fb,102,JournalLayout::MapCenter-1,3,3,{220,38,28});text(fb,175,JournalLayout::MapTop+2,"N",{244,222,160});
+    box(fb,102,JournalLayout::MapCenter-1,3,3,{35,225,245});text(fb,175,JournalLayout::MapTop+2,"N",{244,222,160});
     text(fb,23,JournalLayout::ZoomTop,"-",ink);text(fb,153,JournalLayout::ZoomTop,"+",ink);
     text(fb,56,JournalLayout::ZoomTop,"ZOOM "+std::to_string(zoom)+"X",ink);
     // The private image is the original human paperdoll gump, cropped/resized

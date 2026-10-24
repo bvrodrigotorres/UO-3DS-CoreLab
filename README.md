@@ -231,3 +231,10 @@ combate montado con equipo visible. Pausa visible antes del guardado asíncrono;
 Opciones ocupa el lugar de Desarrollador, que se revela con L+R durante dos
 segundos en pausa. Se optimizan composición de ropa, alcance de NPC y esperas de
 atlas. [Instalación, controles, límites y validación](docs/v0.39.md).
+
+## v0.40
+
+Caballo orientado con el mismo ajuste que el personaje a pie. Puntos dinámicos
+en el minimapa: hostiles rojos, criaturas neutrales grises, NPC humanos amarillos
+y jugador celeste. Conserva la caché y el refresco de la pantalla inferior.
+[Instalación y comprobaciones](docs/v0.40.md).

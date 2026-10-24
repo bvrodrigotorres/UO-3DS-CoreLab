@@ -544,7 +544,7 @@ int main(){
             }
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==4)lab::drawSkills(bottom,playerStatus.skills,skillsMenu,combat.meditating);
-            else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt);
+            else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt,authentic&&hasNpcs?&npcs:nullptr);
             else if(pages.page==3)lab::drawCommerce(bottom,inventory,commerce,&itemIcons);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons,&inventoryDrag,&playerStatus);
             else lab::drawHud(bottom,hud);
