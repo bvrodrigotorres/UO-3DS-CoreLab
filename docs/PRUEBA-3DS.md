@@ -178,3 +178,9 @@ Copiar toda la carpeta `3ds` del ZIP privado, incluidos `britain-expanded/npc-po
 y `npc-poses/`. No borrar mapas ni partidas. Diagnóstico: `NPC SPRITES: CACHE 4 MIB`.
 Repetir bosque, persecución, curación y saqueo durante una sesión prolongada.
 Detalles: [v0.41](v0.41.md).
+
+## v0.41.1
+
+Corrección del arranque: se restaura la reserva RAM de las pantallas anterior
+a v0.41, conservando la nueva carga de poses de NPC y cadáveres. Instalar el ZIP
+v0.41.1 sin borrar partidas. [Detalles](v0.41.1.md).

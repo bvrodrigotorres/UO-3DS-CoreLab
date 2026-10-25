@@ -245,3 +245,9 @@ Caché fija para poses de NPC y cadáveres, lecturas protegidas frente al terren
 menor presión de memoria y buffers de pantalla aislados en VRAM. Instalar también
 los nuevos recursos privados de `npc-poses`. Ver [instrucciones y alcance de la
 corrección](docs/v0.41.md).
+
+## v0.41.1
+
+Corrección del arranque: se restaura la reserva RAM de las pantallas anterior
+a v0.41, conservando la nueva carga de poses de NPC y cadáveres. Instalar el ZIP
+v0.41.1 sin borrar partidas. [Detalles](docs/v0.41.1.md).

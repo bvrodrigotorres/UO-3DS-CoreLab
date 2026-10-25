@@ -136,8 +136,8 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
 }
 
 int main(){
-    // Isolate scanout buffers from the linear texture/vertex streaming heap.
-    gfxInit(GSP_BGR8_OES,GSP_BGR8_OES,true);bool new3ds=false;APT_CheckNew3DS(&new3ds);
+    // The software HUD writes BGR bytes directly: use the proven RAM buffers.
+    gfxInitDefault();bool new3ds=false;APT_CheckNew3DS(&new3ds);
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
