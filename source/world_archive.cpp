@@ -20,7 +20,7 @@ bool WorldArchive::open(const std::string&name,std::string&error){
     unsigned width=u32(header+8),height=u32(header+12),cols=u32(header+16),rows=u32(header+20),lands=u32(header+24),statics=u32(header+28),count=u32(header+32);
     uint64_t tables=u64(header+40),index=u64(header+48),data=u64(header+56);
     if(!width||!height||width>7168||height>4096||width%64||height%64||cols!=width/64||rows!=height/64||count!=cols*rows||!lands||lands>16384||!statics||statics>65536||tables!=64||index!=64+uint64_t(lands+statics)*12||data!=index+uint64_t(count)*24||data>next.fileBytes)return bad();
-    next.mapWidth=width;next.mapHeight=height;next.columns=cols;next.rows=rows;
+    next.catalogueIdentity=u32(header+36);next.mapWidth=width;next.mapHeight=height;next.columns=cols;next.rows=rows;
     uint32_t hash=2166136261u;uint8_t record[24];
     next.landFlags.reserve(lands);next.textures.reserve(lands);next.staticFlags.reserve(statics);next.heights.reserve(statics);next.entries.reserve(count);
     for(unsigned i=0;i<lands;++i){if(!f.read((char*)record,12)||u16(record+10))return bad();hash=fnv(record,12,hash);next.landFlags.push_back(u64(record));next.textures.push_back(u16(record+8));}

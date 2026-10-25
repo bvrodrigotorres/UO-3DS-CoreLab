@@ -98,6 +98,11 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     text(fb,20,219,"START: PAUSA | DESLIZA 1/6",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
+void drawExpeditionHud(uint8_t*fb,const HudInfo&info){
+    drawHud(fb,info);const Color ink={55,37,22};box(fb,18,185,284,45,{218,195,148});
+    text(fb,20,189,"PAD: CAMINAR | B: CORRER",ink);text(fb,20,199,"X: DESTINOS | L/R: MINIMAPA",ink);
+    text(fb,20,209,"SELECT: TECHOS | START: PAUSA",ink);text(fb,20,219,"EN PAUSA: B VUELVE A TU PARTIDA",ink);
+}
 void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool meditating){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},muted={118,108,92};
     text(fb,20,14,"HABILIDADES",ink,2);text(fb,20,34,"TOTAL "+skillValue(skills.total())+" / 700.0",ink);text(fb,216,34,"MAX 100.0",ink);
@@ -114,7 +119,7 @@ void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool medita
     box(fb,18,207,85,24,gold);box(fb,107,207,105,24,gold);box(fb,216,207,86,24,gold);
     text(fb,24,215,menu.all?"VER ACTIVAS":"VER TODAS",ink);text(fb,114,215,meditating?"MEDITANDO":"MEDITAR",ink);text(fb,222,215,"HOJA "+std::to_string(menu.sheet+1)+"/"+std::to_string(menu.sheets()),ink);
 }
-void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt,const Npcs*npcs){
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt,const Npcs*npcs,bool expedition){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
     (void)message;
@@ -168,7 +173,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){size_t p=(y*j->dollWidth+x)*4;
             if(j->doll[p+3]>127)pixel(fb,ox+x,JournalLayout::MapTop+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
     }else text(fb,205,86,"SIN IMAGEN",ink);
-    text(fb,205,JournalLayout::ZoomTop,"TOCA: EQUIPO",ink,1,17);
+    text(fb,205,JournalLayout::ZoomTop,expedition?"TOCA: VIAJAR":"TOCA: EQUIPO",ink,1,17);
     const PlayerStatus initial;const auto&stats=status?*status:initial;
     constexpr int ox=10,oy=146;
     if(statusArt&&statusArt->rgba.size()==300*82*4){
@@ -320,8 +325,8 @@ void drawDeveloperMenu(uint8_t*fb,const DeveloperMenu&m,const World&w){
 void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
-    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO",m.developer?"DESARROLLADOR":"OPCIONES","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
-    for(int i=0;i<6;++i){int y=49+i*22;box(fb,25,y,270,20,ink);box(fb,27,y+2,266,16,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO",m.developer?"DESARROLLADOR":"OPCIONES","EXPLORAR BRITANNIA (PRUEBA)","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    for(int i=0;i<7;++i){int y=50+i*19;box(fb,25,y,270,17,ink);box(fb,27,y+2,266,13,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }

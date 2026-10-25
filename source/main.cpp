@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "core.hpp"
 #include "renderer.hpp"
+#include "expedition_ui.hpp"
 #include "character_depth.hpp"
 #include "performance.hpp"
 #include "mount.hpp"
@@ -382,6 +383,16 @@ int main(){
                 optionsEditor(menu.options,saveRoot+"options.sav");roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;lab::invalidateRenderList();
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
+            }else if(action==lab::PauseAction::Explore){
+                if(!authentic)pause.message="REQUIERE LA PARTIDA DE BRITAIN";
+                else if(!saves->flush())pause.message="ESPERA EL GUARDADO PENDIENTE";
+                else {
+                    lab::setQuestMarker({});
+                    pause.message=lab::exploreBritannia(target,baseRoot,saveRoot+savePrefix+"expedition.sav",{actor.x+w->originX,actor.y+w->originY,actor.z},playerStatus,inventory,equipmentArt,statusArt,roofs);
+                    if(!lab::loadAtlases(w->images,error,worldRoot)){pause.message="ERROR AL RESTAURAR TEXTURAS: "+error;quit=true;break;}
+                    lab::invalidateRenderList();pausedResources.restart();
+                }
+                now=osGetTime();pausePad=0;frames=0;
             }else if(action==lab::PauseAction::Developer){
                 lab::Actor destination;if(developerEditor(*w,npcs,destination)){
                     actor=destination;from=actor;moving=false;progress=1;animationPhase=0;alignCamera();npcPush.reset();inventoryDrag.cancel();inventory.closeContainer();combat.attacking=false;combat.target=-1;

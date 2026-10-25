@@ -1,8 +1,9 @@
 # Preparación del mundo completo — etapa de geometría
 
-**Estado: experimental; NO activa el mapa completo en el juego.**
-La versión estable sigue siendo v0.43. El archivo privado de esta etapa no es
-un paquete instalable ni se anuncia en Universal-Updater.
+**Estado: la geometría se integra en el modo experimental de exploración v0.44.**
+Ver `v0.44.md`: la campaña sigue separada; no hay población/loot global.
+El lector por sí solo sigue sin ser un paquete instalable; v0.44 añade un
+catálogo gráfico privado y un paquete opcional por el servidor local.
 
 ## Auditoría real del cliente
 
@@ -43,10 +44,11 @@ Validaciones:
   inválidos y conservación de la ventana anterior ante error.
 - 53 grupos de pruebas nativas y compilación ARMv6K con auditoría de pila.
 
-## Por qué no está activado
+## Integración y trabajo pendiente
 
 Los `Land.image` y `Object.image` de las ventanas nuevas permanecen en NoImage:
-la geometría no contiene todavía el mapeo al banco gráfico del renderer. No debe
+la geometría no contiene el mapeo al banco gráfico del renderer. WorldGraphics
+lo resuelve antes de activar una ventana de exploración. No debe
 usarse como sustituto directo de `scene.bin` ni como mapa supuestamente jugable.
 
 Falta implementar y comprobar conjuntamente:
@@ -63,8 +65,9 @@ Falta implementar y comprobar conjuntamente:
 5. Minimapa por sectores, teletransportes, regreso a NPCs de misiones que estén
    fuera de la ventana y pruebas reales de trayectos prolongados en Old 3DS.
 
-No se eleva el límite de 512 de `loadWorld`, no se sustituye la región actual,
-no se reescriben partidas y no se publica una falsa versión de mapa completo.
+No se eleva el límite de 512 de `loadWorld`, no se sustituye la campaña actual
+y no se reescriben sus partidas. v0.44 permite explorar la geografía completa
+como modo aparte, con posición separada y cargas visibles.
 
 ## Reproducir con archivos privados
 

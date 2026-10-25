@@ -9,6 +9,7 @@ class WorldArchive {
     struct Slot {int key=-1;uint64_t used=0;std::vector<uint8_t>data;};
     std::string path;
     int mapWidth=0,mapHeight=0,columns=0,rows=0;
+    uint32_t catalogueIdentity=0;
     uint64_t fileBytes=0,tick=0;unsigned reads=0;
     std::vector<Entry>entries;
     std::vector<uint64_t>landFlags,staticFlags;
@@ -26,6 +27,7 @@ public:
     int height()const{return mapHeight;}
     size_t sectorCount()const{return entries.size();}
     size_t cacheBytes()const;
+    uint32_t identity()const{return catalogueIdentity;}
     unsigned diskReads()const{return reads;}
     uint32_t objectCount()const{return entries.empty()?0:entries.back().first+entries.back().count;}
 };
