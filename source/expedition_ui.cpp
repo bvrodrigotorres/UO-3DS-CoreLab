@@ -47,10 +47,11 @@ std::string exploreBritannia(C3D_RenderTarget*target,const std::string&base,cons
         u64 now=osGetTime();float dt=std::min(.05f,(now-last)/1000.f);last=now;hidScanInput();auto down=hidKeysDown(),held=hidKeysHeld();circlePosition pad;hidCircleRead(&pad);
         if(down&KEY_START){paused=!paused;travel=false;if(paused)message=savePositionNow()?"EXPLORACION GUARDADA":error;}
         if(paused){lower({"PAUSA EXPLORACION","BRITANNIA",{message,"","START / A: CONTINUAR","B: VOLVER A TU PARTIDA","","MOCHILA Y MISIONES CONSERVADAS"}});if(down&KEY_A)paused=false;if(down&KEY_B){if(savePositionNow())return "DE REGRESO A BRITAIN";message=error;}last=osGetTime();continue;}
+        const bool travelWasOpen=travel;
         if((down&KEY_X)&&!moving){travel=!travel;repeat=0;}
         bool touchTravel=false;
         if((down&KEY_TOUCH)&&map&&!moving&&!travel){touchPosition t;hidTouchRead(&t);if(t.py>=JournalLayout::ZoomTop&&t.py<=JournalLayout::ZoomTop+13){if(t.px>=20&&t.px<=47)zoom=std::max(1,zoom-1);if(t.px>=147&&t.px<=178)zoom=std::min(4,zoom+1);}if(t.px>=196&&t.px<305&&t.py>=25&&t.py<146)travel=true;}
-        if((down&KEY_TOUCH)&&travel){touchPosition t;hidTouchRead(&t);if(t.px>=20&&t.px<300&&t.py>=62&&t.py<152){choice=(t.py-62)/9;touchTravel=true;}}
+        if((down&KEY_TOUCH)&&travel){touchPosition t;hidTouchRead(&t);int hit=expeditionDestinationHit(travelWasOpen,t.px,t.py);if(hit>=0){choice=hit;touchTravel=true;}}
         if(travel){
             int d=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);if(!d)repeat=0;else if(now>=repeat){choice=(choice+d+10)%10;repeat=now+180;}
             if(down&KEY_B)travel=false;

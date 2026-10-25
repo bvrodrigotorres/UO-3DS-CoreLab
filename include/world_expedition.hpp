@@ -13,6 +13,7 @@ public:
     Journal map(const World&)const;
     unsigned images()const{return count;}
 };
+inline int expeditionDestinationHit(bool alreadyOpen,int x,int y){return alreadyOpen&&x>=20&&x<300&&y>=62&&y<152?(y-62)/9:-1;}
 struct ExpeditionWindow {
     static int origin(int global,int extent){return std::max(0,std::min(extent-128,((global-32)/64)*64));}
     static bool needs(const World&w,const Actor&a,int width,int height){

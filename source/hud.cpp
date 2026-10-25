@@ -128,9 +128,9 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
     float scale=float(std::max(1,std::min(4,zoom)));
-    struct RadarCache{const Journal*j=nullptr;const World*w=nullptr;const uint8_t*data=nullptr;Actor actor{};int zoom=0;bool valid=false;std::array<uint8_t,166*(JournalLayout::MapBottom-JournalLayout::MapTop)*3>pixels{};};
+    struct RadarCache{const Journal*j=nullptr;const World*w=nullptr;const uint8_t*data=nullptr;Actor actor{};int zoom=0,originX=0,originY=0;bool valid=false;std::array<uint8_t,166*(JournalLayout::MapBottom-JournalLayout::MapTop)*3>pixels{};};
     static RadarCache radar;
-    if(!radar.valid||radar.j!=j||radar.w!=&w||radar.data!=(j?j->map.data():nullptr)||radar.actor.x!=a.x||radar.actor.y!=a.y||radar.actor.z!=a.z||radar.zoom!=zoom){
+    if(!radar.valid||radar.j!=j||radar.w!=&w||radar.data!=(j?j->map.data():nullptr)||radar.actor.x!=a.x||radar.actor.y!=a.y||radar.actor.z!=a.z||radar.zoom!=zoom||radar.originX!=w.originX||radar.originY!=w.originY){
     for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){
         float sx=(x-103.f)/scale,sy=(y-float(JournalLayout::MapCenter))/scale;
         int wx=int(std::floor(a.x+w.originX+(sx+sy)*.5f));
@@ -145,7 +145,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         }
         size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;radar.pixels[at]=c.b;radar.pixels[at+1]=c.g;radar.pixels[at+2]=c.r;
     }
-        radar.j=j;radar.w=&w;radar.data=j?j->map.data():nullptr;radar.actor=a;radar.zoom=zoom;radar.valid=true;
+        radar.j=j;radar.w=&w;radar.data=j?j->map.data():nullptr;radar.actor=a;radar.zoom=zoom;radar.originX=w.originX;radar.originY=w.originY;radar.valid=true;
     }
     for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;pixel(fb,x,y,{radar.pixels[at+2],radar.pixels[at+1],radar.pixels[at]});}
     // Dynamic markers overlay the cached terrain; no map rebuild or texture upload.

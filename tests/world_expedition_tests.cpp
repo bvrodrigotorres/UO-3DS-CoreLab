@@ -7,6 +7,7 @@ using namespace lab;
 static void put(std::vector<uint8_t>&b,unsigned n,unsigned bytes){for(unsigned i=0;i<bytes;++i)b.push_back(uint8_t(n>>(8*i)));}
 static void write(const std::string&p,const std::vector<uint8_t>&b){std::ofstream f(p,std::ios::binary);f.write((char*)b.data(),b.size());}
 int main(int argc,char**argv){
+ assert(expeditionDestinationHit(false,220,80)==-1);assert(expeditionDestinationHit(true,220,80)==2);assert(expeditionDestinationHit(true,20,151)==9);assert(expeditionDestinationHit(true,20,152)==-1);
  assert(argc>=2);std::string root=std::string(argv[1])+"/",error;std::vector<uint8_t>body;for(auto r:{std::array<unsigned,3>{0,3,0},{1,100,1}})for(auto n:r)put(body,n,2);
  uint32_t hash=2166136261u;for(auto c:body)hash=(hash^c)*16777619u;
  std::vector<uint8_t>b{'U','W','G','1'};put(b,32,4);put(b,2,4);put(b,hash,4);b.insert(b.end(),body.begin(),body.end());write(root+"graphics.bin",b);write(root+"radar.bin",std::vector<uint8_t>(65536,255));
