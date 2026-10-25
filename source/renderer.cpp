@@ -462,7 +462,7 @@ bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
-               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status,const Inventory*inventory){
+               RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status,const Inventory*inventory,bool present){
     used=0;objects=0;overflow=false;batches.clear();resourceWaits=resourceUploads=0;textureLoadsRemaining=1;textureFailure=false;
     auto project=[&](float x,float y,float z)->Point{return {200+(x-cameraX-y+cameraY)*22,126+(x-cameraX+y-cameraY)*22-(z-footZ)*4};};
     const auto&list=renderCache.get(w,actor,roofs!=RoofMode::Full);
@@ -499,6 +499,9 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         prepareWorldPages(needed,w.images);
     }
     if(npcs)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ);
+    // Resource preparation can run behind the software loading screen without
+    // submitting a display transfer into its framebuffer.
+    if(!present)return;
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);C3D_RenderTargetClear(target,C3D_CLEAR_ALL,0x14212fff,0xffffffff);
     C3D_FrameDrawOn(target);
     auto bloodBurst=[&](const Draw&draw){if(!combat)return;const auto saved=pixelMode;pixelMode=PixelMode::Translucent;

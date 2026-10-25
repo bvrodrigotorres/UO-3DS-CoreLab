@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 #include "startup.hpp"
 #include "hud.hpp"
+#include "resource_preparation.hpp"
+#include "title_art.hpp"
+#include <algorithm>
 #include <cassert>
 #include <fstream>
 #include <iterator>
@@ -44,6 +47,22 @@ int main(int argc,char**argv){
     {std::ofstream f(root+"campaign.sav",std::ios::binary);f<<"broken";}Campaign broken(root);assert(!broken.load()&&!broken.valid);
     std::vector<uint8_t>top(400*240*3+32,0xA5),bottom(320*240*3+32,0xA5);
     drawTitle(top.data()+16);ppm(root+"title.ppm",top,400);
+    const auto expected=top;
+    // Full CPU-owned redraw must overwrite every previous world pixel, on
+    // either backbuffer, and never cross the rotated framebuffer bounds.
+    for(int i=0;i<3;++i){std::fill(top.begin()+16,top.end()-16,uint8_t(i*67));drawTitle(top.data()+16);assert(top==expected);}
+    for(int y:{0,40,140,235})for(int x:{0,100,200,399}){
+        uint16_t color=TitleArt[y*400+x];auto at=16+3*(x*240+239-y);
+        assert(top[at]==(color&31)*255/31&&top[at+1]==((color>>5)&63)*255/63&&top[at+2]==((color>>11)&31)*255/31);
+    }
+    drawTitle(top.data()+16,true);ppm(root+"loading-title.ppm",top,400);
+    ResourcePreparation loading;
+    assert(loading.pending());loading.observe(4,false);assert(loading.pending());
+    loading.observe(0,false);assert(loading.pending());loading.observe(1,false);assert(loading.pending());
+    loading.observe(0,false);loading.observe(0,false);assert(!loading.pending());
+    // A teleport or an editor transition must restart the resource pump.
+    loading.restart();assert(loading.pending());loading.observe(0,true);assert(loading.pending());
+    loading.observe(0,false);assert(loading.pending());loading.observe(0,false);assert(!loading.pending());
     for(auto page:{MenuPage::Main,MenuPage::Options,MenuPage::Confirm}){menu.page=page;menu.selected=0;drawStartMenu(bottom.data()+16,menu,true);}
     for(int stage=-1;stage<8;++stage)drawLoading(bottom.data()+16,"CARGANDO BRITANNIA",stage);
     menu.back();drawStartMenu(bottom.data()+16,menu,true);ppm(root+"menu.ppm",bottom,320);

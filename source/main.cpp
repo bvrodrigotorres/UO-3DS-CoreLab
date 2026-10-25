@@ -15,6 +15,7 @@
 #include "exploration.hpp"
 #include "hud.hpp"
 #include "region_migration.hpp"
+#include "resource_preparation.hpp"
 #include <3ds.h>
 #include <cstdio>
 #include <cmath>
@@ -28,7 +29,10 @@
 extern "C" { u32 __stacksize__=128*1024; }
 
 namespace {
+bool graphicsReady=false;
 void startupFrame(const lab::StartMenu*menu,bool canContinue,const std::string&stage="",int progress=0){
+    // Complete any outstanding world transfer before CPU-owned title buffers.
+    if(graphicsReady)C3D_FrameSync();
     auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr);
     auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
     lab::drawTitle(top,menu==nullptr);
@@ -142,6 +146,7 @@ int main(){
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
     if(!C3D_Init(lab::FrameCommandBytes)){gfxExit();return 1;}
+    graphicsReady=true;
     auto target=C3D_RenderTargetCreate(240,400,GPU_RB_RGBA8,GPU_RB_DEPTH16);
     if(!target||!lab::rendererInit()){consoleInit(GFX_BOTTOM,nullptr);std::printf("CoreLab: GPU init failed\nSTART to exit\n");while(aptMainLoop()){hidScanInput();if(hidKeysDown()&KEY_START)break;}C3D_Fini();gfxExit();return 1;}
     C3D_RenderTargetSetOutput(target,GFX_TOP,GFX_LEFT,GX_TRANSFER_FLIP_VERT(0)|GX_TRANSFER_OUT_TILED(0)|GX_TRANSFER_RAW_COPY(0)|GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8)|GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
@@ -318,13 +323,22 @@ int main(){
     if(playerStatus.mounted&&!inventory.prepareEquipment(inventory.equipmentMask())){playerStatus.mounted=false;saveMessage="CABALLO: ACTUALIZA LA CARPETA CHARACTER/MOUNTED";}
     lab::SkillsMenu skillsMenu;
     playerStatus.skills.start((authentic?inventory:demoInventory).equipment[0]);
-    if(authentic){u64 warmUntil=osGetTime()+3000;unsigned readyFrames=0;while(aptMainLoop()&&osGetTime()<warmUntil&&readyFrames<2){
-        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,0,true,false,false,hasNpcs?&npcs:nullptr,&combat,&playerStatus,&inventory);
-        readyFrames=lab::rendererResourceWaits()||lab::rendererTextureError()?0:readyFrames+1;startupFrame(nullptr,false,"PREPARANDO LA REGION",5);
+    if(authentic){u64 warmUntil=osGetTime()+10000;lab::ResourcePreparation preparation;while(aptMainLoop()&&osGetTime()<warmUntil&&preparation.pending()){
+        lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,0,true,false,false,hasNpcs?&npcs:nullptr,&combat,&playerStatus,&inventory,false);
+        preparation.observe(lab::rendererResourceWaits(),lab::rendererTextureError());startupFrame(nullptr,false,"PREPARANDO LA REGION",5);
     }}
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
+    lab::ResourcePreparation pausedResources;
     auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage,sink);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
-    auto presentPause=[&](){auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawPause(bottom,pause);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();if(pause.presented())saveAtPause(pauseAt);};
+    auto presentPause=[&](){
+        // Pump only rendering/I/O. Never advance NPCs, combat, doors or timers
+        // while paused, including after a developer teleport.
+        if(pausedResources.pending()){
+            lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
+            pausedResources.observe(lab::rendererResourceWaits(),lab::rendererTextureError());
+        }
+        auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);lab::drawPause(bottom,pause);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();if(pause.presented())saveAtPause(pauseAt);
+    };
     lab::FramePacer framePacer;lab::FrameStats frameStats;u64 lastHud=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
     while(aptMainLoop()){
@@ -334,7 +348,7 @@ int main(){
         auto saveState=saves->status();bool saveNotice=inventory.savePending!=(saveState.pending>0)||inventory.saveFailed!=saveState.error;inventory.savePending=saveState.pending>0;inventory.saveFailed=saveState.error;if(saveState.error)saveMessage="ERROR SD: GUARDADO PENDIENTE";
         combat.locate(actor);
         bool wasPaused=pause.active;
-        if((down&KEY_START)&&!pause.active){pause.open();pauseAt=now;pages.active=false;inventoryDrag.cancel();presentPause();last=osGetTime();continue;}
+        if((down&KEY_START)&&!pause.active){pause.open();pausedResources.restart();pauseAt=now;pages.active=false;inventoryDrag.cancel();presentPause();last=osGetTime();continue;}
         else if((down&KEY_START)&&pause.active)pause.active=false;
         if(pause.active||wasPaused){
             pause.holdDeveloper((held&(KEY_L|KEY_R))==(KEY_L|KEY_R),now);
@@ -404,6 +418,7 @@ int main(){
                 if(saved){inventory.closeContainer();C3D_FrameSync();quit=action==lab::PauseAction::Exit;menu.back();menu.selected=1;canContinue=true;moving=false;break;}
                 pause.message="ERROR SD: NO SE PUDO GUARDAR";
             }
+            if(action!=lab::PauseAction::None&&action!=lab::PauseAction::Resume)pausedResources.restart();
             last=sample=now;sampleFrames=0;
             presentPause();
             continue;
@@ -434,9 +449,10 @@ int main(){
                         last=sample=osGetTime();frames=0;
                     }
                 }else if(lab::characterPaperdollHit(pages.startX,pages.startY)){
-                    pause.open();pause.selected=2;pauseAt=now;presentPause();
+                    pause.open();pausedResources.restart();pause.selected=2;pauseAt=now;presentPause();
                     if(appearance.enabled&&characterAssets.ready())equipmentEditor(characterAssets,appearance,inventory,playerStatus);
                     else pause.message="PERSONALIZA EL PERSONAJE PRIMERO";
+                    pausedResources.restart();
                     now=osGetTime();last=sample=now;pausePad=0;frames=0;
                     lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
                     continue;

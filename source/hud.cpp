@@ -10,6 +10,8 @@
 #include "overhead_font.hpp"
 #include "combat.hpp"
 #include "exploration.hpp"
+#include "version.hpp"
+#include "title_art.hpp"
 #include <cmath>
 #include <memory>
 #include <cstdio>
@@ -83,7 +85,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     if(compact)return;
     if(paused){text(fb,116,18,"PAUSA",ink,3);}else{
     text(fb,19,15,"BRITANNIA",ink,2);
-    text(fb,225,20,"C.LAB V0.41.2",ink,1,13);
+    text(fb,225,20,std::string("C.LAB V")+Version,ink,1,13);
     text(fb,19,34,info.scene+" | "+info.roofs,ink);
     }
     box(fb,17,45,286,1,ink);box(fb,17,47,286,1,gold);
@@ -275,24 +277,17 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
 
 void drawTitle(uint8_t*fb,bool loading){
     canvasWidth=400;
-    const Color gold={211,170,86},darkGold={110,75,33},stone={27,38,46};
-    for(int y=0;y<240;++y)for(int x=0;x<400;++x){int glow=std::max(0,80-std::abs(x-200)/2-std::abs(y-90)/2);
-        pixel(fb,x,y,{uint8_t(7+glow/6),uint8_t(14+glow/5),uint8_t(23+glow/4)});}
-    for(int x=15;x<390;x+=37){int y=18+(x*13)%43;pixel(fb,x,y,gold);}
-    // Original code-drawn battlements, without external title assets.
-    for(int side:{0,1}){int x=side?332:20;box(fb,x,157,48,76,stone);for(int n=0;n<4;++n)box(fb,x+n*14,148,7,14,stone);
-        for(int row=0;row<3;++row)box(fb,x+19,170+row*20,6,10,{8,15,23});}
-    box(fb,72,205,256,28,stone);for(int x=75;x<330;x+=18)box(fb,x,198,9,10,stone);
-    for(int y:{8,231}){box(fb,8,y,384,2,darkGold);box(fb,10,y+2,380,1,gold);}
-    for(int x:{8,390})box(fb,x,8,2,226,darkGold);
-    text(fb,46,73,"ULTIMA ONLINE",{0,0,0},4);
-    text(fb,44,71,"ULTIMA ONLINE",gold,4);
-    box(fb,108,111,184,1,darkGold);box(fb,140,114,120,1,gold);
-    text(fb,173,125,"3DS",gold,3);
+    const Color gold={238,205,128};
+    // Embedded RGB565: available on the very first frame, no SD read or GPU
+    // texture allocation, 187.5 KiB in read-only program data.
+    for(int y=0;y<240;++y)for(int x=0;x<400;++x){uint16_t c=TitleArt[y*400+x];
+        pixel(fb,x,y,{uint8_t(((c>>11)&31)*255/31),uint8_t(((c>>5)&63)*255/63),uint8_t((c&31)*255/31)});}
     std::string subtitle=loading?"PREPARANDO BRITANNIA":"AVENTURAS EN BRITANNIA";
-    text(fb,(400-int(subtitle.size())*6)/2,173,subtitle,gold,1,36);
-    const std::string version="CORELAB V0.34";
-    text(fb,(400-int(version.size())*6)/2,217,version,gold);
+    int x=(400-int(subtitle.size())*6)/2;
+    text(fb,x+1,183,subtitle,{0,0,0},1,36);text(fb,x,182,subtitle,gold,1,36);
+    const std::string version=std::string("CORELAB V")+Version;
+    x=(400-int(version.size())*6)/2;
+    text(fb,x+1,223,version,{0,0,0});text(fb,x,222,version,gold);
     canvasWidth=320;
 }
 void drawLoading(uint8_t*fb,const std::string&stage,int progress){
