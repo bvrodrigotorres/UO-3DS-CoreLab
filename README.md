@@ -251,3 +251,9 @@ corrección](docs/v0.41.md).
 Corrección del arranque: se restaura la reserva RAM de las pantallas anterior
 a v0.41, conservando la nueva carga de poses de NPC y cadáveres. Instalar el ZIP
 v0.41.1 sin borrar partidas. [Detalles](docs/v0.41.1.md).
+
+## v0.41.2
+
+Corregidas las lecturas de terreno que no terminaban y las poses de NPC que se
+descartaban al avanzar la animación. Colas independientes y ciclos de caminar
+completos con caché GPU fija. [Instalación y validación](docs/v0.41.2.md).

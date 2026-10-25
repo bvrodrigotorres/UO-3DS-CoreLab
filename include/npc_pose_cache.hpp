@@ -20,6 +20,23 @@ inline bool readNpcPoseManifest(const std::vector<uint8_t>&b,const std::vector<N
     }
     checksums=std::move(next);return true;
 }
+struct NpcPoseNeed {int key;float distance;unsigned priority;};
+inline void addNpcPoseCycle(std::vector<NpcPoseNeed>&out,int style,unsigned frame,unsigned frames,float distance){
+    auto add=[&](unsigned pose,unsigned priority){const int key=int(unsigned(style)*frames+pose);auto found=std::find_if(out.begin(),out.end(),[&](const NpcPoseNeed&n){return n.key==key;});if(found==out.end())out.push_back({key,distance,priority});else if(priority<found->priority||(priority==found->priority&&distance<found->distance))*found={key,distance,priority};};
+    add(frame,0);
+    if(frame<40){unsigned base=frame/5*5,phase=frame%5;for(unsigned n=1;n<=4;++n)add(base+(phase?1+(phase-1+n)%4:n),n);add(base,5);}
+}
+inline void orderNpcPoseNeeds(std::vector<NpcPoseNeed>&out){std::stable_sort(out.begin(),out.end(),[](const NpcPoseNeed&a,const NpcPoseNeed&b){return a.priority<b.priority||(a.priority==b.priority&&a.distance<b.distance);});}
+// One protected read stays in flight until consumed; enumerating more pages cannot
+// replace it. The same selector is exercised by delayed-I/O native regressions.
+struct WorldPageRead {
+    int pending=-1;
+    int choose(const std::vector<unsigned char>&needed,const std::vector<unsigned char>&resident,const std::vector<uint64_t>&retry,uint64_t now)const{
+        if(pending>=0)return pending;
+        for(size_t i=0;i<needed.size();++i)if(needed[i]&&!resident[i]&&now>=retry[i])return int(i);
+        return -1;
+    }
+};
 struct NpcPoseCache {
     static constexpr unsigned Slots=112, Across=8, Rows=7, CellWidth=128, CellHeight=144;
     struct Slot {int key=-1;uint64_t used=0;};

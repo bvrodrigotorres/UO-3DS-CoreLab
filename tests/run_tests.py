@@ -124,6 +124,11 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
+    def test_slow_storage_terrain_and_animation_progress(self):
+        binary=Path(self.temp.name)/'streaming412_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-pthread','-I'+str(ROOT/'include'),str(ROOT/'tests/streaming412_tests.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_npc_pose_streaming_and_resource_leases(self):
         binary=Path(self.temp.name)/'streaming41_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-pthread','-I'+str(ROOT/'include'),str(ROOT/'tests/streaming41_tests.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)
