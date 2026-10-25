@@ -326,7 +326,7 @@ void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
     const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO",m.developer?"DESARROLLADOR":"OPCIONES","EXPLORAR BRITANNIA (PRUEBA)","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
-    for(int i=0;i<7;++i){int y=50+i*19;box(fb,25,y,270,17,ink);box(fb,27,y+2,266,13,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    for(int i=0;i<7;++i){int y=50+i*19;box(fb,25,y,270,17,ink);box(fb,27,y+2,266,13,i==m.selected?gold:Color{196,168,117});text(fb,36,y+5,i==m.selected?">":" ",ink);text(fb,50,y+5,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }
