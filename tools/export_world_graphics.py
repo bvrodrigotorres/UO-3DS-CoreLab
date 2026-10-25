@@ -6,7 +6,7 @@ from pathlib import Path
 from export_scene import find,land_image,static_image,pixels555
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--client',type=Path,required=True);p.add_argument('--archive',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--client',type=Path,required=True);p.add_argument('--archive',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--per-page',type=int,choices=(1,2,4,8),default=2);a=p.parse_args()
  if a.out.exists():raise FileExistsError(a.out)
  from PIL import Image
  from ultima_sdk import Files,Art
@@ -49,13 +49,13 @@ def main():
  a.out.mkdir(parents=True);src=a.out/'_sources';src.mkdir()
  permutation=sorted(range(len(images)),key=lambda i:(max(images[i].size),images[i].width*images[i].height,images[i].width))
  remap={};sizes=[];pages=[]
- for n in range(0,len(permutation),8):
-  folder=src/str(n//8);folder.mkdir();group=permutation[n:n+8]
+ for n in range(0,len(permutation),a.per_page):
+  folder=src/str(n//a.per_page);folder.mkdir();group=permutation[n:n+a.per_page]
   for i,old in enumerate(group):remap[old]=len(sizes);im=images[old];im.save(folder/f'{i:02d}.png');sizes.append(im.size)
-  # Every page has 32 logical slots. This keeps existing renderer addressing.
-  for i in range(len(group),32):Image.new('RGBA',(1,1)).save(folder/f'{i:02d}.png');sizes.append((1,1))
-  (folder/'page.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(32)))
-  pages.append((folder,a.out.resolve()/f'atlas_{n//8:02d}.t3x'))
+  # Compact pages avoid loading seven unrelated large sprites for one visible item.
+  for i in range(len(group),a.per_page):Image.new('RGBA',(1,1)).save(folder/f'{i:02d}.png');sizes.append((1,1))
+  (folder/'page.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(a.per_page)))
+  pages.append((folder,a.out.resolve()/f'atlas_{n//a.per_page:02d}.t3x'))
  if len(sizes)>=65535:raise ValueError('Local graphics handle overflow')
  exe=shutil.which('tex3ds') or '/opt/devkitpro/tools/bin/tex3ds'
  def convert(pair):
@@ -64,6 +64,7 @@ def main():
   for n,_ in enumerate(pool.map(convert,pages)):
    if n%100==0:print(f'{n+1}/{len(pages)} atlas',flush=True)
  costs=[out.stat().st_size for folder,out in pages]
+ (a.out/'atlas_layout.bin').write_bytes(struct.pack('<4sHH',b'UWP1',a.per_page,0))
  (a.out/'image_sizes.bin').write_bytes(struct.pack('<4sHH',b'UOI1',len(sizes),len(pages))+b''.join(struct.pack('<HH',*s) for s in sizes)+b''.join(struct.pack('<I',c) for c in costs))
  records=sorted((kind,art,remap[old]) for (kind,art),old in mapping.items())
  body=b''.join(struct.pack('<HHH',*r) for r in records)
@@ -73,7 +74,7 @@ def main():
   return h
  (a.out/'graphics.bin').write_bytes(struct.pack('<4sIII',b'UWG1',len(sizes),len(records),fnv(body))+body)
  shutil.copy2(find(a.client,'radarcol.mul'),a.out/'radar.bin')
- report={'unique_images':len(images),'logical_images':len(sizes),'atlas_pages':len(pages),'atlas_bytes':sum(costs),'missing_original_graphics':missing,'slope_texture_files_available':bool(idx and tex),'geometry_catalogue':h[10],'limitations':['Original statics and terrain only; no server population or dynamic decoration','Hues retained by geometry but use original uncolored sprite, matching existing scene exporter']}
+ report={'unique_images':len(images),'logical_images':len(sizes),'atlas_pages':len(pages),'sprites_per_page':a.per_page,'atlas_bytes':sum(costs),'missing_original_graphics':missing,'slope_texture_files_available':bool(idx and tex),'geometry_catalogue':h[10],'limitations':['Original statics and terrain only; no server population or dynamic decoration','Hues retained by geometry but use original uncolored sprite, matching existing scene exporter']}
  (a.out/'graphics-report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
  shutil.rmtree(src)
 if __name__=='__main__':main()

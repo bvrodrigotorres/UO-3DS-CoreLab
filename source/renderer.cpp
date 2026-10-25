@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "renderer.hpp"
+#include "atlas_layout.hpp"
 #include "avatar.hpp"
 #include "character.hpp"
 #include "repairs.hpp"
@@ -35,6 +36,7 @@ static C3D_Tex white,labelFont,groundIcons;
 static bool groundIconsReady=false;static std::array<Tex3DS_SubTexture,ItemTypes>groundFrames;
 static OverheadFont overheadFont;
 static std::vector<C2D_SpriteSheet> sheets;
+static unsigned atlasSlots=32;
 static bool streamed=false,textureFailure=false;
 static std::string atlasRoot;
 static std::vector<std::array<unsigned,2>>imageSizes;
@@ -186,9 +188,9 @@ static void uvFor(C2D_Image image,Point*uv){
     Tex3DS_SubTextureBottomLeft(image.subtex,&uv[3].x,&uv[3].y);
 }
 static bool imageFor(unsigned id,C2D_Image&image){
-    if(id==NoImage||id/32>=sheets.size())return false;
-    auto sheet=sheets[id/32];if(!sheet)return false;if(id%32>=C2D_SpriteSheetCount(sheet))return false;
-    image=C2D_SpriteSheetGetImage(sheet,id%32);return true;
+    if(id==NoImage||id/atlasSlots>=sheets.size())return false;
+    auto sheet=sheets[id/atlasSlots];if(!sheet)return false;if(id%atlasSlots>=C2D_SpriteSheetCount(sheet))return false;
+    image=C2D_SpriteSheetGetImage(sheet,id%atlasSlots);return true;
 }
 static const Point whiteUV[]={{0,1},{1,1},{1,0},{0,0}};
 static void rect(float x,float y,float w,float h,float r,float g,float b,float a=1){
@@ -256,30 +258,33 @@ void rendererShutdown(){
     shaderProgramFree(&program);if(shader)DVLB_Free(shader);
 }
 bool loadAtlases(int images,std::string&error,const std::string&root){
-    worldRead.pending=-1;
-    streamed=images>512;atlasRoot=root;textureFailure=false;worldRetry.assign((images+31)/32,0);
+    unsigned slots=32;
+    std::ifstream layout(root+"atlas_layout.bin",std::ios::binary);
+    if(layout){std::vector<uint8_t>b(9);layout.read((char*)b.data(),b.size());b.resize(size_t(layout.gcount()));if(!readAtlasLayout(b,slots)){error="INVALID ATLAS LAYOUT";return false;}}
+    atlasSlots=slots;worldRead.pending=-1;
+    streamed=images>512;atlasRoot=root;textureFailure=false;worldRetry.assign((images+int(atlasSlots)-1)/int(atlasSlots),0);
     if(streamed){
         std::ifstream f(root+"image_sizes.bin",std::ios::binary);
-        std::vector<unsigned char>b(8+size_t(images)*4+size_t((images+31)/32)*4);
+        std::vector<unsigned char>b(8+size_t(images)*4+size_t((images+int(atlasSlots)-1)/int(atlasSlots))*4);
         if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UOI1",4)){
             error="Invalid large-map image metadata";return false;
         }
         auto n=[&](size_t at,int count){unsigned value=0;for(int i=0;i<count;++i)value|=unsigned(b[at+i])<<(8*i);return value;};
-        unsigned pages=(images+31)/32;
+        unsigned pages=(images+int(atlasSlots)-1)/int(atlasSlots);
         if(n(4,2)!=unsigned(images)||n(6,2)!=pages){error="Large-map image count mismatch";return false;}
         imageSizes.clear();sheetCosts.clear();
         for(int i=0;i<images;++i){unsigned w=n(8+i*4,2),h=n(10+i*4,2);if(!w||!h||w>1024||h>1024){error="Invalid image size";return false;}imageSizes.push_back({w,h});}
         for(unsigned i=0;i<pages;++i){unsigned cost=n(8+images*4+i*4,4);if(!cost||cost>3*1024*1024){error="Invalid atlas size";return false;}char name[32];std::snprintf(name,sizeof name,"atlas_%02u.t3x",i);
-            std::ifstream file(root+name,std::ios::binary|std::ios::ate);
-            if(!file||file.tellg()!=std::streamoff(cost)){error="Missing/incomplete large-map atlas";return false;}
+            std::ifstream file;if(atlasSlots==32)file.open(root+name,std::ios::binary|std::ios::ate);
+            if(atlasSlots==32&&(!file||file.tellg()!=std::streamoff(cost))){error="Missing/incomplete large-map atlas";return false;}
             sheetCosts.push_back(cost);}
         C3D_FrameSync();for(auto sheet:sheets)if(sheet)C2D_SpriteSheetFree(sheet);
         sheets.assign(pages,nullptr);sheetUsed.assign(pages,0);bytes=0;error.clear();return true;
     }
     std::vector<C2D_SpriteSheet> next;size_t size=0;
-    for(int i=0;i<(images+31)/32;++i){
+    for(int i=0;i<(images+int(atlasSlots)-1)/int(atlasSlots);++i){
         char name[32];std::snprintf(name,sizeof(name),"atlas_%02d.t3x",i);std::string path=root+name;
-        auto sheet=C2D_SpriteSheetLoad(path.c_str());int required=std::min(32,images-i*32);
+        auto sheet=C2D_SpriteSheetLoad(path.c_str());int required=std::min(int(atlasSlots),images-i*int(atlasSlots));
         if(!sheet||C2D_SpriteSheetCount(sheet)<(size_t)required){
             if(sheet)C2D_SpriteSheetFree(sheet);
             for(auto s:next)C2D_SpriteSheetFree(s);
@@ -447,10 +452,10 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
         if(linearSpaceFree()>=sheetCosts[i]+2*1024*1024)break;
         victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));
     }
-    if(linearSpaceFree()<sheetCosts[i]+2*1024*1024){textureFailure=true;worldRetry[i]=now+1000;return;}
+    if((atlasSlots<32&&bytes+sheetCosts[i]>WorldTextureBudget)||linearSpaceFree()<sheetCosts[i]+2*1024*1024){textureFailure=true;worldRetry[i]=now+1000;return;}
     --textureLoadsRemaining;
-    auto sheet=resourceReader?(file.valid?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):C2D_SpriteSheetLoad(path.c_str());
-    if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(32,images-int(i)*32))){if(sheet)C2D_SpriteSheetFree(sheet);textureFailure=true;worldRetry[i]=now+1000;return;}
+    auto sheet=resourceReader?(file.valid&&file.bytes.size()==sheetCosts[i]?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):C2D_SpriteSheetLoad(path.c_str());
+    if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(int(atlasSlots),images-int(i)*int(atlasSlots)))){if(sheet)C2D_SpriteSheetFree(sheet);textureFailure=true;worldRetry[i]=now+1000;return;}
     worldRetry[i]=0;auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);sheets[i]=sheet;bytes+=image.tex->size;++resourceUploads;
 }
 unsigned rendererResourceWaits(){return resourceWaits;}
@@ -496,7 +501,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         neededWorld.assign(sheets.size(),0);auto&needed=neededWorld;
         for(const auto&d:visibleDraws){
             unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;
-            if(id!=NoImage&&id/32<needed.size())needed[id/32]=1;
+            if(id!=NoImage&&id/atlasSlots<needed.size())needed[id/atlasSlots]=1;
         }
         prepareWorldPages(needed,w.images);
     }
