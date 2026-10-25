@@ -22,7 +22,7 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT := $(CURDIR)/$(TARGET)
 export VPATH := $(CURDIR)/source $(CURDIR)/shaders
 export DEPSDIR := $(CURDIR)/$(BUILD)
-export OFILES := main.o save_queue.o quests.o commerce.o character.o combat.o core.o scene_io.o renderer.o exploration.o avatar_io.o hud.o journal.o doors.o npcs.o inventory.o equipment.o startup.o region_migration.o world.shbin.o
+export OFILES := main.o world_archive.o save_queue.o quests.o commerce.o character.o combat.o core.o scene_io.o renderer.o exploration.o avatar_io.o hud.o journal.o doors.o npcs.o inventory.o equipment.o startup.o region_migration.o world.shbin.o
 export INCLUDE := -I$(CURDIR)/include -I$(CTRULIB)/include -I$(CURDIR)/build
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 export _3DSXFLAGS += --smdh=$(CURDIR)/$(TARGET).smdh
