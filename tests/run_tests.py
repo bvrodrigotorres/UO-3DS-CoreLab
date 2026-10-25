@@ -53,6 +53,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/equipment_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/equipment.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
 
+    def test_quests_and_conversations(self):
+        binary=Path(self.temp.name)/'quest43_tests'
+        sources=['tests/quest43_tests.cpp','source/quests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_startup_and_campaigns(self):
         binary=Path(self.temp.name)/'startup_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/startup_tests.cpp'),str(ROOT/'source/startup.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)

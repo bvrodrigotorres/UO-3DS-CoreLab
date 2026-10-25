@@ -48,7 +48,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;ground={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=useMode=false;dressed=accessories=false;
+    path=p;ground={};quests={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=useMode=false;dressed=accessories=false;
     std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -68,7 +68,7 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&(!std::memcmp(b.data(),"UIN1",4)||!std::memcmp(b.data(),"UIN2",4)||!std::memcmp(b.data(),"UIN3",4)||!std::memcmp(b.data(),"UIN4",4)||!std::memcmp(b.data(),"UIN5",4)||!std::memcmp(b.data(),"UIN6",4)||!std::memcmp(b.data(),"UIN7",4))&&get(b,4)==identity&&get(b,8)==chests.size();
+    bool ok=b.size()>=20&&b.size()<=524288&&b[0]=='U'&&b[1]=='I'&&b[2]=='N'&&b[3]>='1'&&b[3]<='8'&&get(b,4)==identity&&get(b,8)==chests.size();
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
@@ -84,7 +84,8 @@ void Inventory::init(const World&w,const std::string&p){
     }
     bool legacy=b.size()>=4&&b[3]=='1';
     std::array<int,11>loaded;loaded.fill(-1);
-    bool hasGround=b.size()>=4&&b[3]=='7';
+    bool hasQuests=b.size()>=4&&b[3]=='8';
+    bool hasGround=b.size()>=4&&(b[3]=='7'||hasQuests);
     bool expanded=b.size()>=4&&(b[3]=='6'||hasGround);
     int slots=expanded?11:8;
     bool remembered=b.size()>=4&&(b[3]=='5'||expanded);
@@ -113,7 +114,11 @@ void Inventory::init(const World&w,const std::string&p){
         }
         groundFormat=true;
     }
-    if(!ok||pos!=b.size()-4){writable=false;ground={};backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
+    if(ok&&hasQuests){
+        if(pos+QuestCount*16!=b.size()-4)ok=false;
+        else for(unsigned i=0;i<QuestCount;++i){auto&q=quests[i];q={get(b,pos),get(b,pos+4),get(b,pos+8),get(b,pos+12)};pos+=16;if(!validQuest(i,q))ok=false;}
+    }
+    if(!ok||pos!=b.size()-4){writable=false;ground={};quests={};backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
     restored=true;equipment=loaded;if(legacy)seedGear();
     message=input==path?"INVENTARIO RESTAURADO":"INVENTARIO RECUPERADO";
@@ -234,20 +239,22 @@ void Inventory::open(const World&w,const Actor&a){
     opened=nearest(w,a);message=opened<0?"ACERCATE AL LADO DE UN COFRE":"COFRE ABIERTO - TOCA UN OBJETO";
 }
 bool Inventory::persist(std::string&error,SaveRename renameFile){
+    bool hasQuests=false;for(const auto&q:quests)if(q.state)hasQuests=true;
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
     bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
     bool expanded=false;for(size_t s=8;s<11;++s)if(equipment[s]>=0||lastEquipment[s]>=0)expanded=true;
-    if(groundFormat)expanded=true;
+    if(groundFormat||hasQuests)expanded=true;
     if(expanded){extended=true;remembered=true;}
     size_t slots=expanded?11:8;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(groundFormat?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    std::vector<uint8_t>b={'U','I','N',uint8_t(hasQuests?'8':groundFormat?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     size_t capacity=128+backpack.size()*8;for(const auto&c:chests)capacity+=4+c.items.size()*8;for(const auto&p:ground)capacity+=16+p.items.size()*12;b.reserve(capacity);
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
     append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));
-    if(groundFormat){unsigned count=0;for(const auto&pile:ground)if(!pile.items.empty())++count;put(b,count);
+    if(groundFormat||hasQuests){unsigned count=0;for(const auto&pile:ground)if(!pile.items.empty())++count;put(b,count);
         for(const auto&pile:ground)if(!pile.items.empty()){put(b,pile.position.x);put(b,pile.position.y);put(b,pile.position.z);put(b,pile.items.size());
             for(size_t i=0;i<pile.items.size();++i){put(b,pile.items[i].type);put(b,pile.items[i].count);put(b,unsigned(std::max(1.f,std::min(180000.f,std::ceil(pile.remaining[i]*1000)))));}}
     }
+    if(hasQuests)for(const auto&q:quests){put(b,q.state);put(b,q.count);put(b,q.giver);put(b,q.signature);}
     put(b,hash(b));
     if(saveSink&&renameFile==std::rename){if(saveSink(path,std::move(b)))return true;error="GUARDADO OCUPADO: REINTENTA";return false;}
     std::string tmp=path+".tmp",bak=path+".bak";
@@ -323,6 +330,13 @@ bool Inventory::consume(size_t index,SaveRename renameFile){
     if(!writable||index>=backpack.size()||!itemHealing(backpack[index].type)){message="ESTE OBJETO NO CURA";return false;}
     Bag previous=backpack;if(!--backpack[index].count)backpack.erase(backpack.begin()+index);
     if(!persist(message,renameFile)){backpack=std::move(previous);return false;}return true;
+}
+bool Inventory::commitQuest(unsigned id,const QuestProgress&next,Bag items,SaveRename renameFile){
+    if(!writable||id>=QuestCount||!validQuest(id,next)||items.size()>BagSlots)return false;
+    std::array<bool,ItemTypes>used{};
+    for(auto item:items){if(item.type>=ItemTypes||!item.count||(used[item.type]&&itemDefs[item.type].stackable)||(!itemDefs[item.type].stackable&&item.count!=1))return false;used[item.type]=true;}
+    auto before=quests[id];auto previous=backpack;quests[id]=next;backpack=std::move(items);
+    if(!persist(message,renameFile)){quests[id]=before;backpack=std::move(previous);return false;}return true;
 }
 bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFile){
     if(!writable||type==0||type>=ItemTypes||!price||price>65535){message="COMERCIO NO DISPONIBLE";return false;}

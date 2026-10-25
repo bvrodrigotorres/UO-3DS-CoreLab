@@ -12,7 +12,7 @@ bool inheritRegionInventory(const World&oldWorld,const Inventory&oldInventory,co
             if(!used[i]&&old.art==candidate.art&&old.z==candidate.z&&old.x+oldWorld.originX==candidate.x+newWorld.originX&&old.y+oldWorld.originY==candidate.y+newWorld.originY){contents[i].items=chest.items;used[i]=true;found=true;break;}}
         if(!found){error="UN COFRE ORIGINAL NO COINCIDE";return false;}
     }
-    next.chests=std::move(contents);next.backpack=oldInventory.backpack;next.equipment=oldInventory.equipment;next.lastEquipment=oldInventory.lastEquipment;next.dressed=oldInventory.dressed;next.accessories=oldInventory.accessories;error.clear();return true;
+    next.chests=std::move(contents);next.backpack=oldInventory.backpack;next.quests=oldInventory.quests;next.equipment=oldInventory.equipment;next.lastEquipment=oldInventory.lastEquipment;next.dressed=oldInventory.dressed;next.accessories=oldInventory.accessories;error.clear();return true;
 }
 bool migrateRegion(const std::string&oldRoot,const std::string&newRoot,const World&w,std::string&message){
     if(std::ifstream(newRoot+"campaign.sav").good()||std::ifstream(newRoot+"campaign.sav.bak").good())return true;

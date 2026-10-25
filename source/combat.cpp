@@ -56,6 +56,7 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     *pool={true,npcs.all()[index].position,0,unsigned(roll(0,6))};
     auto&n=npcs.combatants()[index];n.alive=false;n.hostile=false;n.aggressionOrder=0;n.moving=false;n.progress=1;n.from=n.position;
     auto&v=mob[index];v.hits=0;v.respawn=float(n.respawnSeconds);
+    if(onKill)onKill(n);
     auto slot=std::find_if(corpses.begin(),corpses.end(),[](const Corpse&c){return !c.active;});
     if(slot==corpses.end())slot=std::min_element(corpses.begin(),corpses.end(),[](const Corpse&a,const Corpse&b){return a.decay<b.decay;});
     inv.closeExternal(&slot->loot);*slot=Corpse{};slot->active=true;slot->position=n.position;slot->style=n.style;slot->direction=n.direction;slot->decay=90;slot->name=n.name;

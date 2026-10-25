@@ -95,7 +95,7 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
     text(fb,20,199,"Y: CURAR | A: ATACAR | X: OBJ",ink);
     text(fb,20,209,"SELECT: TECHOS | L/R: PAGINAS",ink);
-    text(fb,20,219,"START: PAUSA | DESLIZA 1/5",ink);
+    text(fb,20,219,"START: PAUSA | DESLIZA 1/6",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
 void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool meditating){
@@ -275,6 +275,17 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
     if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
 }
 
+void drawQuests(uint8_t*fb,const QuestPanel&p){
+    drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
+    text(fb,20,14,"CONVERSACIONES Y MISIONES",ink);
+    for(unsigned i=0;i<2;++i){box(fb,18+i*144,30,140,22,p.selected==i?gold:paper);text(fb,24+i*144,38,i?"SUMINISTROS":"CEMENTERIO",ink);}
+    text(fb,20,60,p.speaker,ink,1,46);text(fb,20,72,p.profession,ink,1,46);box(fb,18,85,284,1,gold);
+    for(unsigned i=0;i<3;++i)text(fb,20,94+i*13,p.dialogue[i],ink,1,46);
+    text(fb,20,139,p.heading,ink,1,46);text(fb,20,153,p.objective,ink,1,46);text(fb,20,167,p.reward,ink,1,46);
+    text(fb,20,184,p.message,ink,1,46);
+    box(fb,18,201,284,21,gold);text(fb,24,208,p.button,ink,1,44);
+    text(fb,20,223,"A: HABLAR | TOCA MISION | L/R: PAGINA",ink,1,46);
+}
 void drawTitle(uint8_t*fb,bool loading){
     canvasWidth=400;
     const Color gold={238,205,128};
@@ -319,7 +330,7 @@ void drawStartMenu(uint8_t*fb,const StartMenu&m,bool canContinue){
     drawHud(fb,{"ULTIMA ONLINE 3DS",opts?"OPCIONES":confirm?"NUEVA PARTIDA":"INICIO",{}});
     const Color ink={55,37,22},gold={174,131,64};
     std::vector<std::string>rows;
-    if(opts){const char*roofs[]={"AUTO","OCULTOS","COMPLETOS"};const char*pages[]={"DIAGNOSTICO","MAPA","INVENTARIO","COMERCIO","HABILIDADES"};
+    if(opts){const char*roofs[]={"AUTO","OCULTOS","COMPLETOS"};const char*pages[]={"DIAGNOSTICO","MAPA","INVENTARIO","COMERCIO","HABILIDADES","MISIONES"};
         rows={std::string("TECHOS: ")+roofs[m.options.roofs],"ZOOM DEL MAPA: "+std::to_string(m.options.zoom)+"X",std::string("PAGINA: ")+pages[m.options.page],"VOLVER"};
     }else if(confirm)rows={"CANCELAR","SI, NUEVO JUEGO"};
     else rows={"NUEVO JUEGO",canContinue?"CONTINUAR":"CONTINUAR - SIN PARTIDA","OPCIONES","SALIR DEL JUEGO"};

@@ -24,6 +24,8 @@ struct Vertex {float x,y,z,u,v,r,g,b,a;};
 enum class PixelMode { World,Support,Character,Translucent };
 struct Batch {C3D_Tex*texture;int first,count;PixelMode mode;};
 static PixelMode pixelMode=PixelMode::World;
+static QuestMarker questMarker;
+void setQuestMarker(const QuestMarker&marker){questMarker=marker;}
 static Vertex*buffer;
 static DVLB_s* shader;
 static shaderProgram_s program;
@@ -652,6 +654,21 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         if(!e.player&&npcs&&e.npc>=0&&size_t(e.npc)<npcs->all().size()&&npcs->hasPopulation()){int style=npcs->all()[e.npc].style;if(style>=0&&size_t(style)<npcs->styles().size())pivot=npcs->styles()[style].pivotY+14.f;}
         std::string value=combatText(e);const auto color=combatTextColor(e);float x=overheadPixelOrigin(p.x-overheadFont.width(value)/2.f+int(e.seed%9)-4),y=overheadPixelOrigin(p.y-pivot-10-e.age*25),alpha=std::min(1.f,(1.2f-e.age)*4);
         labelText(x+1,y+1,value,false,0,0,0,alpha);labelText(x,y,value,true,0,0,0,alpha);labelText(x,y,value,false,color[0],color[1],color[2],alpha);
+    }
+    if(questMarker.active){
+        const auto saved=pixelMode;pixelMode=PixelMode::Translucent;
+        float dx=questMarker.x-cameraX,dy=questMarker.y-cameraY;
+        float vx=dx-dy,vy=dx+dy,length=std::sqrt(vx*vx+vy*vy);
+        if(length<.01f){vx=0;vy=-1;}else {vx/=length;vy/=length;}
+        auto triangle=[&](float radius,float red,float green,float blue){
+            Point p[]={{200+vx*radius,23+vy*radius},{200-vx*radius*.6f-vy*radius*.7f,23-vy*radius*.6f+vx*radius*.7f},{200-vx*radius*.6f+vy*radius*.7f,23-vy*radius*.6f-vx*radius*.7f}};
+            for(const auto&v:p)push({v.x,v.y,WorldDepthZ,0,1,red,green,blue,1},&white);
+        };
+        triangle(14,0,0,0);triangle(11,1,.8f,.15f);
+        const std::string hint=std::max(std::abs(dx),std::abs(dy))<=1?"HABLA PARA COBRAR":"VUELVE POR TU PREMIO";
+        float x=overheadPixelOrigin(200-overheadFont.width(hint)/2.f);
+        labelText(x+1,43,hint,false,0,0,0);labelText(x,42,hint,false,1,.85f,.2f);
+        pixelMode=saved;
     }
     C3D_BindProgram(&program);C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER,uniformProjection,&projection);
     auto attrs=C3D_GetAttrInfo();AttrInfo_Init(attrs);AttrInfo_AddLoader(attrs,0,GPU_FLOAT,3);AttrInfo_AddLoader(attrs,1,GPU_FLOAT,2);AttrInfo_AddLoader(attrs,2,GPU_FLOAT,4);

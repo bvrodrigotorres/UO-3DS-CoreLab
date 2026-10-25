@@ -32,11 +32,11 @@ bool write(const std::string&p,Bytes b,std::string&error,SaveRename renameFile){
 }
 }
 bool GameOptions::load(const std::string&p){
-    Bytes b{};if(!read(p,"UOP1",b)||b[4]>2||b[5]<1||b[5]>4||b[6]>4||b[7]||get(b,8))return false;
+    Bytes b{};if(!read(p,"UOP1",b)||b[4]>2||b[5]<1||b[5]>4||b[6]>5||b[7]||get(b,8))return false;
     roofs=b[4];zoom=b[5];page=b[6];return true;
 }
 bool GameOptions::save(const std::string&p,std::string&error,SaveRename renameFile)const{
-    if(roofs<0||roofs>2||zoom<1||zoom>4||page<0||page>4)return false;
+    if(roofs<0||roofs>2||zoom<1||zoom>4||page<0||page>5)return false;
     Bytes b{{'U','O','P','1'}};b[4]=roofs;b[5]=zoom;b[6]=page;return write(p,b,error,renameFile);
 }
 std::string Campaign::prefix(uint32_t gen)const{return gen?"game-"+std::to_string(gen)+"-":"";}
@@ -74,7 +74,7 @@ MenuAction StartMenu::activate(bool canContinue){
     if(page==MenuPage::Options){
         if(selected==0)options.roofs=(options.roofs+1)%3;
         if(selected==1)options.zoom=options.zoom%4+1;
-        if(selected==2)options.page=(options.page+1)%5;
+        if(selected==2)options.page=(options.page+1)%6;
         if(selected==3)back();
         return MenuAction::None;
     }

@@ -34,4 +34,5 @@ unsigned rendererUploads();
 bool hasRunAnimation();
 unsigned renderListBuilds();
 void invalidateRenderList();
+void setQuestMarker(const QuestMarker&);
 }

@@ -3,6 +3,7 @@
 #include "core.hpp"
 #include "exploration.hpp"
 #include "save_dispatch.hpp"
+#include "quest_state.hpp"
 #include <array>
 #include <functional>
 namespace lab {
@@ -52,6 +53,8 @@ public:
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);
     Bag backpack;
+    std::array<QuestProgress,QuestCount>quests{};
+    bool commitQuest(unsigned,const QuestProgress&,Bag,SaveRename=std::rename);
     std::array<GroundPile,32>ground;
     std::vector<Chest> chests;
     int opened=-1,bagPage=0,detailType=-1;

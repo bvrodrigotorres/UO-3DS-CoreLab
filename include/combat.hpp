@@ -21,6 +21,7 @@ class Combat {
 public:
     std::array<DamageVisual,32>damage{};std::array<BloodPool,32>blood{};
     std::array<Corpse,32>corpses{};int target=-1;bool attacking=false;std::string message;
+    std::function<void(const Npc&)>onKill;
     void locate(const Actor&a){playerPosition=a;}
     bool useHealing(Inventory&,size_t,PlayerStatus&,SaveRename=std::rename);
     bool meditating=false;float meditationPulse=0;

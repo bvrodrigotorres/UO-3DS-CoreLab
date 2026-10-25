@@ -16,6 +16,7 @@
 #include "hud.hpp"
 #include "region_migration.hpp"
 #include "resource_preparation.hpp"
+#include "quests.hpp"
 #include <3ds.h>
 #include <cstdio>
 #include <cmath>
@@ -165,7 +166,7 @@ int main(){
 
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
-    lab::TouchPages pages;pages.count=5;lab::Journal journal;std::string journalError;
+    lab::TouchPages pages;pages.count=6;lab::Journal journal;std::string journalError;
     bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
     const std::string saveRoot=worldRoot;
     lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
@@ -311,6 +312,8 @@ int main(){
     }
     std::vector<lab::Actor>occupants;occupants.reserve(npcs.all().size()*2+2);
     lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);combat.locate(actor);
+    lab::Quests quests;quests.setup(*w,npcs);lab::setQuestMarker({});
+    combat.onKill=[&](const lab::Npc&npc){if(authentic)quests.killed(*w,npc,inventory);};
     auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
     lab::AsyncSaves*asyncWriter=nullptr;
     auto persistVitals=[&](){if(asyncWriter&&!asyncWriter->flush()){saveMessage="ERROR SD: GUARDADO PENDIENTE";return false;}bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
@@ -331,6 +334,7 @@ int main(){
     lab::ResourcePreparation pausedResources;
     auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage,sink);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
     auto presentPause=[&](){
+        lab::setQuestMarker(authentic?quests.marker(npcs,inventory):lab::QuestMarker{});
         // Pump only rendering/I/O. Never advance NPCs, combat, doors or timers
         // while paused, including after a developer teleport.
         if(pausedResources.pending()){
@@ -465,12 +469,16 @@ int main(){
                 else if(selected!=unsigned(skillsMenu.selected))skillsMenu.message.clear();
             }
             if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)commerce.tap(*w,npcs,actor,inventory,pages.startX,pages.startY);
+            if(!changed&&oldPage==5&&authentic&&dx*dx+dy*dy<144){
+                if(pages.startY>=30&&pages.startY<52&&pages.startX>=18&&pages.startX<302)quests.select(pages.startX>=162?1:0);
+                if(pages.startY>=201&&pages.startY<226&&pages.startX>=18&&pages.startX<302)quests.interact(*w,npcs,actor,inventory);
+            }
             pageChanged=true;
         }
         if(authentic)inventory.tickGround(dt);
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
         if(authentic&&(down&KEY_X))combat.select(npcs,actor,true);
-        if(authentic&&(down&KEY_A))combat.toggle(npcs,actor);
+        if(authentic&&(down&KEY_A)){if(pages.page==5)quests.interact(*w,npcs,actor,inventory);else combat.toggle(npcs,actor);}
         if(authentic){
             occupants.clear();occupants.push_back(actor);if(moving)occupants.push_back(from);npcs.addOccupants(occupants);
             if(doors.update(privateWorld,dt,occupants))lab::invalidateRenderList();
@@ -520,6 +528,7 @@ int main(){
                 if(!lab::selectEquipment(key|4096))lab::selectEquipment(key);
             }else lab::selectEquipment(key);
         }
+        lab::setQuestMarker(authentic?quests.marker(npcs,inventory):lab::QuestMarker{});
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||now-lastHud>=200||down||pageChanged||saveNotice){
@@ -549,6 +558,7 @@ int main(){
             if(authentic&&hasNpcs)hud.lines.emplace_back(lab::rendererNpcPoseStreaming()?"NPC SPRITES: CACHE 4 MIB":"NPC SPRITES: LEGACY (SIN POSES)");
             if(!combatArtError.empty())hud.lines.push_back(combatArtError);
             if(!combat.message.empty())hud.lines.push_back(combat.message);
+            if(!quests.message.empty())hud.lines.push_back(quests.message);
             if(playerStatus.skills.notice>0)hud.lines.push_back(playerStatus.skills.message);
             if(!saveMessage.empty())hud.lines.push_back(saveMessage);
             if(authentic&&!equipmentError.empty())hud.lines.push_back(equipmentError);
@@ -561,7 +571,8 @@ int main(){
             if(saveState.error)hud.lines.emplace_back("ERROR SD: GUARDADO PENDIENTE");
             }
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
-            if(pages.page==4)lab::drawSkills(bottom,playerStatus.skills,skillsMenu,combat.meditating);
+            if(pages.page==5)lab::drawQuests(bottom,quests.panel(*w,npcs,actor,inventory));
+            else if(pages.page==4)lab::drawSkills(bottom,playerStatus.skills,skillsMenu,combat.meditating);
             else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt,authentic&&hasNpcs?&npcs:nullptr);
             else if(pages.page==3)lab::drawCommerce(bottom,inventory,commerce,&itemIcons);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons,&inventoryDrag,&playerStatus);
