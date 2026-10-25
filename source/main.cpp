@@ -136,7 +136,8 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
 }
 
 int main(){
-    gfxInitDefault();bool new3ds=false;APT_CheckNew3DS(&new3ds);
+    // Isolate scanout buffers from the linear texture/vertex streaming heap.
+    gfxInit(GSP_BGR8_OES,GSP_BGR8_OES,true);bool new3ds=false;APT_CheckNew3DS(&new3ds);
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
@@ -529,6 +530,7 @@ int main(){
                 auto greeting=npcs.greeting(actor);
                 hud.lines.push_back(greeting.empty()?"NPC "+std::to_string(npcs.all().size())+" | POBLACION LOCAL":greeting);
             }
+            if(authentic&&hasNpcs)hud.lines.emplace_back(lab::rendererNpcPoseStreaming()?"NPC SPRITES: CACHE 4 MIB":"NPC SPRITES: LEGACY (SIN POSES)");
             if(!combatArtError.empty())hud.lines.push_back(combatArtError);
             if(!combat.message.empty())hud.lines.push_back(combat.message);
             if(playerStatus.skills.notice>0)hud.lines.push_back(playerStatus.skills.message);

@@ -28,6 +28,7 @@ void drawWorld(C3D_RenderTarget*,const World&,const Actor&,float cameraX,float c
 size_t drawnObjects();
 bool rendererOverflow();
 bool rendererTextureError();
+bool rendererNpcPoseStreaming();
 unsigned rendererResourceWaits();
 unsigned rendererUploads();
 bool hasRunAnimation();

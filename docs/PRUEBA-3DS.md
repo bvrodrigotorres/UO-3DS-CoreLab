@@ -171,3 +171,10 @@ Actualizar ejecutable y SMDH sobre v0.39, conservando la carpeta de animaciones
 caballo debe mirar hacia donde avanza. El minimapa añade puntos rojos para
 hostiles, grises para criaturas neutrales, amarillos para humanos y celeste para
 el jugador. Probar movimiento, zoom, hostilidad al atacar, muerte y respawn.
+
+## v0.41
+
+Copiar toda la carpeta `3ds` del ZIP privado, incluidos `britain-expanded/npc-poses.bin`
+y `npc-poses/`. No borrar mapas ni partidas. Diagnóstico: `NPC SPRITES: CACHE 4 MIB`.
+Repetir bosque, persecución, curación y saqueo durante una sesión prolongada.
+Detalles: [v0.41](v0.41.md).

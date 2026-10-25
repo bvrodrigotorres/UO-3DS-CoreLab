@@ -238,3 +238,10 @@ Caballo orientado con el mismo ajuste que el personaje a pie. Puntos dinámicos
 en el minimapa: hostiles rojos, criaturas neutrales grises, NPC humanos amarillos
 y jugador celeste. Conserva la caché y el refresco de la pantalla inferior.
 [Instalación y comprobaciones](docs/v0.40.md).
+
+## v0.41
+
+Caché fija para poses de NPC y cadáveres, lecturas protegidas frente al terreno,
+menor presión de memoria y buffers de pantalla aislados en VRAM. Instalar también
+los nuevos recursos privados de `npc-poses`. Ver [instrucciones y alcance de la
+corrección](docs/v0.41.md).

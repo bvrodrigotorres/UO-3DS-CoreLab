@@ -87,32 +87,34 @@ SaveQueueStatus AsyncSaves::status()const{Guard guard(impl->mutex);return {unsig
 
 #include <fstream>
 #include <map>
+#include <set>
 namespace lab {
 struct AsyncResources::Impl {
     struct Ready{std::string path;ResourceRead file;};
-    Mutex mutex;std::map<std::string,unsigned>requested;std::vector<Ready>ready;
+    Mutex mutex;std::map<std::string,unsigned>requested;std::set<std::string>protectedReads;std::vector<Ready>ready;
     AsyncSaves worker;
     Impl():worker([this](const std::string&path,const std::vector<uint8_t>&meta,std::string&){
         auto get=[&](unsigned i){return uint32_t(meta[i])|uint32_t(meta[i+1])<<8|uint32_t(meta[i+2])<<16|uint32_t(meta[i+3])<<24;};
         unsigned maximum=get(0);uint32_t expected=get(4);ResourceRead result;std::ifstream f(path,std::ios::binary|std::ios::ate);
         if(f&&f.tellg()>0&&f.tellg()<=std::streamoff(maximum)){result.bytes.resize(size_t(f.tellg()));f.seekg(0);f.read((char*)result.bytes.data(),result.bytes.size());result.valid=bool(f);if(result.valid&&expected){uint32_t h=2166136261u;for(auto b:result.bytes)h=(h^b)*16777619u;result.valid=h==expected;}}
         if(!result.valid)result.bytes.clear();
-        Guard guard(mutex);size_t bytes=result.bytes.size();for(const auto&r:ready)bytes+=r.file.bytes.size();
+        Guard guard(mutex);if(requested.find(path)==requested.end())return true;size_t bytes=result.bytes.size();for(const auto&r:ready)bytes+=r.file.bytes.size();
         while(bytes>4*1024*1024&&!ready.empty()){bytes-=ready.front().file.bytes.size();auto path=ready.front().path;requested.erase(path);ready.erase(ready.begin());}
         ready.push_back({path,std::move(result)});return true;
     }){ready.reserve(4);}
 };
 AsyncResources::AsyncResources():impl(new Impl){}AsyncResources::~AsyncResources()=default;
 bool AsyncResources::start(){return impl->worker.start();}
-bool AsyncResources::request(const std::string&path,unsigned maximum,uint32_t checksum){
-    {Guard guard(impl->mutex);if(impl->requested.find(path)!=impl->requested.end())return true;if(!maximum||maximum>4*1024*1024)return false;
+bool AsyncResources::request(const std::string&path,unsigned maximum,uint32_t checksum,bool protectedRead){
+    {Guard guard(impl->mutex);if(impl->requested.find(path)!=impl->requested.end()){if(protectedRead)impl->protectedReads.insert(path);return true;}if(!maximum||maximum>4*1024*1024)return false;
         size_t reserved=maximum;for(const auto&r:impl->requested)reserved+=r.second;
-        while((impl->requested.size()>=4||reserved>4*1024*1024)&&!impl->ready.empty()){const auto&stale=impl->ready.front().path;auto found=impl->requested.find(stale);if(found!=impl->requested.end()){reserved-=found->second;impl->requested.erase(found);}impl->ready.erase(impl->ready.begin());}
+        while(impl->requested.size()>=4||reserved>4*1024*1024){auto victim=std::find_if(impl->ready.begin(),impl->ready.end(),[&](const Impl::Ready&r){return impl->protectedReads.count(r.path)==0;});if(victim==impl->ready.end())break;auto found=impl->requested.find(victim->path);if(found!=impl->requested.end()){reserved-=found->second;impl->requested.erase(found);}impl->ready.erase(victim);}
         if(impl->requested.size()>=4||reserved>4*1024*1024)return false;
-        impl->requested.emplace(path,maximum);}
+        impl->requested.emplace(path,maximum);if(protectedRead)impl->protectedReads.insert(path);}
     std::vector<uint8_t>meta;for(unsigned n:{maximum,unsigned(checksum)})for(unsigned i=0;i<4;++i)meta.push_back(uint8_t(n>>(8*i)));
     if(impl->worker.enqueue(path,std::move(meta)))return true;
-    Guard guard(impl->mutex);impl->requested.erase(path);return false;
+    Guard guard(impl->mutex);impl->requested.erase(path);impl->protectedReads.erase(path);return false;
 }
-bool AsyncResources::take(const std::string&path,ResourceRead&out){Guard guard(impl->mutex);auto found=std::find_if(impl->ready.begin(),impl->ready.end(),[&](const Impl::Ready&r){return r.path==path;});if(found==impl->ready.end())return false;out=std::move(found->file);impl->ready.erase(found);impl->requested.erase(path);return true;}
+void AsyncResources::retain(const std::vector<std::string>&paths){Guard guard(impl->mutex);for(auto it=impl->ready.begin();it!=impl->ready.end();){if(impl->protectedReads.count(it->path)&&std::find(paths.begin(),paths.end(),it->path)==paths.end()){impl->requested.erase(it->path);impl->protectedReads.erase(it->path);it=impl->ready.erase(it);}else ++it;}}
+bool AsyncResources::take(const std::string&path,ResourceRead&out){Guard guard(impl->mutex);auto found=std::find_if(impl->ready.begin(),impl->ready.end(),[&](const Impl::Ready&r){return r.path==path;});if(found==impl->ready.end())return false;out=std::move(found->file);impl->ready.erase(found);impl->requested.erase(path);impl->protectedReads.erase(path);return true;}
 }

@@ -26,7 +26,8 @@ public:
     AsyncResources();~AsyncResources();
     bool start();
     // At most four outstanding reads and 4 MiB completed data, never GPU work.
-    bool request(const std::string&,unsigned maximumBytes,uint32_t checksum=0);
+    bool request(const std::string&,unsigned maximumBytes,uint32_t checksum=0,bool protectedRead=false);
     bool take(const std::string&,ResourceRead&);
+    void retain(const std::vector<std::string>&);
 };
 }

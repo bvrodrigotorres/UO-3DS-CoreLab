@@ -109,11 +109,12 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
     auto found=cache.find(file);
     if(found==cache.end()){
         std::ifstream f(root+file,std::ios::binary|std::ios::ate);if(!f||f.tellg()<604||f.tellg()>8*1024*1024)return false;
-        std::vector<uint8_t>b(size_t(f.tellg()));f.seekg(0);f.read((char*)b.data(),b.size());
+        const size_t incoming=size_t(f.tellg());
+        while(!cache.empty()&&(cache.size()>=24||cacheBytes+incoming>4*1024*1024)){auto oldest=std::min_element(cacheUsed.begin(),cacheUsed.end(),[](const auto&a,const auto&b){return a.second<b.second;});auto victim=cache.find(oldest->first);cacheBytes-=victim->second.size();cache.erase(victim);cacheUsed.erase(oldest);}
+        std::vector<uint8_t>b(incoming);f.seekg(0);f.read((char*)b.data(),b.size());
         bool mount=!std::memcmp(b.data(),"UAM1",4);
         if(!f||(!mount&&std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4)&&std::memcmp(b.data(),"UAP3",4))||
            (b[8]|unsigned(b[9])<<8)!=(mount?256u:144u)||b[10]||b[11]||b.size()<(mount?1048u:604u)||get(b,12)!=b.size()-20||get(b,16)!=hash(b.data()+20,b.size()-20))return false;
-        while(!cache.empty()&&(cache.size()>=32||cacheBytes+b.size()>8*1024*1024)){auto oldest=std::min_element(cacheUsed.begin(),cacheUsed.end(),[](const auto&a,const auto&b){return a.second<b.second;});auto victim=cache.find(oldest->first);cacheBytes-=victim->second.size();cache.erase(victim);cacheUsed.erase(oldest);}
         cacheBytes+=b.size();found=cache.emplace(file,std::move(b)).first;
     }
     cacheUsed[file]=++cacheClock;const auto&b=found->second;
