@@ -45,12 +45,16 @@ const std::vector<uint8_t>*WorldArchive::sector(unsigned key,std::string&error){
     if(!f.read((char*)b.data(),b.size())||fnv(b.data(),b.size())!=e.checksum){error="SECTOR INCOMPLETO O CORRUPTO";return nullptr;}
     slot->data=std::move(b);slot->key=int(key);slot->used=++tick;return &slot->data;
 }
-bool WorldArchive::window(int x,int y,unsigned side,World&out,std::string&error){
+bool WorldArchive::window(int x,int y,unsigned side,World&out,std::string&error,unsigned limit){
     if(path.empty()||!side||side>WindowSide||x<0||y<0||x>mapWidth-int(side)||y>mapHeight-int(side)){error="VENTANA FUERA DE BRITANNIA";return false;}
     World next;next.width=next.height=int(side);next.originX=x;next.originY=y;next.startX=next.startY=int(side)/2;
-    next.vertices.assign((side+1)*(side+1),0);next.land.resize(side*side);
-    size_t maximum=0;for(int sx=x/64;sx<=(x+int(side)-1)/64;++sx)for(int sy=y/64;sy<=(y+int(side)-1)/64;++sy)maximum+=entries[unsigned(sx*rows+sy)].count;
-    next.objects.reserve(std::min(maximum,size_t(MaxObjects)));
+    // Count only included records: a 64-square sliding view may touch four
+    // sectors, but must not reserve the objects of all four entire sectors.
+    size_t maximum=0;
+    for(int sx=x/64;sx<=(x+int(side)-1)/64;++sx)for(int sy=y/64;sy<=(y+int(side)-1)/64;++sy){unsigned key=unsigned(sx*rows+sy);auto*b=sector(key,error);if(!b)return false;
+        for(unsigned i=0;i<entries[key].count;++i){const auto*r=b->data()+TerrainBytes+size_t(i)*7;int xx=sx*64+r[2],yy=sy*64+r[3];if(xx>=x&&yy>=y&&xx<x+int(side)&&yy<y+int(side))++maximum;}}
+    if(maximum>std::min(limit,MaxObjects)){error="SECTOR DEMASIADO DENSO PARA PRECARGA";return false;}
+    next.vertices.assign((side+1)*(side+1),0);next.land.resize(side*side);next.objects.reserve(maximum);
     for(int sx=x/64;sx<=(x+int(side)-1)/64;++sx)for(int sy=y/64;sy<=(y+int(side)-1)/64;++sy){unsigned key=unsigned(sx*rows+sy);auto*b=sector(key,error);if(!b)return false;
         const auto&e=entries[key];int ox=sx*64,oy=sy*64;
         for(int yy=std::max(y,oy);yy<=std::min(y+int(side),oy+64);++yy)for(int xx=std::max(x,ox);xx<=std::min(x+int(side),ox+64);++xx){size_t at=size_t((yy-oy)*65+xx-ox)*3;unsigned art=u16(b->data()+at);if(art>=landFlags.size()){error="TERRENO INVALIDO";return false;}
@@ -73,6 +77,16 @@ bool WorldArchive::window(int x,int y,unsigned side,World&out,std::string&error)
     for(size_t i=0;i<counts.size();++i)next.cells[i].reserve(counts[i]);
     for(size_t i=0;i<next.objects.size();++i){const auto&o=next.objects[i];next.cells[size_t(o.y)*side+o.x].push_back(i);}
     out=std::move(next);error.clear();return true;
+}
+bool WorldArchive::radar(int x,int y,unsigned side,const std::vector<uint16_t>&palette,Journal&out,std::string&error){
+    if(!side||side>128||x<0||y<0||x+int(side)>mapWidth||y+int(side)>mapHeight){error="RADAR FUERA DEL MAPA";return false;}
+    Journal j;j.width=j.height=side;j.originX=x;j.originY=y;j.map.resize(side*side*3);std::vector<int16_t>top(side*side,-32768);
+    auto color=[&](size_t at,unsigned art){uint16_t c=art<palette.size()?palette[art]:0;for(unsigned n=0;n<3;++n)j.map[at*3+n]=uint8_t(((c>>(10-n*5))&31)*255/31);};
+    for(int sx=x/64;sx<=(x+int(side)-1)/64;++sx)for(int sy=y/64;sy<=(y+int(side)-1)/64;++sy){unsigned key=unsigned(sx*rows+sy);auto*b=sector(key,error);if(!b)return false;
+        for(int yy=std::max(y,sy*64);yy<std::min(y+int(side),sy*64+64);++yy)for(int xx=std::max(x,sx*64);xx<std::min(x+int(side),sx*64+64);++xx){auto*r=b->data()+((yy-sy*64)*65+xx-sx*64)*3;size_t at=size_t(yy-y)*side+xx-x;top[at]=int8_t(r[2]);color(at,u16(r));}
+        for(unsigned i=0;i<entries[key].count;++i){auto*r=b->data()+TerrainBytes+size_t(i)*7;unsigned art=u16(r);int xx=sx*64+r[2],yy=sy*64+r[3];if(art>=heights.size()||r[2]>=64||r[3]>=64){error="RADAR INVALIDO";return false;}if(xx<x||yy<y||xx>=x+int(side)||yy>=y+int(side))continue;size_t at=size_t(yy-y)*side+xx-x;int z=int8_t(r[4])+heights[art];if(art>1&&z>=top[at]){top[at]=z;color(at,0x4000u+art);}}
+    }
+    out=std::move(j);error.clear();return true;
 }
 bool WorldArchive::verify(std::string&error){for(unsigned i=0;i<entries.size();++i)if(!sector(i,error))return false;error.clear();return true;}
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "core.hpp"
+#include "journal.hpp"
 #include <array>
 namespace lab {
 // Full-client geometry archive. No global World, GPU textures or save mutations.
@@ -15,13 +16,14 @@ class WorldArchive {
     std::vector<uint64_t>landFlags,staticFlags;
     std::vector<uint16_t>textures;
     std::vector<uint8_t>heights;
-    std::array<Slot,4>cache;
+    std::array<Slot,9>cache;
     const std::vector<uint8_t>*sector(unsigned,std::string&);
 public:
     static constexpr unsigned SectorSide=64,WindowSide=128,MaxObjects=65536;
     static constexpr size_t CacheBudget=512*1024;
     bool open(const std::string&,std::string&);
-    bool window(int x,int y,unsigned side,World&,std::string&);
+    bool window(int x,int y,unsigned side,World&,std::string&,unsigned maxObjects=MaxObjects);
+    bool radar(int x,int y,unsigned side,const std::vector<uint16_t>&colors,Journal&,std::string&);
     bool verify(std::string&);
     int width()const{return mapWidth;}
     int height()const{return mapHeight;}

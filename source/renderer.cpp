@@ -156,10 +156,11 @@ static size_t bytes,objects;
 static int used;
 static bool overflow;
 static std::vector<Batch> batches;
-static RenderCache renderCache;
+static RenderCache renderCache,aheadRenderCache;
 static RoofCutaway roofCutaway;
 static std::vector<Draw>mergedDraws,visibleDraws;
-static std::vector<unsigned char>neededWorld;
+static std::vector<unsigned char>neededWorld,aheadWorld,residentWorld;
+static int lookAheadX=0,lookAheadY=0;
 static constexpr int Capacity=65536;
 static void push(Vertex v,C3D_Tex*texture){
     if(used>=Capacity){overflow=true;return;}
@@ -432,30 +433,48 @@ void warmEquipment(unsigned current,const EquipmentArt&art){
     if(!(current&MountedBank)&&characterAppearance.enabled&&linearSpaceFree()>=6*1024*1024)prepareEquipment(current|4096u,art,ignored);
     prepareEquipment(current,art,ignored);
 }
-static void prepareWorldPages(const std::vector<unsigned char>&needed,int images){
+static void prepareWorldPages(const std::vector<unsigned char>&needed,int images,const std::vector<unsigned char>&ahead){
     if(!streamed)return;
-    ++textureClock;const uint64_t now=osGetTime();std::vector<unsigned char>resident(sheets.size());
-    for(size_t j=0;j<sheets.size();++j){resident[j]=sheets[j]!=nullptr;if(needed[j])sheetUsed[j]=textureClock;}
-    const int selected=worldRead.choose(needed,resident,worldRetry,now);if(selected<0){if(resourceReader)resourceReader->retain({});return;}const size_t i=unsigned(selected);
+    ++textureClock;const uint64_t now=osGetTime();residentWorld.assign(sheets.size(),0);
+    for(size_t j=0;j<sheets.size();++j){residentWorld[j]=sheets[j]!=nullptr;if(needed[j])sheetUsed[j]=textureClock;}
+    int selected=worldRead.choose(needed,residentWorld,worldRetry,now);
+    bool speculative=selected>=0&&!needed[unsigned(selected)];
+    if(selected<0&&resourceReader){
+        // Small, future-visible pages only. No speculative synchronous SD I/O.
+        for(size_t j=0;j<ahead.size();++j)if(ahead[j]&&!residentWorld[j]&&now>=worldRetry[j]&&sheetCosts[j]<=256*1024&&
+            (selected<0||sheetCosts[j]<sheetCosts[unsigned(selected)]))selected=int(j);
+        speculative=selected>=0;
+    }
+    if(selected<0){if(resourceReader)resourceReader->retain({});return;}const size_t i=unsigned(selected);
+    if(speculative&&worldRead.pending<0){
+        // Drop stale pages, never current/future-visible ones, to avoid a loop
+        // of evicting and re-reading the same speculative working set.
+        while(bytes+sheetCosts[i]>WorldTextureBudget||linearSpaceFree()<sheetCosts[i]+2*1024*1024){
+            int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&!ahead[j]&&(victim<0||sheetUsed[j]<sheetUsed[unsigned(victim)]))victim=int(j);
+            if(victim<0)return;
+            C3D_FrameSync();auto image=C2D_SpriteSheetGetImage(sheets[unsigned(victim)],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[unsigned(victim)]);sheets[unsigned(victim)]=nullptr;
+        }
+    }
     char name[32];std::snprintf(name,sizeof name,"atlas_%02u.t3x",unsigned(i));const auto path=atlasRoot+name;ResourceRead file;
-    if(!textureLoadsRemaining){++resourceWaits;return;}
+    if(!textureLoadsRemaining){if(!speculative)++resourceWaits;return;}
     if(resourceReader){
         resourceReader->retain({path});
-        if(worldRead.pending<0){if(resourceReader->request(path,sheetCosts[i],0,true))worldRead.pending=selected;++resourceWaits;return;}
-        if(!resourceReader->take(path,file)){++resourceWaits;return;}
-        worldRead.pending=-1;if(!needed[i]||sheets[i])return;
+        if(worldRead.pending<0){if(resourceReader->request(path,sheetCosts[i],0,true))worldRead.pending=selected;if(!speculative)++resourceWaits;return;}
+        if(!resourceReader->take(path,file)){if(!speculative)++resourceWaits;return;}
+        worldRead.pending=-1;if((!needed[i]&&!ahead[i])||sheets[i])return;
     }
     C3D_FrameSync();
     while(bytes+sheetCosts[i]>WorldTextureBudget||linearSpaceFree()<sheetCosts[i]+2*1024*1024){
-        int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&(victim<0||sheetUsed[j]<sheetUsed[victim]))victim=int(j);
-        if(victim>=0){auto image=C2D_SpriteSheetGetImage(sheets[victim],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[victim]);sheets[victim]=nullptr;continue;}
+        int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&(!speculative||!ahead[j])&&(victim<0||sheetUsed[j]<sheetUsed[unsigned(victim)]))victim=int(j);
+        if(victim>=0){auto image=C2D_SpriteSheetGetImage(sheets[unsigned(victim)],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[unsigned(victim)]);sheets[unsigned(victim)]=nullptr;continue;}
         if(linearSpaceFree()>=sheetCosts[i]+2*1024*1024)break;
+        if(speculative)break;
         victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));
     }
-    if((atlasSlots<32&&bytes+sheetCosts[i]>WorldTextureBudget)||linearSpaceFree()<sheetCosts[i]+2*1024*1024){textureFailure=true;worldRetry[i]=now+1000;return;}
+    if((atlasSlots<32&&bytes+sheetCosts[i]>WorldTextureBudget)||linearSpaceFree()<sheetCosts[i]+2*1024*1024){if(!speculative)textureFailure=true;worldRetry[i]=now+1000;return;}
     --textureLoadsRemaining;
     auto sheet=resourceReader?(file.valid&&file.bytes.size()==sheetCosts[i]?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):C2D_SpriteSheetLoad(path.c_str());
-    if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(int(atlasSlots),images-int(i)*int(atlasSlots)))){if(sheet)C2D_SpriteSheetFree(sheet);textureFailure=true;worldRetry[i]=now+1000;return;}
+    if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(int(atlasSlots),images-int(i)*int(atlasSlots)))){if(sheet)C2D_SpriteSheetFree(sheet);if(!speculative)textureFailure=true;worldRetry[i]=now+1000;return;}
     worldRetry[i]=0;auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);sheets[i]=sheet;bytes+=image.tex->size;++resourceUploads;
 }
 unsigned rendererResourceWaits(){return resourceWaits;}
@@ -468,13 +487,15 @@ bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
+void setWorldLookAhead(int dx,int dy){lookAheadX=dx;lookAheadY=dy;if(!dx&&!dy)aheadRenderCache.release();}
+void adoptWorldView(RoofCutaway&&prepared){renderCache.invalidate();aheadRenderCache.invalidate();roofCutaway=std::move(prepared);}
 void releaseWorldResources(){
     C3D_FrameSync();
     // Join the CPU reader before releasing its ready buffers. No scene or GPU
     // objects are accessed by this worker. Pose streaming has a separate reader.
     resourceReader.reset();worldRead.pending=-1;
     batches.clear();for(auto&sheet:sheets)if(sheet){C2D_SpriteSheetFree(sheet);sheet=nullptr;}bytes=0;
-    renderCache.release();roofCutaway=RoofCutaway{};
+    renderCache.release();aheadRenderCache.release();roofCutaway=RoofCutaway{};
     std::vector<Draw>().swap(mergedDraws);std::vector<Draw>().swap(visibleDraws);std::vector<unsigned char>().swap(neededWorld);
     std::fill(worldRetry.begin(),worldRetry.end(),0);std::fill(sheetUsed.begin(),sheetUsed.end(),0);
     resourceReader.reset(new AsyncResources);if(!resourceReader->start())resourceReader.reset();
@@ -514,7 +535,13 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;
             if(id!=NoImage&&id/atlasSlots<needed.size())needed[id/atlasSlots]=1;
         }
-        prepareWorldPages(needed,w.images);
+        aheadWorld.assign(sheets.size(),0);
+        if(lookAheadX||lookAheadY){Actor future{actor.x+lookAheadX*4,actor.y+lookAheadY*4,actor.z};
+            if(w.contains(future.x,future.y))for(const auto&d:aheadRenderCache.get(w,future,roofs!=RoofMode::Full))if(worldVisible(w,d,future.x,future.y,footZ,imageSizes)){
+                unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;if(id!=NoImage&&id/atlasSlots<aheadWorld.size()&&!needed[id/atlasSlots])aheadWorld[id/atlasSlots]=1;
+            }
+        }
+        prepareWorldPages(needed,w.images,aheadWorld);
     }
     if(npcs)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ);
     // Resource preparation can run behind the software loading screen without

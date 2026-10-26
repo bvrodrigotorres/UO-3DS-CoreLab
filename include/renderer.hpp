@@ -36,5 +36,8 @@ unsigned renderListBuilds();
 void invalidateRenderList();
 // Loading-screen-only fence: discard world pages and CPU staging, keep actors.
 void releaseWorldResources();
+class RoofCutaway;
+void adoptWorldView(RoofCutaway&&);
+void setWorldLookAhead(int dx,int dy);
 void setQuestMarker(const QuestMarker&);
 }

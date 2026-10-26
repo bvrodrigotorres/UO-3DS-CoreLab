@@ -9,6 +9,7 @@ class RoofCutaway {
     const World*world=nullptr;const Object*storage=nullptr;
     std::vector<int>group;std::vector<unsigned char>active;
 public:
+    size_t bytes()const{return group.capacity()*sizeof(int)+active.capacity();}
     void build(const World&w){
         world=&w;storage=w.objects.data();group.assign(w.objects.size(),-1);active.clear();
         std::vector<size_t>queue;

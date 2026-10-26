@@ -14,7 +14,7 @@ CXXFLAGS := $(CFLAGS) -std=gnu++17 -fno-rtti -fno-exceptions -fstack-usage
 LDFLAGS := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lcitro2d -lcitro3d -lctru -lm
 LIBDIRS := $(CTRULIB) $(PORTLIBS)
-APP_TITLE := UO CoreLab v0.44.1
+APP_TITLE := UO CoreLab v0.45
 APP_DESCRIPTION := Independent scene and walking experiment
 APP_AUTHOR := bvrodrigotorres
 export TOPDIR := $(CURDIR)
@@ -22,7 +22,7 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT := $(CURDIR)/$(TARGET)
 export VPATH := $(CURDIR)/source $(CURDIR)/shaders
 export DEPSDIR := $(CURDIR)/$(BUILD)
-export OFILES := main.o expedition_ui.o world_expedition.o world_archive.o save_queue.o quests.o commerce.o character.o combat.o core.o scene_io.o renderer.o exploration.o avatar_io.o hud.o journal.o doors.o npcs.o inventory.o equipment.o startup.o region_migration.o world.shbin.o
+export OFILES := main.o expedition_ui.o world_stream.o world_expedition.o world_archive.o save_queue.o quests.o commerce.o character.o combat.o core.o scene_io.o renderer.o exploration.o avatar_io.o hud.o journal.o doors.o npcs.o inventory.o equipment.o startup.o region_migration.o world.shbin.o
 export INCLUDE := -I$(CURDIR)/include -I$(CTRULIB)/include -I$(CURDIR)/build
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 export _3DSXFLAGS += --smdh=$(CURDIR)/$(TARGET).smdh

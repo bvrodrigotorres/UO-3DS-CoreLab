@@ -122,7 +122,7 @@ void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool medita
 void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt,const Npcs*npcs,bool expedition){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
-    (void)message;
+
     text(fb,20,14,"MINIMAPA",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
     box(fb,192,25,1,116,gold);
     // Inverse isometric projection: same world axes as the top screen.
@@ -160,7 +160,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     for(int d=-4;d<=4;++d){pixel(fb,103+d,JournalLayout::MapCenter,gold);pixel(fb,103,JournalLayout::MapCenter+d,gold);}
     box(fb,102,JournalLayout::MapCenter-1,3,3,{35,225,245});text(fb,175,JournalLayout::MapTop+2,"N",{244,222,160});
     text(fb,23,JournalLayout::ZoomTop,"-",ink);text(fb,153,JournalLayout::ZoomTop,"+",ink);
-    text(fb,56,JournalLayout::ZoomTop,"ZOOM "+std::to_string(zoom)+"X",ink);
+    text(fb,56,JournalLayout::ZoomTop,message=="PREPARANDO TERRENO..."?"CARGANDO...":"ZOOM "+std::to_string(zoom)+"X",ink);
     // The private image is the original human paperdoll gump, cropped/resized
     // by the exporter, not an invented equipment state or animated world sprite.
     if(inv&&equipment&&((equipment->currentKey==inv->equipmentMask()&&equipment->currentDoll.size()==76*104*4)||equipment->dolls.size()==8*76*104*4)){

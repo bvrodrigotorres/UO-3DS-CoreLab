@@ -389,6 +389,7 @@ int main(){
                 else {
                     lab::setQuestMarker({});
                     pause.message=lab::exploreBritannia(target,baseRoot,saveRoot+savePrefix+"expedition.sav",{actor.x+w->originX,actor.y+w->originY,actor.z},playerStatus,inventory,equipmentArt,statusArt,roofs);
+                    lab::setWorldLookAhead(0,0);
                     if(!lab::loadAtlases(w->images,error,worldRoot)){pause.message="ERROR AL RESTAURAR TEXTURAS: "+error;quit=true;break;}
                     lab::invalidateRenderList();pausedResources.restart();
                 }

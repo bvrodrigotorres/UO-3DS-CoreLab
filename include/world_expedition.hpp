@@ -11,6 +11,7 @@ public:
     bool load(const std::string&,std::string&);
     bool bind(World&,std::string&)const;
     Journal map(const World&)const;
+    const std::vector<uint16_t>&radarColors()const{return radar;}
     unsigned images()const{return count;}
 };
 inline int expeditionDestinationHit(bool alreadyOpen,int x,int y){return alreadyOpen&&x>=20&&x<300&&y>=62&&y<152?(y-62)/9:-1;}
