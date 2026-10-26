@@ -58,6 +58,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/packed_textures_tests.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
+    def test_expedition_npc_pilot(self):
+        binary=Path(self.temp.name)/'expedition_npcs_tests'
+        sources=['tests/expedition_npcs_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp','source/character.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_background_world_stream(self):
         binary=Path(self.temp.name)/'world_stream_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-pthread','-I'+str(ROOT/'include'),str(ROOT/'tests/world_stream_tests.cpp'),str(ROOT/'source/world_stream.cpp'),str(ROOT/'source/world_expedition.cpp'),str(ROOT/'source/world_archive.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)

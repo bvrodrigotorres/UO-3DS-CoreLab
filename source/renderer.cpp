@@ -10,6 +10,7 @@
 #include "npc_pose_cache.hpp"
 #include "view.hpp"
 #include "save_queue.hpp"
+#include "resource_preparation.hpp"
 #include "texture_pack.hpp"
 #include "packed_file_reader.hpp"
 #include <memory>
@@ -573,6 +574,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;if(id!=NoImage&&id/atlasSlots<aheadWorld.size()&&!needed[id/atlasSlots])aheadWorld[id/atlasSlots]=1;
             }
         }
+        bool missing=false;for(size_t i=0;i<needed.size();++i)if(needed[i]&&!sheets[i]){missing=true;break;}
+        textureLoadsRemaining=worldUploadAllowance(textureLoadsRemaining,missing);
         const auto beforeUploads=resourceUploads;const uint64_t beforeTime=osGetTime();
         prepareWorldPages(needed,w.images,aheadWorld);
         // The compact world archive uses many tiny pages. Admit a second small

@@ -388,9 +388,11 @@ int main(){
                 else if(!saves->flush())pause.message="ESPERA EL GUARDADO PENDIENTE";
                 else {
                     lab::setQuestMarker({});
-                    pause.message=lab::exploreBritannia(target,baseRoot,saveRoot+savePrefix+"expedition.sav",{actor.x+w->originX,actor.y+w->originY,actor.z},playerStatus,inventory,equipmentArt,statusArt,roofs);
+                    pause.message=lab::exploreBritannia(target,baseRoot,saveRoot+savePrefix+"expedition.sav",{actor.x+w->originX,actor.y+w->originY,actor.z},playerStatus,inventory,equipmentArt,statusArt,roofs,npcs,*w,itemIcons,sink);
                     lab::setWorldLookAhead(0,0);
                     if(!lab::loadAtlases(w->images,error,worldRoot)){pause.message="ERROR AL RESTAURAR TEXTURAS: "+error;quit=true;break;}
+                    lab::prepareEquipment(inventory.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0),equipmentArt,equipmentError);
+                    lab::warmEquipment(inventory.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0),equipmentArt);
                     lab::invalidateRenderList();pausedResources.restart();
                 }
                 now=osGetTime();pausePad=0;frames=0;

@@ -1,6 +1,6 @@
 # Native application, separate from the old Luma homebrew target title.
 BasicInfo:
-  Title                   : "UO-CoreLab46"
+  Title                   : "UO-CoreLab47"
   ProductCode             : "CTR-H-UOC2"
   Logo                    : Homebrew
 

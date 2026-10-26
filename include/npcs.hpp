@@ -11,6 +11,8 @@ struct Npc {
 };
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
 class Npcs {
+    bool windowed=false;
+    std::vector<unsigned char>simulation,placement;
     bool occupancyActive=false;mutable bool occupancyDirty=true;mutable std::vector<int>occupancyHead=std::vector<int>(4096,-1);mutable std::vector<int>occupancyNext;
     mutable unsigned occupancyBuilds=0;
     void rebuildOccupancy()const;
@@ -20,6 +22,13 @@ class Npcs {
     uint64_t aggressionClock=0;size_t routeCursor=0;unsigned routeNodes=0,routeSearches=0;
     std::vector<Npc> people,original;std::vector<NpcStyle>art;uint32_t random=12345;
 public:
+    static constexpr unsigned WindowActiveLimit=64;
+    // Stable regional roster: moving the geometry window never recreates NPCs.
+    void importWindowSpawns(const Npcs&,int dx,int dy);
+    void shiftWindow(int dx,int dy);
+    void prepareWindow(const World&,const Actor&);
+    bool simulates(size_t i)const{return !windowed||(i<simulation.size()&&simulation[i]);}
+    unsigned activeCount()const;
     bool loadPopulation(const std::string&,const std::string&scene,const World&,std::string&);
     bool loadNames(const std::string&,const std::string&scene,const std::string&population,std::string&);
     unsigned lastOccupancyBuilds()const{return occupancyBuilds;}

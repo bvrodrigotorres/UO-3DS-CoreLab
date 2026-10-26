@@ -32,6 +32,7 @@ public:
     bool combatPose()const{return attacking||striking();}
     int strikeFrame(unsigned frames=4)const{return std::max(0,std::min(int(frames)-1,int((.45f-strike)*frames/.45f)));}
     void reset(const Npcs&);
+    void shiftWindow(int dx,int dy);
     bool attackable(const Npc&n)const{return n.alive&&n.animal;}
     void select(const Npcs&,const Actor&,bool cycle=false);
     void toggle(const Npcs&,const Actor&);

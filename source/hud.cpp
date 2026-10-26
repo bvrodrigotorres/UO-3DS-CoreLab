@@ -100,8 +100,8 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
 void drawExpeditionHud(uint8_t*fb,const HudInfo&info){
     drawHud(fb,info);const Color ink={55,37,22};box(fb,18,185,284,45,{218,195,148});
-    text(fb,20,189,"PAD: CAMINAR | B: CORRER",ink);text(fb,20,199,"X: DESTINOS | L/R: MINIMAPA",ink);
-    text(fb,20,209,"SELECT: TECHOS | START: PAUSA",ink);text(fb,20,219,"EN PAUSA: B VUELVE A TU PARTIDA",ink);
+    text(fb,20,189,"PAD: CAMINAR | B: CORRER",ink);text(fb,20,199,"A: ATACAR | Y: CURAR | L/R: HOJAS",ink);
+    text(fb,20,209,"X: DESTINOS | START: PAUSA",ink);text(fb,20,219,"EN PAUSA: B VUELVE A TU PARTIDA",ink);
 }
 void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool meditating){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},muted={118,108,92};
@@ -195,10 +195,10 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
 
 }
 
-void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag,const PlayerStatus*status){
+void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag,const PlayerStatus*status,bool trial){
     (void)w;(void)a;drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
-    text(fb,18,18,"MOCHILA "+std::to_string(inv.backpack.size())+"/24",ink);
+    text(fb,18,18,std::string(trial?"PRUEBA ":"MOCHILA ")+std::to_string(inv.backpack.size())+"/24",ink);
     text(fb,170,18,inv.hasContainer()?inv.containerName():"SIN BOTIN CERCA",ink,1,22);
     box(fb,156,34,1,154,gold);
     auto bag=[&](const Bag&items,int left,size_t offset){
@@ -218,9 +218,9 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     auto button=[&](int x,int y,int width,int height,const std::string&label,bool active){box(fb,x,y,width,height,ink);box(fb,x+1,y+1,width-2,height-2,active?gold:Color{161,143,108});text(fb,x+7,y+(height-7)/2,label,ink);};
     button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/2  >",true);
     button(18,214,90,16,inv.useMode?"USAR":inv.equipMode?"EQUIPAR":"TRANSFERIR",true);
-    box(fb,116,214,32,17,ink);box(fb,118,216,28,13,{161,143,108});
+    if(!trial){box(fb,116,214,32,17,ink);box(fb,118,216,28,13,{161,143,108});
     box(fb,126,219,13,9,ink);box(fb,124,217,17,2,ink);box(fb,130,215,5,2,ink);
-    for(int x:{129,133,137})box(fb,x,221,1,5,{244,222,160});
+    for(int x:{129,133,137})box(fb,x,221,1,5,{244,222,160});}
     button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
     if(!failed&&inv.useMode){text(fb,18,29,inv.message,ink,1,47);}

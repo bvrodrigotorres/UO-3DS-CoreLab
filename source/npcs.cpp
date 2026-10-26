@@ -6,6 +6,46 @@
 #include <cstring>
 namespace lab {
 static bool same(const Actor&a,const Actor&b){return a.x==b.x&&a.y==b.y&&std::abs(a.z-b.z)<16;}
+void Npcs::importWindowSpawns(const Npcs&source,int dx,int dy){
+    art=source.art;deathFrames=source.deathFrames;original=source.original.empty()?source.people:source.original;
+    people=original;windowed=true;random=12345;aggressionClock=0;routeCursor=0;
+    for(auto&n:people){n.alive=true;n.hostile=false;n.aggressionOrder=0;n.moving=false;n.progress=1;n.from=n.position;n.namePresence={};}
+    simulation.assign(people.size(),0);placement.assign(people.size(),1);shiftWindow(dx,dy);
+}
+void Npcs::shiftWindow(int dx,int dy){
+    auto shift=[&](Actor&a){a.x+=dx;a.y+=dy;};
+    for(auto&n:people){shift(n.position);shift(n.from);shift(n.home);}
+    for(auto&n:original){shift(n.position);shift(n.from);shift(n.home);}
+    occupancyDirty=true;simulation.assign(people.size(),0);for(auto&pending:placement)if(pending==2)pending=1;
+}
+unsigned Npcs::activeCount()const{if(!windowed)return unsigned(people.size());return unsigned(std::count(simulation.begin(),simulation.end(),1));}
+void Npcs::prepareWindow(const World&w,const Actor&player){
+    if(!windowed)return;
+    occupancyDirty=true;simulation.assign(people.size(),0);std::vector<size_t>nearby;nearby.reserve(people.size());
+    auto distance=[&](size_t i){const auto&a=people[i].alive?people[i].position:people[i].home;int x=a.x-player.x,y=a.y-player.y;return x*x+y*y;};
+    for(size_t i=0;i<people.size();++i){if(placement[i]==2)continue;const auto&a=people[i].alive?people[i].position:people[i].home;
+        if(w.contains(a.x,a.y)&&std::max(std::abs(a.x-player.x),std::abs(a.y-player.y))<=24)nearby.push_back(i);
+    }
+    const auto count=std::min<size_t>(WindowActiveLimit,nearby.size());
+    std::partial_sort(nearby.begin(),nearby.begin()+count,nearby.end(),[&](size_t a,size_t b){int da=distance(a),db=distance(b);return da<db||(da==db&&a<b);});
+    unsigned placements=0;
+    for(size_t j=0;j<count;++j){size_t i=nearby[j];auto&n=people[i];
+        if(placement[i]==1){
+            if(placements>=4)continue;
+            ++placements;
+            bool valid=canStand(w,n.position)&&!same(n.position,player)&&!occupied(n.position);
+            for(int radius=1;radius<=3&&!valid;++radius)for(int y=-radius;y<=radius&&!valid;++y)for(int x=-radius;x<=radius&&!valid;++x){
+                Actor at{n.home.x+x,n.home.y+y,n.home.z};if(!w.contains(at.x,at.y))continue;
+                if(!canStand(w,at)){at.z=heights(w,at.x,at.y).average;if(std::abs(at.z-n.home.z)>8||!canStand(w,at))continue;}
+                if(!occupied(at)&&!same(at,player)){n.position=n.from=n.home=at;valid=true;occupancyDirty=true;}
+            }
+            // Invalid dynamic platforms in the campaign must not leave floating
+            // sprites in the original map. Retry only after a window change.
+            placement[i]=valid?0:2;
+        }
+        if(placement[i]!=2)simulation[i]=1;
+    }
+}
 bool canStand(const World&w,const Actor&a){
     if(!w.contains(a.x,a.y))return false;
     auto h=heights(w,a.x,a.y);const auto&land=w.land[a.y*w.width+a.x];
@@ -56,6 +96,7 @@ bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::s
     original=std::move(next);error.clear();return true;
 }
 void Npcs::reset(const World&w,const Actor&player){
+    windowed=false;simulation.clear();placement.clear();
     occupancyDirty=true;people.clear();random=12345;aggressionClock=0;routeCursor=0;routeNodes=routeSearches=0;
     if(hasPopulation()){
         for(auto n:original){
@@ -80,7 +121,7 @@ void Npcs::reset(const World&w,const Actor&player){
 }
 void Npcs::rebuildOccupancy()const{
     ++occupancyBuilds;std::fill(occupancyHead.begin(),occupancyHead.end(),-1);occupancyNext.assign(people.size()*2,-1);
-    for(size_t i=0;i<people.size();++i)if(people[i].alive){
+    for(size_t i=0;i<people.size();++i)if(people[i].alive&&simulates(i)){
         for(int slot=0;slot<(people[i].moving?2:1);++slot){const auto&a=slot?people[i].from:people[i].position;unsigned bin=(unsigned(a.x)*73856093u^unsigned(a.y)*19349663u)&4095;int link=int(i*2+slot);occupancyNext[link]=occupancyHead[bin];occupancyHead[bin]=link;}
     }
     occupancyDirty=false;
@@ -94,23 +135,24 @@ void Npcs::occupancyMoved(size_t index,const Actor&before,const Actor&from,bool 
 }
 void Npcs::beginMove(size_t index,const Actor&to,int direction){auto&n=people[index];Actor before=n.position;n.from=before;n.position=to;n.progress=0;n.moving=true;n.direction=(direction+1)&7;occupancyMoved(index,before,before,false);}
 bool Npcs::occupied(const Actor&a,int except)const{
-    if(!occupancyActive){for(size_t i=0;i<people.size();++i)if(int(i)!=except&&people[i].alive&&(same(a,people[i].position)||(people[i].moving&&same(a,people[i].from))))return true;return false;}
+    if(!occupancyActive){for(size_t i=0;i<people.size();++i)if(int(i)!=except&&people[i].alive&&simulates(i)&&(same(a,people[i].position)||(people[i].moving&&same(a,people[i].from))))return true;return false;}
     if(occupancyDirty)rebuildOccupancy();
     unsigned bin=(unsigned(a.x)*73856093u^unsigned(a.y)*19349663u)&4095;
     for(int link=occupancyHead[bin];link>=0;link=occupancyNext[link]){int index=link/2;if(index!=except&&same(a,(link&1)?people[index].from:people[index].position))return true;}
     return false;
 }
 void Npcs::addOccupants(std::vector<Actor>&out)const{
-    for(const auto&n:people)if(n.alive){out.push_back(n.position);if(n.moving)out.push_back(n.from);}
+    for(size_t i=0;i<people.size();++i){const auto&n=people[i];if(n.alive&&simulates(i)){out.push_back(n.position);if(n.moving)out.push_back(n.from);}}
 }
 void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerMoving,float dt,Doors&doors){
+    prepareWindow(w,player);
     routeNodes=routeSearches=occupancyBuilds=0;
     if(dt<=0||people.empty())return;
     struct IndexScope{bool&active;~IndexScope(){active=false;}}scope{occupancyActive};occupancyActive=true;occupancyDirty=true;
     const int dx[]={0,1,1,1,0,-1,-1,-1},dy[]={-1,-1,0,1,1,1,0,-1};
     // Rotate priority so a blocked creature cannot monopolize the shared route budget.
     size_t first=routeCursor++%people.size();
-    for(size_t offset=0;offset<people.size();++offset){size_t i=(first+offset)%people.size();auto&n=people[i];if(!n.alive)continue;
+    for(size_t offset=0;offset<people.size();++offset){size_t i=(first+offset)%people.size();auto&n=people[i];if(!n.alive||!simulates(i))continue;
         int px=player.x-n.position.x,py=player.y-n.position.y;
         bool near=std::abs(player.z-n.position.z)<16&&std::max(std::abs(px),std::abs(py))<=2;
         n.namePresence.update(near,dt);
@@ -182,7 +224,7 @@ void Npcs::update(const World&w,const Actor&player,const Actor&from,bool playerM
     }
 }
 std::string Npcs::greeting(const Actor&a)const{
-    for(const auto&n:people)if(n.alive&&!n.animal&&std::abs(n.position.z-a.z)<16&&std::abs(n.position.x-a.x)<=2&&std::abs(n.position.y-a.y)<=2)return n.greeting;
+    for(size_t i=0;i<people.size();++i){const auto&n=people[i];if(simulates(i)&&n.alive&&!n.animal&&std::abs(n.position.z-a.z)<16&&std::abs(n.position.x-a.x)<=2&&std::abs(n.position.y-a.y)<=2)return n.greeting;}
     return "";
 }
 bool drawBefore(const Draw&a,const Draw&b){
@@ -198,7 +240,7 @@ std::vector<Draw> Npcs::drawList(const World&w,const Actor&a,bool cutaway)const{
         const auto&o=w.objects[i];if(o.z>a.z+14&&(o.flags&(Roof|Surface)))ceiling=std::min(ceiling,o.z);
     }
     for(size_t i=0;i<people.size();++i){const auto&n=people[i];const auto&p=n.position;
-        if(!n.alive)continue;
+        if(!n.alive||!simulates(i))continue;
         if(std::abs(p.x-a.x)>12||std::abs(p.y-a.y)>12||(cutaway&&p.z>=ceiling))continue;
         out.push_back({Kind::Npc,p.x,p.y,p.z,p.z+1,i,0xffffff00u+(uint32_t)i});
     }

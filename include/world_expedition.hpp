@@ -2,6 +2,7 @@
 #pragma once
 #include "world_archive.hpp"
 #include "journal.hpp"
+#include "mount.hpp"
 namespace lab {
 // Global catalog -> bounded local scene. Never touches campaign inventory/state.
 class WorldGraphics {
@@ -14,7 +15,13 @@ public:
     const std::vector<uint16_t>&radarColors()const{return radar;}
     unsigned images()const{return count;}
 };
-inline int expeditionDestinationHit(bool alreadyOpen,int x,int y){return alreadyOpen&&x>=20&&x<300&&y>=62&&y<152?(y-62)/9:-1;}
+inline int expeditionDestinationHit(bool alreadyOpen,int x,int y,int count=10){return alreadyOpen&&x>=20&&x<300&&y>=62&&y<62+count*9?(y-62)/9:-1;}
+enum class ExpeditionTouch {None,ZoomOut,ZoomIn,Travel,Mount};
+inline ExpeditionTouch expeditionTouch(int x,int y){
+    if(horseIconHit(x,y))return ExpeditionTouch::Mount;
+    if(y>=JournalLayout::ZoomTop&&y<=JournalLayout::ZoomTop+13){if(x>=20&&x<=47)return ExpeditionTouch::ZoomOut;if(x>=147&&x<=178)return ExpeditionTouch::ZoomIn;}
+    return x>=196&&x<305&&y>=25&&y<146?ExpeditionTouch::Travel:ExpeditionTouch::None;
+}
 enum class WindowReplacement {Loaded,Recovered,Unavailable};
 struct ExpeditionWindow {
     static int origin(int global,int extent){return std::max(0,std::min(extent-128,((global-32)/64)*64));}

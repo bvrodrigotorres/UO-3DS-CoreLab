@@ -36,9 +36,15 @@ void Combat::reset(const Npcs&npcs){
     for(auto&p:blood)p=BloodPool{};
     playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=0;swing=regen=strike=0;message.clear();
 }
+void Combat::shiftWindow(int dx,int dy){
+    auto shift=[&](Actor&a){a.x+=dx;a.y+=dy;};shift(playerPosition);
+    for(auto&c:corpses)if(c.active)shift(c.position);
+    for(auto&e:damage)if(e.active)shift(e.position);
+    for(auto&p:blood)if(p.active)shift(p.position);
+}
 void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
     automaticDefense=false;
-    std::vector<int>choices;for(size_t i=0;i<npcs.all().size();++i){const auto&n=npcs.all()[i];if(attackable(n)&&distance(n.position,a)<=8&&std::abs(n.position.z-a.z)<=8)choices.push_back(int(i));}
+    std::vector<int>choices;for(size_t i=0;i<npcs.all().size();++i){const auto&n=npcs.all()[i];if(npcs.simulates(i)&&attackable(n)&&distance(n.position,a)<=8&&std::abs(n.position.z-a.z)<=8)choices.push_back(int(i));}
     if(choices.empty()){target=-1;attacking=false;message="NO HAY CRIATURAS CERCANAS";return;}
     std::stable_sort(choices.begin(),choices.end(),[&](int l,int r){return distance(npcs.all()[l].position,a)<distance(npcs.all()[r].position,a);});
     auto found=std::find(choices.begin(),choices.end(),target);
@@ -82,7 +88,7 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     if(target==int(index)){target=-1;attacking=false;}
 }
 void Combat::defend(Npcs&npcs,const Actor&player){
-    auto eligible=[&](int index){if(index<0||size_t(index)>=npcs.all().size())return false;const auto&n=npcs.all()[index];return attackable(n)&&n.hostile&&!(n.maximumHits>0&&n.meleeMax==0)&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8;};
+    auto eligible=[&](int index){if(index<0||size_t(index)>=npcs.all().size()||!npcs.simulates(size_t(index)))return false;const auto&n=npcs.all()[index];return attackable(n)&&n.hostile&&!(n.maximumHits>0&&n.meleeMax==0)&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8;};
     if(automaticDefense&&eligible(target))return;
     if(attacking&&!automaticDefense&&eligible(target))return; // Keep an active manual opponent; stale/neutral selections cannot block defense.
     if(suppressDefense)return;
@@ -123,7 +129,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     for(auto&p:blood)if(p.active){p.age+=dt;if(p.age>=3)p.active=false;}
     status.healthVisible=std::max(0.f,status.healthVisible-dt);status.flash=std::max(0.f,status.flash-dt);swing=std::max(0.f,swing-dt);strike=std::max(0.f,strike-dt);
     for(auto&c:corpses)if(c.active){c.decay-=dt;if(c.decay<=0){inv.closeExternal(&c.loot);c.active=false;c.loot.clear();}}
-    for(size_t i=0;i<mob.size();++i){auto&v=mob[i];auto&n=npcs.combatants()[i];v.flash=std::max(0.f,v.flash-dt);v.cooldown=std::max(0.f,v.cooldown-dt);
+    for(size_t i=0;i<mob.size();++i){if(!npcs.simulates(i))continue;auto&v=mob[i];auto&n=npcs.combatants()[i];v.flash=std::max(0.f,v.flash-dt);v.cooldown=std::max(0.f,v.cooldown-dt);
         if(!n.alive){v.respawn-=dt;if(v.respawn>0)continue;bool placed=false;
             for(int radius=0;radius<=3&&!placed;++radius){for(int y=-radius;y<=radius&&!placed;++y){for(int x=-radius;x<=radius&&!placed;++x){
                 Actor a{n.home.x+x,n.home.y+y,n.home.z};
@@ -132,7 +138,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
             if(!placed)v.respawn=1;
         }
     }
-    if(target>=0&&(target>=int(mob.size())||!attackable(npcs.all()[target])||distance(player,npcs.all()[target].position)>10)){target=-1;attacking=false;}
+    if(target>=0&&(target>=int(mob.size())||!npcs.simulates(size_t(target))||!attackable(npcs.all()[target])||distance(player,npcs.all()[target].position)>10)){target=-1;attacking=false;}
     defend(npcs,player);
     if(attacking&&target>=0){auto&enemy=npcs.combatants()[target];if(!enemy.hostile)enemy.wait=0;npcs.engage(size_t(target));}
     if(attacking&&target>=0&&!moving&&!npcs.all()[target].moving&&swing<=0&&meleeReach(w,player,npcs.all()[target].position)){
@@ -149,7 +155,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     }
     defend(npcs,player);
     for(size_t i=0;i<mob.size();++i){auto&n=npcs.combatants()[i];auto&v=mob[i];
-        if((n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
+        if(!npcs.simulates(i)||(n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
         v.cooldown=1.25f;int damage=roll(n.meleeMin?n.meleeMin:n.name.find("dog")!=std::string::npos?4:2,n.meleeMax?n.meleeMax:n.name.find("dog")!=std::string::npos?7:4);
         if(status.skills.ready){int difficulty=std::max(100,std::min(1000,v.maximum*5+n.meleeMax*15));int chance=std::max(100,std::min(950,(difficulty+500)*1000/(2*(int(status.skills.value(weaponSkill(inv.equipment[0])))+500))));
             if(roll(0,999)>=chance){message="ESQUIVAS EL GOLPE";damageVisual(player,0,true,-1,CombatText::Miss);status.skills.practice(weaponSkill(inv.equipment[0]),difficulty,false);continue;}}
