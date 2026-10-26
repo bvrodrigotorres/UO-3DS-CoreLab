@@ -88,15 +88,22 @@ SaveQueueStatus AsyncSaves::status()const{Guard guard(impl->mutex);return {unsig
 #include <fstream>
 #include <map>
 #include <set>
+#include "packed_file_reader.hpp"
 namespace lab {
 struct AsyncResources::Impl {
     struct Ready{std::string path;ResourceRead file;};
     Mutex mutex;std::map<std::string,unsigned>requested;std::set<std::string>protectedReads;std::vector<Ready>ready;
+    PackedFileReader packed;
     AsyncSaves worker;
     Impl():worker([this](const std::string&path,const std::vector<uint8_t>&meta,std::string&){
         auto get=[&](unsigned i){return uint32_t(meta[i])|uint32_t(meta[i+1])<<8|uint32_t(meta[i+2])<<16|uint32_t(meta[i+3])<<24;};
-        unsigned maximum=get(0);uint32_t expected=get(4);ResourceRead result;std::ifstream f(path,std::ios::binary|std::ios::ate);
-        if(f&&f.tellg()>0&&f.tellg()<=std::streamoff(maximum)){result.bytes.resize(size_t(f.tellg()));f.seekg(0);f.read((char*)result.bytes.data(),result.bytes.size());result.valid=bool(f);if(result.valid&&expected){uint32_t h=2166136261u;for(auto b:result.bytes)h=(h^b)*16777619u;result.valid=h==expected;}}
+        if(meta.size()<18)return true;
+        unsigned maximum=get(0);uint32_t expected=get(4);ResourceRead result;
+        const std::string source(reinterpret_cast<const char*>(meta.data()+17),meta.size()-17);
+        if(meta[16]){uint64_t offset=uint64_t(get(8))|(uint64_t(get(12))<<32);result.valid=packed.read(source,offset,maximum,result.bytes);}
+        else {std::ifstream f(source,std::ios::binary|std::ios::ate);
+            if(f&&f.tellg()>0&&f.tellg()<=std::streamoff(maximum)){result.bytes.resize(size_t(f.tellg()));f.seekg(0);f.read((char*)result.bytes.data(),result.bytes.size());result.valid=bool(f);}}
+        if(result.valid&&expected){uint32_t h=2166136261u;for(auto b:result.bytes)h=(h^b)*16777619u;result.valid=h==expected;}
         if(!result.valid)result.bytes.clear();
         Guard guard(mutex);if(requested.find(path)==requested.end())return true;size_t bytes=result.bytes.size();for(const auto&r:ready)bytes+=r.file.bytes.size();
         while(bytes>4*1024*1024&&!ready.empty()){bytes-=ready.front().file.bytes.size();auto path=ready.front().path;requested.erase(path);ready.erase(ready.begin());}
@@ -106,12 +113,20 @@ struct AsyncResources::Impl {
 AsyncResources::AsyncResources():impl(new Impl){}AsyncResources::~AsyncResources()=default;
 bool AsyncResources::start(){return impl->worker.start();}
 bool AsyncResources::request(const std::string&path,unsigned maximum,uint32_t checksum,bool protectedRead){
+    return requestImpl(path,path,0,maximum,checksum,protectedRead,false);
+}
+bool AsyncResources::requestSlice(const std::string&key,const std::string&archive,uint64_t offset,unsigned bytes,uint32_t checksum,bool protectedRead){
+    return requestImpl(key,archive,offset,bytes,checksum,protectedRead,true);
+}
+bool AsyncResources::requestImpl(const std::string&path,const std::string&source,uint64_t offset,unsigned maximum,uint32_t checksum,bool protectedRead,bool slice){
+    if(source.empty()||source.size()>4096)return false;
     {Guard guard(impl->mutex);if(impl->requested.find(path)!=impl->requested.end()){if(protectedRead)impl->protectedReads.insert(path);return true;}if(!maximum||maximum>4*1024*1024)return false;
         size_t reserved=maximum;for(const auto&r:impl->requested)reserved+=r.second;
         while(impl->requested.size()>=4||reserved>4*1024*1024){auto victim=std::find_if(impl->ready.begin(),impl->ready.end(),[&](const Impl::Ready&r){return impl->protectedReads.count(r.path)==0;});if(victim==impl->ready.end())break;auto found=impl->requested.find(victim->path);if(found!=impl->requested.end()){reserved-=found->second;impl->requested.erase(found);}impl->ready.erase(victim);}
         if(impl->requested.size()>=4||reserved>4*1024*1024)return false;
         impl->requested.emplace(path,maximum);if(protectedRead)impl->protectedReads.insert(path);}
-    std::vector<uint8_t>meta;for(unsigned n:{maximum,unsigned(checksum)})for(unsigned i=0;i<4;++i)meta.push_back(uint8_t(n>>(8*i)));
+    std::vector<uint8_t>meta;for(unsigned n:{maximum,unsigned(checksum),unsigned(offset),unsigned(offset>>32)})for(unsigned i=0;i<4;++i)meta.push_back(uint8_t(n>>(8*i)));
+    meta.push_back(slice);meta.insert(meta.end(),source.begin(),source.end());
     if(impl->worker.enqueue(path,std::move(meta)))return true;
     Guard guard(impl->mutex);impl->requested.erase(path);impl->protectedReads.erase(path);return false;
 }

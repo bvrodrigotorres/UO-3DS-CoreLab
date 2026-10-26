@@ -141,20 +141,7 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
 
 }
 
-int main(int argc,char** argv){
-    // The HOME shortcut temporarily selects itself for Luma's 3DSX loader.
-    // Restore the previous selection before any resource loading can fail.
-    constexpr const char* forwarderPrefix="corelab-forwarder:hbldr-tid=";
-    if(argc==2&&argv&&argv[1]){
-        unsigned long long restore=0;char trailing=0;s64 lumaVersion=0;
-        if(std::sscanf(argv[1],"corelab-forwarder:hbldr-tid=%16llX%c",&restore,&trailing)==1&&
-           std::string(argv[1]).size()==std::char_traits<char>::length(forwarderPrefix)+16&&
-           (restore>>48)==0x0004&&R_SUCCEEDED(svcGetSystemInfo(&lumaVersion,0x10000,0))){
-            struct LumaSharedConfig{u64 current,selected;bool useHbldr;};
-            auto config=reinterpret_cast<volatile LumaSharedConfig*>(OS_SHAREDCFG_VADDR+0x800);
-            if(config->current==0x000400000D0C4B00ULL)config->selected=restore;
-        }
-    }
+int main(){
     // The software HUD writes BGR bytes directly: use the proven RAM buffers.
     gfxInitDefault();bool new3ds=false;APT_CheckNew3DS(&new3ds);
     // Draw the entire lower page into the hidden buffer, then present it.

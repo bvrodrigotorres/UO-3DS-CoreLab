@@ -1,6 +1,6 @@
 # Procedencia y alcance
 
-El lanzador HOME en `forwarder/` adapta el código MIT de
+El lanzador histórico en `forwarder/` y la base RSF en `cia/game.rsf` adaptan el código MIT de
 [ZallaxDev/emerald-3ds](https://github.com/ZallaxDev/emerald-3ds/tree/b198c08defb94081ae995796cf75ab8cdb51f2d0/3ds_port/forwarder).
 Copyright (c) 2026 Zallax and Emerald 3DS contributors. Licencia y alcance en
 `forwarder/LICENSE-REFERENCE.md`. No se incluyen recursos de Pokémon.

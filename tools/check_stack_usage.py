@@ -11,7 +11,7 @@ for path in root.glob('*.su'):
         if len(fields)>=3:
             rows.append((fields[0],int(fields[-2]),fields[-1]))
 if not rows:raise SystemExit('No compiler stack usage reports found')
-main=[r for r in rows if r[0].endswith('int main()')]
+main=[r for r in rows if r[0].endswith(('int main()', 'int main(int, char**)'))]
 if len(main)!=1:raise SystemExit('Missing or ambiguous main stack report')
 for name,size,kind in rows:
     if size>16384:raise SystemExit(f'Excessive stack frame: {size} {name}')

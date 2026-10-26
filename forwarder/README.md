@@ -1,5 +1,8 @@
 # Acceso directo HOME de CoreLab
 
+**Histórico:** reemplazado desde v0.46 por la aplicación nativa de `cia/`.
+La prueba real de este lanzador cayó en Homebrew; no usar como distribución.
+
 `dist/CoreLab-HOME.cia` instala un lanzador, no una segunda copia del juego.
 Title ID reservado para este proyecto: `000400000D0C4B00`; versión del lanzador
 1.0.0. Requiere Luma3DS y el soporte de retorno del lanzador en `source/main.cpp`.
