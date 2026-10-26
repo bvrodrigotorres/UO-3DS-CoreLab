@@ -44,6 +44,7 @@ static std::vector<size_t>sheetCosts;
 static std::vector<uint64_t>sheetUsed;
 static uint64_t textureClock=0;
 static std::vector<uint64_t>worldRetry,npcRetry;
+static std::vector<uint32_t>worldPriority;
 static std::vector<bool>npcVerified;
 static unsigned textureLoadsRemaining=0;
 static constexpr size_t WorldTextureBudget=10*1024*1024;
@@ -437,7 +438,7 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     if(!streamed)return;
     ++textureClock;const uint64_t now=osGetTime();residentWorld.assign(sheets.size(),0);
     for(size_t j=0;j<sheets.size();++j){residentWorld[j]=sheets[j]!=nullptr;if(needed[j])sheetUsed[j]=textureClock;}
-    int selected=worldRead.choose(needed,residentWorld,worldRetry,now);
+    int selected=worldRead.choose(needed,residentWorld,worldRetry,now,worldPriority);
     bool speculative=selected>=0&&!needed[unsigned(selected)];
     if(selected<0&&resourceReader){
         // Small, future-visible pages only. No speculative synchronous SD I/O.
@@ -458,8 +459,12 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     char name[32];std::snprintf(name,sizeof name,"atlas_%02u.t3x",unsigned(i));const auto path=atlasRoot+name;ResourceRead file;
     if(!textureLoadsRemaining){if(!speculative)++resourceWaits;return;}
     if(resourceReader){
-        resourceReader->retain({path});
-        if(worldRead.pending<0){if(resourceReader->request(path,sheetCosts[i],0,true))worldRead.pending=selected;if(!speculative)++resourceWaits;return;}
+        const auto reads=worldRead.batch(needed,residentWorld,worldRetry,now,worldPriority,sheetCosts,selected);
+        std::vector<std::string>paths;paths.reserve(reads.size());
+        for(int page:reads){char queued[32];std::snprintf(queued,sizeof queued,"atlas_%02u.t3x",unsigned(page));paths.push_back(atlasRoot+queued);}
+        resourceReader->retain(paths);
+        for(size_t n=0;n<reads.size();++n){int page=reads[n];if(resourceReader->request(paths[n],sheetCosts[unsigned(page)],0,true)&&n==0)worldRead.pending=selected;}
+        if(worldRead.pending<0){if(!speculative)++resourceWaits;return;}
         if(!resourceReader->take(path,file)){if(!speculative)++resourceWaits;return;}
         worldRead.pending=-1;if((!needed[i]&&!ahead[i])||sheets[i])return;
     }
@@ -475,7 +480,7 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     --textureLoadsRemaining;
     auto sheet=resourceReader?(file.valid&&file.bytes.size()==sheetCosts[i]?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):C2D_SpriteSheetLoad(path.c_str());
     if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(int(atlasSlots),images-int(i)*int(atlasSlots)))){if(sheet)C2D_SpriteSheetFree(sheet);if(!speculative)textureFailure=true;worldRetry[i]=now+1000;return;}
-    worldRetry[i]=0;auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);sheets[i]=sheet;bytes+=image.tex->size;++resourceUploads;
+    worldRetry[i]=0;auto image=C2D_SpriteSheetGetImage(sheet,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);sheets[i]=sheet;residentWorld[i]=1;bytes+=image.tex->size;++resourceUploads;
 }
 unsigned rendererResourceWaits(){return resourceWaits;}
 unsigned rendererUploads(){return resourceUploads;}
@@ -531,9 +536,16 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         else if(textureClock%2==0)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ);}
     if(authentic&&streamed){
         neededWorld.assign(sheets.size(),0);auto&needed=neededWorld;
+        worldPriority.assign(sheets.size(),UINT32_MAX);
         for(const auto&d:visibleDraws){
             unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;
-            if(id!=NoImage&&id/atlasSlots<needed.size())needed[id/atlasSlots]=1;
+            if(id!=NoImage&&id/atlasSlots<needed.size()){
+                unsigned page=id/atlasSlots;needed[page]=1;
+                int dx=d.x-actor.x,dy=d.y-actor.y;
+                // Distance first; at equal distance prefer the supporting floor.
+                uint32_t priority=uint32_t(dx*dx+dy*dy)*2+(d.kind==Kind::Land?0:1);
+                worldPriority[page]=std::min(worldPriority[page],priority);
+            }
         }
         aheadWorld.assign(sheets.size(),0);
         if(lookAheadX||lookAheadY){Actor future{actor.x+lookAheadX*4,actor.y+lookAheadY*4,actor.z};
@@ -541,7 +553,14 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 unsigned id=d.kind==Kind::Land?w.land[d.index].image:d.kind==Kind::Static?w.objects[d.index].image:NoImage;if(id!=NoImage&&id/atlasSlots<aheadWorld.size()&&!needed[id/atlasSlots])aheadWorld[id/atlasSlots]=1;
             }
         }
+        const auto beforeUploads=resourceUploads;const size_t beforeBytes=bytes;const uint64_t beforeTime=osGetTime();
         prepareWorldPages(needed,w.images,aheadWorld);
+        // The compact world archive uses many tiny pages. Admit a second small
+        // ready page only when the first upload was cheap; never add SD waits.
+        int nextPage=worldRead.choose(needed,residentWorld,worldRetry,osGetTime(),worldPriority);
+        if(atlasSlots<32&&nextPage>=0&&sheetCosts[unsigned(nextPage)]<=128*1024&&resourceUploads>beforeUploads&&bytes>=beforeBytes&&bytes-beforeBytes<=128*1024&&osGetTime()-beforeTime<2){
+            textureLoadsRemaining=1;prepareWorldPages(needed,w.images,aheadWorld);
+        }
     }
     if(npcs)prepareNpcPages(*npcs,combat,npcList,cameraX,cameraY,footZ);
     // Resource preparation can run behind the software loading screen without

@@ -1,5 +1,10 @@
 # Procedencia y alcance
 
+El lanzador HOME en `forwarder/` adapta el código MIT de
+[ZallaxDev/emerald-3ds](https://github.com/ZallaxDev/emerald-3ds/tree/b198c08defb94081ae995796cf75ab8cdb51f2d0/3ds_port/forwarder).
+Copyright (c) 2026 Zallax and Emerald 3DS contributors. Licencia y alcance en
+`forwarder/LICENSE-REFERENCE.md`. No se incluyen recursos de Pokémon.
+
 El núcleo adapta un subconjunto de archivos marcados MIT de
 [CrossUO, revisión 79d0f94a3645154dc1795045d9d89df554d6cd2a](https://github.com/crossuo/crossuo/tree/79d0f94a3645154dc1795045d9d89df554d6cd2a).
 Autores originales identificados en esos archivos: Copyright (c) 2016 Hotride.
