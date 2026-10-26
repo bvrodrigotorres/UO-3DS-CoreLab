@@ -14,6 +14,7 @@ public:
     unsigned images()const{return count;}
 };
 inline int expeditionDestinationHit(bool alreadyOpen,int x,int y){return alreadyOpen&&x>=20&&x<300&&y>=62&&y<152?(y-62)/9:-1;}
+enum class WindowReplacement {Loaded,Recovered,Unavailable};
 struct ExpeditionWindow {
     static int origin(int global,int extent){return std::max(0,std::min(extent-128,((global-32)/64)*64));}
     static bool needs(const World&w,const Actor&a,int width,int height){
@@ -23,4 +24,15 @@ struct ExpeditionWindow {
     static Actor global(const World&w,const Actor&a){return {a.x+w.originX,a.y+w.originY,a.z};}
     static Actor local(const World&w,const Actor&a){return {a.x-w.originX,a.y-w.originY,a.z};}
 };
+// Loading screens own the swap. Only tiny coordinates survive; no second live
+// geometry window. A failed destination is rebuilt from the validated archive.
+template<class Build> WindowReplacement replaceExpeditionWindow(World&scene,const Actor&actor,Journal&radar,const Actor&destination,bool safe,std::string&error,Build&&build){
+    const bool hadScene=!scene.land.empty();const Actor previous=ExpeditionWindow::global(scene,actor);const int previousX=scene.originX,previousY=scene.originY;
+    scene=World{};radar=Journal{};
+    if(build(destination,safe,-1,-1))return WindowReplacement::Loaded;
+    const auto failure=error;
+    scene=World{};radar=Journal{};
+    if(hadScene&&build(previous,false,previousX,previousY)){error=failure;return WindowReplacement::Recovered;}
+    scene=World{};radar=Journal{};error=failure+" | NO SE PUDO RECUPERAR EL SECTOR";return WindowReplacement::Unavailable;
+}
 }

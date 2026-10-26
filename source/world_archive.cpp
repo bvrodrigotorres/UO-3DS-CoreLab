@@ -49,6 +49,8 @@ bool WorldArchive::window(int x,int y,unsigned side,World&out,std::string&error)
     if(path.empty()||!side||side>WindowSide||x<0||y<0||x>mapWidth-int(side)||y>mapHeight-int(side)){error="VENTANA FUERA DE BRITANNIA";return false;}
     World next;next.width=next.height=int(side);next.originX=x;next.originY=y;next.startX=next.startY=int(side)/2;
     next.vertices.assign((side+1)*(side+1),0);next.land.resize(side*side);
+    size_t maximum=0;for(int sx=x/64;sx<=(x+int(side)-1)/64;++sx)for(int sy=y/64;sy<=(y+int(side)-1)/64;++sy)maximum+=entries[unsigned(sx*rows+sy)].count;
+    next.objects.reserve(std::min(maximum,size_t(MaxObjects)));
     for(int sx=x/64;sx<=(x+int(side)-1)/64;++sx)for(int sy=y/64;sy<=(y+int(side)-1)/64;++sy){unsigned key=unsigned(sx*rows+sy);auto*b=sector(key,error);if(!b)return false;
         const auto&e=entries[key];int ox=sx*64,oy=sy*64;
         for(int yy=std::max(y,oy);yy<=std::min(y+int(side),oy+64);++yy)for(int xx=std::max(x,ox);xx<=std::min(x+int(side),ox+64);++xx){size_t at=size_t((yy-oy)*65+xx-ox)*3;unsigned art=u16(b->data()+at);if(art>=landFlags.size()){error="TERRENO INVALIDO";return false;}
@@ -63,7 +65,14 @@ bool WorldArchive::window(int x,int y,unsigned side,World&out,std::string&error)
         }
     }
     for(unsigned yy=0;yy<side;++yy)for(unsigned xx=0;xx<side;++xx){auto&l=next.land[yy*side+xx];l.texture=textures[l.art]>0&&lab::heights(next,xx,yy).slope;}
-    next.startZ=lab::heights(next,next.startX,next.startY).average;next.index();out=std::move(next);error.clear();return true;
+    next.startZ=lab::heights(next,next.startX,next.startY).average;
+    // Reserve exact per-cell storage instead of repeatedly growing thousands of
+    // tiny vectors while a sector is being decoded on the Old 3DS heap.
+    next.cells.resize(side*side);std::vector<uint32_t>counts(side*side,0);
+    for(const auto&o:next.objects)++counts[size_t(o.y)*side+o.x];
+    for(size_t i=0;i<counts.size();++i)next.cells[i].reserve(counts[i]);
+    for(size_t i=0;i<next.objects.size();++i){const auto&o=next.objects[i];next.cells[size_t(o.y)*side+o.x].push_back(i);}
+    out=std::move(next);error.clear();return true;
 }
 bool WorldArchive::verify(std::string&error){for(unsigned i=0;i<entries.size();++i)if(!sector(i,error))return false;error.clear();return true;}
 }

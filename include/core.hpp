@@ -55,6 +55,7 @@ public:
         return entries;
     }
     void invalidate(){world=nullptr;}
+    void release(){world=nullptr;std::vector<Draw>().swap(entries);}
 };
 struct Candidate {unsigned flags;int z,average,height;bool terrain=false;};
 // Normal walking subset of CrossUO CalculateNewZ, isolated from player/network/UI.

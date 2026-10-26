@@ -9,6 +9,8 @@
 #include <cmath>
 #include <memory>
 #include <fstream>
+#include <malloc.h>
+#include <cstdio>
 namespace lab {
 namespace {
 void lower(const HudInfo&info){auto*b=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);drawExpeditionHud(b,info);GSPGPU_FlushDataCache(b,320*240*3);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();}
@@ -27,19 +29,23 @@ std::string exploreBritannia(C3D_RenderTarget*target,const std::string&base,cons
     World positionWorld;positionWorld.width=archive->width();positionWorld.height=archive->height();positionWorld.compatiblePosition=archive->identity();
     Actor global=start,restored;if(loadPosition(save,positionWorld,restored,error))global=restored;
     auto scene=std::make_unique<World>();Journal radar;Actor actor,from;float progress=0,cameraX=0,cameraY=0,foot=0,phase=0;bool moving=false;int facing=4;
+    auto trace=[&](const char*stage,const Actor&where){auto memory=mallinfo();FILE*f=std::fopen((base+"expedition-load.log").c_str(),"w");if(f){std::fprintf(f,"v0.44.1 %s XY %d,%d Z %d heap_used %d heap_free %d linear_free %lu\n",stage,where.x,where.y,where.z,memory.uordblks,memory.fordblks,(unsigned long)linearSpaceFree());std::fclose(f);}};
     auto load=[&](const Actor&where,bool safe){
-        loading("CARGANDO SECTOR DE BRITANNIA");World next;
-        if(!archive->window(ExpeditionWindow::origin(where.x,archive->width()),ExpeditionWindow::origin(where.y,archive->height()),128,next,error)||!graphics->bind(next,error))return false;
+        loading("CARGANDO SECTOR DE BRITANNIA");trace("before-release",where);releaseWorldResources();trace("resources-released",where);
+        auto result=replaceExpeditionWindow(*scene,actor,radar,where,safe,error,[&](const Actor&where,bool safe,int originX,int originY){World next;
+        if(!archive->window(originX<0?ExpeditionWindow::origin(where.x,archive->width()):originX,originY<0?ExpeditionWindow::origin(where.y,archive->height()):originY,128,next,error)||!graphics->bind(next,error))return false;
         Actor candidate=ExpeditionWindow::local(next,where);
         if(safe){Npcs empty;Actor landing;if(!safeTeleportTile(next,empty,candidate,landing)){candidate.z=heights(next,candidate.x,candidate.y).average;if(!safeTeleportTile(next,empty,candidate,landing)){error="NO HAY UN PUNTO SEGURO";return false;}}candidate=landing;}
-        *scene=std::move(next);actor=from=candidate;cameraX=actor.x;cameraY=actor.y;foot=actor.z;progress=0;moving=false;radar=graphics->map(*scene);invalidateRenderList();return true;
+        *scene=std::move(next);actor=from=candidate;cameraX=actor.x;cameraY=actor.y;foot=actor.z;progress=0;moving=false;radar=graphics->map(*scene);invalidateRenderList();return true;});
+        trace(result==WindowReplacement::Loaded?"geometry-ready":result==WindowReplacement::Recovered?"previous-sector-recovered":"sector-error",where);
+        return result==WindowReplacement::Loaded;
     };
     if(!load(global,true))return error;
     if(!loadAtlases(graphics->images(),error,root))return error;
-    auto warm=[&](){ResourcePreparation prep;u64 until=osGetTime()+10000;while(aptMainLoop()&&osGetTime()<until&&prep.pending()){
+    auto warm=[&](){trace("warming",ExpeditionWindow::global(*scene,actor));ResourcePreparation prep;u64 until=osGetTime()+10000;while(aptMainLoop()&&osGetTime()<until&&prep.pending()){
         drawWorld(target,*scene,actor,cameraX,cameraY,foot,roofs,facing,0,true,false,false,nullptr,nullptr,&status,nullptr,false);
         prep.observe(rendererResourceWaits(),rendererTextureError());loading("PREPARANDO TEXTURAS DEL SECTOR");
-    }};warm();
+    }trace("ready",ExpeditionWindow::global(*scene,actor));};warm();
     std::string message="MAPA EXPERIMENTAL: SOLO EXPLORACION";bool paused=false,map=true,travel=false;int choice=0,zoom=2;u64 repeat=0,last=osGetTime();FramePacer pacer;
     auto savePositionNow=[&](){return savePosition(save,positionWorld,ExpeditionWindow::global(*scene,actor),error);};
     while(aptMainLoop()){
@@ -55,7 +61,7 @@ std::string exploreBritannia(C3D_RenderTarget*target,const std::string&base,cons
         if(travel){
             int d=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);if(!d)repeat=0;else if(now>=repeat){choice=(choice+d+10)%10;repeat=now+180;}
             if(down&KEY_B)travel=false;
-            if((down&KEY_A)||touchTravel){auto old=ExpeditionWindow::global(*scene,actor);if(load(destinations[choice].position,true)){savePositionNow();warm();travel=false;}else{message=error;load(old,false);warm();travel=false;}last=osGetTime();}
+            if((down&KEY_A)||touchTravel){if(load(destinations[choice].position,true)){savePositionNow();warm();travel=false;}else{message=error;if(scene->land.empty())return error;warm();travel=false;paused=true;}last=osGetTime();}
             std::vector<std::string>lines{"PAD: ELEGIR | A: VIAJAR | B: VOLVER"};for(int i=0;i<10;++i)lines.push_back(std::string(i==choice?"> ":"  ")+destinations[i].name);lower({"DESTINOS","EXPLORACION",lines});continue;
         }
         if(down&KEY_SELECT){roofs=RoofMode((int(roofs)+1)%3);invalidateRenderList();}
@@ -68,7 +74,7 @@ std::string exploreBritannia(C3D_RenderTarget*target,const std::string&base,cons
         bool animating=moving,running=(held&KEY_B)!=0;
         if(moving){progress=std::min(1.f,progress+dt/movementSeconds(running,status.mounted));cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;if(progress>=1)moving=false;}
         if(!moving&&ExpeditionWindow::needs(*scene,actor,archive->width(),archive->height())){
-            auto where=ExpeditionWindow::global(*scene,actor);if(!load(where,false)){message=error;paused=true;}else{savePositionNow();warm();}last=osGetTime();continue;
+            auto where=ExpeditionWindow::global(*scene,actor);if(!load(where,false)){message=error;if(scene->land.empty())return error;warm();paused=true;}else{savePositionNow();warm();}last=osGetTime();continue;
         }
         if(animating)phase=std::fmod(phase+dt*(status.mounted?(running?15.f:10.f):(running?13.f:8.f)),status.mounted?5.f:4.f);
         drawWorld(target,*scene,actor,cameraX,cameraY,foot,roofs,facing,int(phase),true,animating,running,nullptr,nullptr,&status);

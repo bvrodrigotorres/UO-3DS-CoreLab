@@ -468,6 +468,17 @@ bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
 unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
+void releaseWorldResources(){
+    C3D_FrameSync();
+    // Join the CPU reader before releasing its ready buffers. No scene or GPU
+    // objects are accessed by this worker. Pose streaming has a separate reader.
+    resourceReader.reset();worldRead.pending=-1;
+    batches.clear();for(auto&sheet:sheets)if(sheet){C2D_SpriteSheetFree(sheet);sheet=nullptr;}bytes=0;
+    renderCache.release();roofCutaway=RoofCutaway{};
+    std::vector<Draw>().swap(mergedDraws);std::vector<Draw>().swap(visibleDraws);std::vector<unsigned char>().swap(neededWorld);
+    std::fill(worldRetry.begin(),worldRetry.end(),0);std::fill(sheetUsed.begin(),sheetUsed.end(),0);
+    resourceReader.reset(new AsyncResources);if(!resourceReader->start())resourceReader.reset();
+}
 void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cameraX,float cameraY,float footZ,
                RoofMode roofs,int direction,int frame,bool authentic,bool moving,bool running,const Npcs*npcs,const Combat*combat,const PlayerStatus*status,const Inventory*inventory,bool present){
     used=0;objects=0;overflow=false;batches.clear();resourceWaits=resourceUploads=0;textureLoadsRemaining=1;textureFailure=false;

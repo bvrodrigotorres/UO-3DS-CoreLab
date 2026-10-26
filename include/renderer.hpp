@@ -34,5 +34,7 @@ unsigned rendererUploads();
 bool hasRunAnimation();
 unsigned renderListBuilds();
 void invalidateRenderList();
+// Loading-screen-only fence: discard world pages and CPU staging, keep actors.
+void releaseWorldResources();
 void setQuestMarker(const QuestMarker&);
 }
