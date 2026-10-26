@@ -1,12 +1,12 @@
-# Native game application; same title ID replaces the old shortcut.
+# Native application, separate from the old Luma homebrew target title.
 BasicInfo:
-  Title                   : "UO-CoreLab"
-  ProductCode             : "CTR-H-UOCL"
+  Title                   : "UO-CoreLab46"
+  ProductCode             : "CTR-H-UOC2"
   Logo                    : Homebrew
 
 TitleInfo:
   Category                : Application
-  UniqueId                : 0xD0C4B
+  UniqueId                : 0xD0C4C
 
 Option:
   UseOnSD                 : true
