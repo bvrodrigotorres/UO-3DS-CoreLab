@@ -65,6 +65,7 @@ struct Candidate {unsigned flags;int z,average,height;bool terrain=false;};
 // Normal walking subset of CrossUO CalculateNewZ, isolated from player/network/UI.
 bool solveCandidates(std::vector<Candidate> list,int currentZ,int minZ,int maxZ,int& nextZ);
 bool step(const World&,const Actor&,int direction,Actor& result,int& actualDirection);
-bool loadWorld(const std::string&,World&,std::string& error);
+// Import reads identity/objects without allocating the unused collision index.
+bool loadWorld(const std::string&,World&,std::string& error,bool buildIndex=true);
 World demoWorld();
 }

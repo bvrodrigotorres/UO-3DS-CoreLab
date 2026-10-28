@@ -20,11 +20,14 @@ bool migrateRegion(const std::string&oldRoot,const std::string&newRoot,const Wor
     Campaign oldCampaign(oldRoot);if(!oldCampaign.load()){message="PARTIDA ANTERIOR INVALIDA: CONSERVADA";return false;}
     std::string prefix=oldCampaign.prefix();if(!std::ifstream(oldRoot+prefix+"inventory-private.sav").good()&&!std::ifstream(oldRoot+prefix+"inventory-private.sav.bak").good())return true;
     World oldWorld;std::string error;
-    if(!loadWorld(oldRoot+"scene.bin",oldWorld,error)){message="NO SE PUDO LEER EL MAPA ANTERIOR";return false;}
+    if(!loadWorld(oldRoot+"scene.bin",oldWorld,error,false)){message="NO SE PUDO LEER EL MAPA ANTERIOR";return false;}
     Inventory previous;previous.init(oldWorld,oldRoot+prefix+"inventory-private.sav");if(!previous.healthy()||!previous.restored){message="INVENTARIO ANTERIOR INVALIDO: CONSERVADO";return false;}
     Appearance appearance;if(!appearance.load(oldRoot+prefix+"appearance.sav")){message="ASPECTO ANTERIOR INVALIDO: CONSERVADO";return false;}
     PlayerStatus vitals;if(!loadVitals(oldRoot+prefix+"vitals-private.sav",vitals)){message="VIDA ANTERIOR INVALIDA: CONSERVADA";return false;}
     Actor position{oldWorld.startX,oldWorld.startY,oldWorld.startZ};loadPosition(oldRoot+prefix+"position-private.sav",oldWorld,position,error);
+    // From here import only needs old object coordinates to match the chests.
+    // Release terrain before constructing/saving the new inventory.
+    std::vector<Land>().swap(oldWorld.land);std::vector<int8_t>().swap(oldWorld.vertices);
     position.x+=oldWorld.originX-w.originX;position.y+=oldWorld.originY-w.originY;
     if(!w.contains(position.x,position.y)||!canStand(w,position))position={w.startX,w.startY,w.startZ};
     Campaign nextCampaign(newRoot);if(!nextCampaign.load()){message="PARTIDA NUEVA INVALIDA";return false;}auto generation=nextCampaign.unusedGeneration();if(!generation){message="NO SE PUDO IMPORTAR LA PARTIDA";return false;}
