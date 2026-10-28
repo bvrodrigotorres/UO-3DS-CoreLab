@@ -26,7 +26,7 @@ int main(int argc,char**argv){
  assert(inside.backpack.size()==2&&inside.equipment[0]==16&&inside.lastEquipment[0]==5&&inside.dressed&&inside.accessories);assert(inside.ground[0].items.empty()&&inside.chests[0].items[0].count==55);
  Npc rat;rat.animal=true;rat.aggressive=true;rat.name="a sewer rat";Npc boss=rat;boss.name="El Devorador";
  assert(!quest.killed(sewer,rat,inside,refuse)&&inside.quests[2].count==0);
- for(int i=0;i<5;++i)assert(quest.killed(sewer,rat,inside));assert(!quest.ready(2,inside));assert(!quest.killed(sewer,rat,inside));
+ for(int i=0;i<5;++i){assert(quest.killed(sewer,rat,inside));}assert(!quest.ready(2,inside));assert(!quest.killed(sewer,rat,inside));
  assert(quest.killed(sewer,boss,inside)&&quest.ready(2,inside));assert(!quest.killed(sewer,boss,inside));
  // Reload the new wire format with the new mission and keep old zone containers.
  assert(inside.checkpoint());Inventory reload;reload.init(sewer,root+"sewer.sav");
@@ -44,7 +44,7 @@ int main(int argc,char**argv){
  assert(!validQuest(2,{2,5,1,1})&&!validQuest(2,{1,0x20005,1,1})&&validQuest(2,{2,0x10005,1,1}));
  World actual;if(argc==3){std::string folder=argv[2];assert(loadWorld(folder+"/scene.bin",actual,error));Doors doors;assert(doors.load(folder+"/doors.bin",folder+"/scene.bin",actual,error));Npcs npcs;assert(npcs.loadPopulation(folder+"/population.bin",folder+"/scene.bin",actual,error));assert(npcs.loadNames(folder+"/npc_names.bin",folder+"/scene.bin",folder+"/population.bin",error));npcs.reset(actual,{16,91,31});assert(npcs.all().size()==70&&npcs.all().back().name=="El Devorador");assert(canStand(actual,{16,91,31})&&canStand(actual,{15,91,42}));assert(sewerPortal(actual,{15,91,42},1));Inventory chests;chests.init(actual,root+"actual.sav");assert(chests.chests.size()==2);chests.copyPlayerFrom(bag);chests.chests[0].items.clear();assert(chests.checkpoint());Inventory loaded;loaded.init(actual,root+"actual.sav");assert(loaded.healthy()&&loaded.restored&&loaded.quests[2].state==2&&loaded.chests.size()==2&&Quests::owned(loaded,28)==2&&loaded.chests[0].items.empty());// With doors opened through normal interactions, the boss, both chests,
  // sufficient mission enemies and the exit must share a walking component.
- for(auto&o:actual.objects)if(o.flags&Door){o.flags=0;o.height=0;}actual.index();
+ for(auto&o:actual.objects){if(o.flags&Door){o.flags=0;o.height=0;}}actual.index();
  std::queue<Actor>pending;pending.push({16,91,31});std::set<std::tuple<int,int,int>>seen;
  while(!pending.empty()){auto a=pending.front();pending.pop();if(!seen.emplace(a.x,a.y,a.z).second)continue;for(int d=0;d<8;++d){Actor n;int direction;if(step(actual,a,d,n,direction)&&!seen.count({n.x,n.y,n.z}))pending.push(n);}}
  const auto&leader=npcs.all().back();assert(seen.count({leader.position.x,leader.position.y,leader.position.z})&&seen.count({15,91,42}));
