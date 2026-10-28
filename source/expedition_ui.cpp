@@ -7,6 +7,7 @@
 #include "performance.hpp"
 #include "world_stream.hpp"
 #include "version.hpp"
+#include "platform_io.hpp"
 #include "npc_push.hpp"
 #include <3ds.h>
 #include <cmath>
@@ -49,7 +50,7 @@ std::string exploreBritannia(C3D_RenderTarget*target,const std::string&base,cons
     auto active=std::make_unique<StreamFrame>();World*scene=&active->world;Journal*radar=&active->radar;std::unique_ptr<WorldStream>stream;
     Actor actor,from;float progress=0,cameraX=0,cameraY=0,foot=0,phase=0;bool moving=false;int facing=4,populationX=0,populationY=0;
     auto rebase=[&](){int dx=populationX-scene->originX,dy=populationY-scene->originY;npcs.shiftWindow(dx,dy);combat.shiftWindow(dx,dy);bag.closeContainer();populationX=scene->originX;populationY=scene->originY;actors->push.reset();npcs.prepareWindow(*scene,actor);};
-    auto trace=[&](const char*stage,const Actor&where){auto memory=mallinfo();FILE*f=std::fopen((base+"expedition-load.log").c_str(),"w");if(f){std::fprintf(f,"v%s %s XY %d,%d Z %d heap_used %d heap_free %d linear_free %lu NPC %u/%lu\n",Version,stage,where.x,where.y,where.z,memory.uordblks,memory.fordblks,(unsigned long)linearSpaceFree(),npcs.activeCount(),(unsigned long)npcs.all().size());std::fclose(f);}};
+    auto trace=[&](const char*stage,const Actor&where){auto memory=mallinfo();auto io=platformIoStats();FILE*f=std::fopen((base+"expedition-load.log").c_str(),"w");if(f){std::fprintf(f,"v%s %s XY %d,%d Z %d heap_used %d heap_free %d linear_free %lu NPC %u/%lu\n",Version,stage,where.x,where.y,where.z,memory.uordblks,memory.fordblks,(unsigned long)linearSpaceFree(),npcs.activeCount(),(unsigned long)npcs.all().size());std::fprintf(f,"SD calls %llu read %llu written %llu errors %llu max_transfer %lu\n",(unsigned long long)io.calls,(unsigned long long)io.readBytes,(unsigned long long)io.writtenBytes,(unsigned long long)io.failures,(unsigned long)io.largestTransfer);std::fclose(f);}};
     auto load=[&](const Actor&where,bool safe){
         loading("CARGANDO DESTINO");if(stream)stream->cancelAndWait();setWorldLookAhead(0,0);releaseWorldResources();
         const bool previous=scene&&!scene->land.empty();const Actor old=previous?ExpeditionWindow::global(*scene,actor):where;

@@ -64,6 +64,11 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
+    def test_serialized_platform_io(self):
+        binary=Path(self.temp.name)/'platform_io_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/platform_io_tests.cpp'),str(ROOT/'source/platform_io.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
     def test_background_world_stream(self):
         binary=Path(self.temp.name)/'world_stream_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-pthread','-I'+str(ROOT/'include'),str(ROOT/'tests/world_stream_tests.cpp'),str(ROOT/'source/world_stream.cpp'),str(ROOT/'source/world_expedition.cpp'),str(ROOT/'source/world_archive.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)

@@ -34,13 +34,13 @@ jobs:
           sha256sum UO-3DS-CoreLab.3dsx > dist/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: UO-3DS-CoreLab-v0.47
+          name: UO-3DS-CoreLab-v0.47.1
           path: dist/
           if-no-files-found: error
       - name: Preserve matching crash symbols
         uses: actions/upload-artifact@v4
         with:
-          name: CoreLab-v0.47-debug-symbols
+          name: CoreLab-v0.47.1-debug-symbols
           path: |
             UO-3DS-CoreLab.elf
             build/UO-3DS-CoreLab.map
