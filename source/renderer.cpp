@@ -12,6 +12,7 @@
 #include "save_queue.hpp"
 #include "resource_preparation.hpp"
 #include "texture_pack.hpp"
+#include "texture_preview.hpp"
 #include "packed_file_reader.hpp"
 #include <memory>
 #include "roof_cutaway.hpp"
@@ -35,7 +36,8 @@ static DVLB_s* shader;
 static shaderProgram_s program;
 static C3D_Mtx projection;
 static int uniformProjection;
-static C3D_Tex white,labelFont,groundIcons;
+static C3D_Tex white,labelFont,groundIcons,previewTexture;
+static bool previewsReady=false;static unsigned previewCount=0,previewRows=0;
 static bool groundIconsReady=false;static std::array<Tex3DS_SubTexture,ItemTypes>groundFrames;
 static OverheadFont overheadFont;
 static std::vector<C2D_SpriteSheet> sheets;
@@ -200,6 +202,24 @@ static bool imageFor(unsigned id,C2D_Image&image){
     auto sheet=sheets[id/atlasSlots];if(!sheet)return false;if(id%atlasSlots>=C2D_SpriteSheetCount(sheet))return false;
     image=C2D_SpriteSheetGetImage(sheet,id%atlasSlots);return true;
 }
+// Resident low-detail art never requests disk I/O or competes with full pages.
+static bool previewFor(unsigned id,C2D_Image&image,Tex3DS_SubTexture&frame){
+    if(!previewsReady||id>=previewCount||id>=imageSizes.size())return false;
+    auto uv=previewUv(id,previewRows);frame={uint16_t(imageSizes[id][0]),uint16_t(imageSizes[id][1]),uv.left,uv.top,uv.right,uv.bottom};image={&previewTexture,&frame};return true;
+}
+static void loadPreviews(const std::string&root,unsigned count,uint32_t catalogueHash){
+    C3D_FrameSync();if(previewsReady)C3D_TexDelete(&previewTexture);previewsReady=false;previewCount=0;
+    if(!count||count>PreviewLimit)return;
+    std::ifstream f(root+"previews.bin",std::ios::binary|std::ios::ate);const size_t size=16+size_t(count)*32;
+    if(!f||f.tellg()!=std::streamoff(size))return;
+    std::vector<uint8_t>b(size);f.seekg(0);if(!f.read(reinterpret_cast<char*>(b.data()),size))return;
+    std::vector<uint16_t>pixels;if(!readPreviews(b,count,catalogueHash,pixels))return;
+    previewRows=previewHeight(count);size_t cost=size_t(PreviewWidth)*previewRows*2;
+    if(linearSpaceFree()<cost+2*1024*1024||!C3D_TexInit(&previewTexture,PreviewWidth,previewRows,GPU_RGBA4))return;
+    std::memset(previewTexture.data,0,previewTexture.size);auto*dest=static_cast<uint16_t*>(previewTexture.data);
+    for(unsigned n=0;n<count;++n)for(unsigned y=0;y<PreviewCell;++y)for(unsigned x=0;x<PreviewCell;++x)dest[characterTexel((n%PreviewColumns)*PreviewCell+x,(n/PreviewColumns)*PreviewCell+y,PreviewWidth)]=pixels[n*16+y*4+x];
+    C3D_TexFlush(&previewTexture);C3D_TexSetFilter(&previewTexture,GPU_LINEAR,GPU_LINEAR);previewCount=count;previewsReady=true;
+}
 static const Point whiteUV[]={{0,1},{1,1},{1,0},{0,0}};
 static void rect(float x,float y,float w,float h,float r,float g,float b,float a=1){
     Point p[]={{x,y},{x+w,y},{x+w,y+h},{x,y+h}};quad(p,whiteUV,&white,r,g,b,a);
@@ -262,6 +282,7 @@ void rendererShutdown(){
     npcSheets.clear();if(corpseSheet)C2D_SpriteSheetFree(corpseSheet);corpseSheet=nullptr;corpseBytes=0;
     if(bloodSheet){C2D_SpriteSheetFree(bloodSheet);}bloodSheet=nullptr;bloodBytes=0;
     if(groundIconsReady){C3D_TexDelete(&groundIcons);groundIconsReady=false;}
+    if(previewsReady){C3D_TexDelete(&previewTexture);previewsReady=false;}
     C3D_TexDelete(&labelFont);C3D_TexDelete(&white);if(buffer)linearFree(buffer);
     shaderProgramFree(&program);if(shader)DVLB_Free(shader);
 }
@@ -293,7 +314,7 @@ bool loadAtlases(int images,std::string&error,const std::string&root){
             worldPack=root+"textures.pack";
         }
         C3D_FrameSync();for(auto sheet:sheets)if(sheet)C2D_SpriteSheetFree(sheet);
-        sheets.assign(pages,nullptr);sheetUsed.assign(pages,0);bytes=0;error.clear();return true;
+        sheets.assign(pages,nullptr);sheetUsed.assign(pages,0);bytes=0;loadPreviews(root,unsigned(images),previewHash(b.data(),b.size()));error.clear();return true;
     }
     std::vector<C2D_SpriteSheet> next;size_t size=0;
     for(int i=0;i<(images+int(atlasSlots)-1)/int(atlasSlots);++i){
@@ -308,7 +329,7 @@ bool loadAtlases(int images,std::string&error,const std::string&root){
         C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);next.push_back(sheet);
     }
     C3D_FrameSync();for(auto s:sheets)if(s)C2D_SpriteSheetFree(s);
-    sheets=std::move(next);bytes=size;return true;
+    sheets=std::move(next);bytes=size;if(previewsReady){C3D_TexDelete(&previewTexture);previewsReady=false;}return true;
 }
 bool loadBloodArt(const std::string&root,std::string&error){
     std::ifstream f(root+"blood.bin",std::ios::binary);uint8_t b[16];
@@ -462,7 +483,7 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
     if(speculative&&worldRead.pending<0){
         // Drop stale pages, never current/future-visible ones, to avoid a loop
         // of evicting and re-reading the same speculative working set.
-        while(bytes+sheetCosts[i]>WorldTextureBudget||linearSpaceFree()<sheetCosts[i]+2*1024*1024){
+        while(bytes+(previewsReady?previewTexture.size:0)+sheetCosts[i]>WorldTextureBudget||linearSpaceFree()<sheetCosts[i]+2*1024*1024){
             int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&!ahead[j]&&(victim<0||sheetUsed[j]<sheetUsed[unsigned(victim)]))victim=int(j);
             if(victim<0)return;
             C3D_FrameSync();auto image=C2D_SpriteSheetGetImage(sheets[unsigned(victim)],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[unsigned(victim)]);sheets[unsigned(victim)]=nullptr;
@@ -490,14 +511,14 @@ static void prepareWorldPages(const std::vector<unsigned char>&needed,int images
         if(file.valid){uint32_t hash=2166136261u;for(uint8_t b:file.bytes)hash=(hash^b)*16777619u;file.valid=hash==worldSlices[i].checksum;}
     }
     C3D_FrameSync();
-    while(bytes+sheetCosts[i]>WorldTextureBudget||linearSpaceFree()<sheetCosts[i]+2*1024*1024){
+    while(bytes+(previewsReady?previewTexture.size:0)+sheetCosts[i]>WorldTextureBudget||linearSpaceFree()<sheetCosts[i]+2*1024*1024){
         int victim=-1;for(size_t j=0;j<sheets.size();++j)if(sheets[j]&&!needed[j]&&(!speculative||!ahead[j])&&(victim<0||sheetUsed[j]<sheetUsed[unsigned(victim)]))victim=int(j);
         if(victim>=0){auto image=C2D_SpriteSheetGetImage(sheets[unsigned(victim)],0);bytes-=image.tex->size;C2D_SpriteSheetFree(sheets[unsigned(victim)]);sheets[unsigned(victim)]=nullptr;continue;}
         if(linearSpaceFree()>=sheetCosts[i]+2*1024*1024)break;
         if(speculative)break;
         victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));
     }
-    if((atlasSlots<32&&bytes+sheetCosts[i]>WorldTextureBudget)||linearSpaceFree()<sheetCosts[i]+2*1024*1024){if(!speculative)textureFailure=true;worldRetry[i]=now+1000;return;}
+    if((atlasSlots<32&&bytes+(previewsReady?previewTexture.size:0)+sheetCosts[i]>WorldTextureBudget)||linearSpaceFree()<sheetCosts[i]+2*1024*1024){if(!speculative)textureFailure=true;worldRetry[i]=now+1000;return;}
     --textureLoadsRemaining;
     auto sheet=(resourceReader||!worldPack.empty())?(file.valid&&file.bytes.size()==sheetCosts[i]?C2D_SpriteSheetLoadFromMem(file.bytes.data(),file.bytes.size()):nullptr):C2D_SpriteSheetLoad(path.c_str());
     if(!sheet||C2D_SpriteSheetCount(sheet)<size_t(std::min(int(atlasSlots),images-int(i)*int(atlasSlots)))){if(sheet)C2D_SpriteSheetFree(sheet);if(!speculative)textureFailure=true;worldRetry[i]=now+1000;return;}
@@ -507,7 +528,7 @@ unsigned rendererResourceWaits(){return resourceWaits;}
 unsigned rendererUploads(){return resourceUploads;}
 bool rendererTextureError(){return textureFailure;}
 bool rendererNpcPoseStreaming(){return poseStreaming;}
-size_t textureBytes(){return bytes+npcBytes+(poseStreaming?4*1024*1024:0)+corpseBytes+bloodBytes+outfitCache.bytes()+(groundIconsReady?groundIcons.size:0);}
+size_t textureBytes(){return bytes+(previewsReady?previewTexture.size:0)+npcBytes+(poseStreaming?4*1024*1024:0)+corpseBytes+bloodBytes+outfitCache.bytes()+(groundIconsReady?groundIcons.size:0);}
 size_t drawnObjects(){return objects;}
 bool rendererOverflow(){return overflow;}
 bool hasRunAnimation(){return runVerified;}
@@ -618,7 +639,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             Point p[]={project(d.x,d.y,h.top),project(d.x+1,d.y,h.right),project(d.x+1,d.y+1,h.bottom),project(d.x,d.y+1,h.left)};
             for(auto&v:p)v.y-=22; // tile origin is the diamond center
             C2D_Image image;
-            if(authentic&&imageFor(land.image,image)){
+            Tex3DS_SubTexture preview;
+            if(authentic&&(imageFor(land.image,image)||previewFor(land.image,image,preview))){
                 Point uv[4];uvFor(image,uv);
                 if(!land.texture){Point rotated[4];for(int i=0;i<4;++i)rotated[i]={(uv[i].x+uv[(i+1)%4].x)*.5f,(uv[i].y+uv[(i+1)%4].y)*.5f};std::copy(rotated,rotated+4,uv);}
                 if(std::abs(h.top-h.bottom)>std::abs(h.left-h.right)){std::rotate(p,p+1,p+4);std::rotate(uv,uv+1,uv+4);}
@@ -630,7 +652,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             }
         }else if(d.kind==Kind::Static){
             const auto&o=w.objects[d.index];C2D_Image image;
-            if(authentic&&imageFor(o.image,image)){
+            Tex3DS_SubTexture preview;
+            if(authentic&&(imageFor(o.image,image)||previewFor(o.image,image,preview))){
                 float width=image.subtex->width,height=image.subtex->height;
                 Point p[]={{center.x-width/2,center.y+22-height},{center.x+width/2,center.y+22-height},{center.x+width/2,center.y+22},{center.x-width/2,center.y+22}};
                 float alpha=objectOpacity(o,footZ,roofs,afterActor,{p[0].x,p[0].y,p[2].x,p[2].y});
@@ -640,7 +663,8 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
                 // the wall. Hidden upper levels suppress both pieces together.
                 if(const auto*floor=floorUnderWall(w,o)){
                     C2D_Image wood;
-                    if(imageFor(floor->image,wood)){
+                    Tex3DS_SubTexture floorPreview;
+                    if(imageFor(floor->image,wood)||previewFor(floor->image,wood,floorPreview)){
                         float fw=wood.subtex->width,fh=wood.subtex->height;
                         Point fp[]={{center.x-fw/2,center.y+22-fh},{center.x+fw/2,center.y+22-fh},{center.x+fw/2,center.y+22},{center.x-fw/2,center.y+22}};
                         float fa=objectOpacity(*floor,footZ,roofs,afterActor,{fp[0].x,fp[0].y,fp[2].x,fp[2].y});
