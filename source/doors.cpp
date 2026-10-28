@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "doors.hpp"
+#include "file_hash.hpp"
 #include <fstream>
 #include <algorithm>
 #include <cmath>
@@ -7,16 +8,15 @@
 namespace lab {
 static bool read(const std::string&path,std::vector<unsigned char>&b){
     std::ifstream f(path,std::ios::binary);if(!f)return false;
-    f.seekg(0,std::ios::end);auto n=f.tellg();if(n<0||n>8*1024*1024)return false;f.seekg(0);
+    f.seekg(0,std::ios::end);auto n=f.tellg();if(n<0||n>24*1024*1024)return false;f.seekg(0);
     b.resize((size_t)n);f.read((char*)b.data(),b.size());return bool(f);
 }
 bool Doors::load(const std::string&path,const std::string&scene,const World&w,std::string&error){
-    std::vector<unsigned char>b,raw;
+    std::vector<unsigned char>b;uint32_t hash=0;
     if(!read(path,b)||b.size()<16||std::memcmp(b.data(),"UOD1",4)){error="No valid doors.bin";return false;}
     auto n=[&](size_t p,int count){uint32_t v=0;for(int i=0;i<count;++i)v|=uint32_t(b[p+i])<<(8*i);return v;};
     unsigned count=n(6,2),base=n(8,4);
-    if(n(4,2)!=1||count>1024||base>w.objects.size()||b.size()!=16+12*count||!read(scene,raw)){error="Invalid door data";return false;}
-    uint32_t hash=2166136261u;for(auto v:raw)hash=(hash^v)*16777619u;
+    if(n(4,2)!=1||count>1024||base>w.objects.size()||b.size()!=16+12*count||!fileHash(scene,24*1024*1024,hash)){error="Invalid door data";return false;}
     if(hash!=n(12,4)){error="Doors belong to another scene";return false;}
     std::vector<DoorState>next;std::vector<int>indices(w.objects.size(),-1);
     for(unsigned i=0;i<count;++i){
@@ -56,8 +56,8 @@ bool Doors::update(World&w,float dt,const std::vector<Actor>&occupants){
     dt=std::max(0.f,dt);
     auto occupied=[&](const DoorState&d){
         for(const auto&a:occupants)if(std::abs(a.z-d.closed.z)<16&&
-           a.x>=std::min(d.closed.x,d.closed.x+d.dx)&&a.x<=std::max(d.closed.x,d.closed.x+d.dx)&&
-           a.y>=std::min(d.closed.y,d.closed.y+d.dy)&&a.y<=std::max(d.closed.y,d.closed.y+d.dy))return true;
+           a.x>=std::min(int(d.closed.x),d.closed.x+d.dx)&&a.x<=std::max(int(d.closed.x),d.closed.x+d.dx)&&
+           a.y>=std::min(int(d.closed.y),d.closed.y+d.dy)&&a.y<=std::max(int(d.closed.y),d.closed.y+d.dy))return true;
         return false;
     };
     for(auto&d:entries){

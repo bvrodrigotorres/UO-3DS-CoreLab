@@ -155,10 +155,16 @@ int main(){
     startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
     const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
-    const std::string worldRoot=std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
+    std::string worldRoot=std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
     std::string error;bool available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
-    std::string migrationMessage;if(available&&worldRoot==baseRoot+"britain-expanded/")lab::migrateRegion(baseRoot+"britain-large/",worldRoot,privateWorld,migrationMessage);
+    std::string migrationMessage;
+    if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
+    if(available&&worldRoot==baseRoot+"britain-realm/"&&!lab::migrateRegion(baseRoot+"britain-expanded/",worldRoot,privateWorld,migrationMessage)){
+        worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
+    }
+    if(available&&worldRoot==baseRoot+"britain-expanded/")lab::migrateRegion(baseRoot+"britain-large/",worldRoot,privateWorld,migrationMessage);
     if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);
+    if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error)&&lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
     const lab::World canonicalPrivate=lab::positionSnapshot(privateWorld);
     lab::World legacyPrivate;lab::Doors doors;std::string doorError;
     bool hasDoors=available&&doors.load(worldRoot+"doors.bin",worldRoot+"scene.bin",privateWorld,doorError);
@@ -400,7 +406,7 @@ int main(){
                 lab::Actor destination;if(developerEditor(*w,npcs,destination)){
                     actor=destination;from=actor;moving=false;progress=1;animationPhase=0;alignCamera();npcPush.reset();inventoryDrag.cancel();inventory.closeContainer();combat.attacking=false;combat.target=-1;
                     for(auto&n:npcs.combatants())n.hostile=false;
-                    lab::invalidateRenderList();saveMessage="TELETRANSPORTE COMPLETADO";
+                    npcs.prepareWindow(*w,actor);lab::invalidateRenderList();saveMessage="TELETRANSPORTE COMPLETADO";
                     bool saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink)&&persistVitals();positionCheckpoint().result(actor,pauseAt,saved);
                 }
                 now=osGetTime();pausePad=0;frames=0;

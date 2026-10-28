@@ -70,12 +70,7 @@ bool WorldArchive::window(int x,int y,unsigned side,World&out,std::string&error,
     }
     for(unsigned yy=0;yy<side;++yy)for(unsigned xx=0;xx<side;++xx){auto&l=next.land[yy*side+xx];l.texture=textures[l.art]>0&&lab::heights(next,xx,yy).slope;}
     next.startZ=lab::heights(next,next.startX,next.startY).average;
-    // Reserve exact per-cell storage instead of repeatedly growing thousands of
-    // tiny vectors while a sector is being decoded on the Old 3DS heap.
-    next.cells.resize(side*side);std::vector<uint32_t>counts(side*side,0);
-    for(const auto&o:next.objects)++counts[size_t(o.y)*side+o.x];
-    for(size_t i=0;i<counts.size();++i)next.cells[i].reserve(counts[i]);
-    for(size_t i=0;i<next.objects.size();++i){const auto&o=next.objects[i];next.cells[size_t(o.y)*side+o.x].push_back(i);}
+    next.index();
     out=std::move(next);error.clear();return true;
 }
 bool WorldArchive::radar(int x,int y,unsigned side,const std::vector<uint16_t>&palette,Journal&out,std::string&error){

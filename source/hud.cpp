@@ -317,7 +317,7 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
 }
 void drawDeveloperMenu(uint8_t*fb,const DeveloperMenu&m,const World&w){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
-    text(fb,18,15,"DESARROLLADOR",ink);text(fb,18,32,"TELETRANSPORTE | MUNDO PAUSADO",ink,1,38);box(fb,251,27,51,17,gold);text(fb,256,32,std::to_string(m.page()+1)+"/2 >",ink);
+    text(fb,18,15,"DESARROLLADOR",ink);text(fb,18,32,"TELETRANSPORTE | MUNDO PAUSADO",ink,1,38);box(fb,251,27,51,17,gold);text(fb,256,32,std::to_string(m.page()+1)+"/"+std::to_string((m.destinations.size()+4)/5)+" >",ink);
     for(int row=0;row<5;++row){int index=m.page()*5+row;if(index>=int(m.destinations.size()))break;int y=49+row*28;const auto&d=m.destinations[index];box(fb,18,y,285,25,index==m.selected?gold:paper);text(fb,24,y+4,d.name,ink,1,44);text(fb,24,y+15,d.available?"XY "+std::to_string(d.target.x+w.originX)+","+std::to_string(d.target.y+w.originY)+" Z "+std::to_string(d.target.z):"NO DISPONIBLE EN ESTE MAPA",ink,1,44);}
     text(fb,20,191,"PAD: ELEGIR | L/R: HOJA",ink);text(fb,20,202,m.message.empty()?"A / START: TELETRANSPORTAR":m.message,ink,1,46);
     box(fb,18,215,132,19,gold);text(fb,37,221,"B: VOLVER",ink);box(fb,170,215,133,19,gold);text(fb,178,221,"TELETRANSPORTAR",ink);

@@ -39,8 +39,9 @@ bool exists(const std::string&p){struct stat s;return stat(p.c_str(),&s)==0;}
 }
 uint32_t inventoryWorldId(const World&w){
     if(w.compatibleInventory)return w.compatibleInventory;
-    std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
-    for(const auto&o:w.objects){put(key,o.art);put(key,o.x);put(key,o.y);put(key,o.z);}return hash(key);
+    uint32_t h=2166136261u;auto add=[&](uint32_t value){for(int i=0;i<4;++i)h=(h^uint8_t(value>>(i*8)))*16777619u;};
+    add(w.originX);add(w.originY);add(w.width);add(w.height);
+    for(const auto&o:w.objects){add(o.art);add(o.x);add(o.y);add(o.z);}return h;
 }
 bool ItemIcons::load(const std::string&p){
     std::ifstream f(p,std::ios::binary);std::vector<uint8_t>b(8+ItemTypes*24*24*4);
@@ -49,10 +50,9 @@ bool ItemIcons::load(const std::string&p){
 }
 void Inventory::init(const World&w,const std::string&p){
     path=p;ground={};quests={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=useMode=false;dressed=accessories=false;
-    std::vector<uint8_t>key;put(key,w.originX);put(key,w.originY);put(key,w.width);put(key,w.height);
+    uint32_t canonical=inventoryWorldId(w);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
-        if(!w.compatibleInventory){put(key,o.art);put(key,o.x);put(key,o.y);put(key,o.z);}
         if(chestArt(o.art)&&chests.size()<1024){
             size_t n=chests.size();
             // Finite local exploration supplies, not server loot tables.
@@ -63,7 +63,7 @@ void Inventory::init(const World&w,const std::string&p){
             chests.push_back({i,loot});
         }
     }
-    identity=w.compatibleInventory?w.compatibleInventory:hash(key);message="ACERCATE A UN COFRE";
+    identity=canonical;message="ACERCATE A UN COFRE";
     std::string input=path;
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
@@ -218,7 +218,7 @@ bool Inventory::reachable(const World&w,const Actor&a,size_t n)const{
     // Do not reach through walls or closed doors sharing either endpoint.
     const int xs[]={a.x,o.x},ys[]={a.y,o.y};
     for(int cell=0;cell<2;++cell)for(size_t index:w.cells[ys[cell]*w.width+xs[cell]]){
-        const auto&v=w.objects[index];if(&v!=&o&&(v.flags&(Wall|Door))&&v.z<a.z+14&&v.z+std::max(1,v.height)>a.z+2)return false;
+        const auto&v=w.objects[index];if(&v!=&o&&(v.flags&(Wall|Door))&&v.z<a.z+14&&v.z+std::max(1,int(v.height))>a.z+2)return false;
     }
     return true;
 }
@@ -239,18 +239,19 @@ void Inventory::open(const World&w,const Actor&a){
     opened=nearest(w,a);message=opened<0?"ACERCATE AL LADO DE UN COFRE":"COFRE ABIERTO - TOCA UN OBJETO";
 }
 bool Inventory::persist(std::string&error,SaveRename renameFile){
+    bool hasGround=groundFormat;for(const auto&p:ground)if(!p.items.empty())hasGround=true;
     bool hasQuests=false;for(const auto&q:quests)if(q.state)hasQuests=true;
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
     bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
     bool expanded=false;for(size_t s=8;s<11;++s)if(equipment[s]>=0||lastEquipment[s]>=0)expanded=true;
-    if(groundFormat||hasQuests)expanded=true;
+    if(hasGround||hasQuests)expanded=true;
     if(expanded){extended=true;remembered=true;}
     size_t slots=expanded?11:8;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(hasQuests?'8':groundFormat?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    std::vector<uint8_t>b={'U','I','N',uint8_t(hasQuests?'8':hasGround?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     size_t capacity=128+backpack.size()*8;for(const auto&c:chests)capacity+=4+c.items.size()*8;for(const auto&p:ground)capacity+=16+p.items.size()*12;b.reserve(capacity);
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
     append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));
-    if(groundFormat||hasQuests){unsigned count=0;for(const auto&pile:ground)if(!pile.items.empty())++count;put(b,count);
+    if(hasGround||hasQuests){unsigned count=0;for(const auto&pile:ground)if(!pile.items.empty())++count;put(b,count);
         for(const auto&pile:ground)if(!pile.items.empty()){put(b,pile.position.x);put(b,pile.position.y);put(b,pile.position.z);put(b,pile.items.size());
             for(size_t i=0;i<pile.items.size();++i){put(b,pile.items[i].type);put(b,pile.items[i].count);put(b,unsigned(std::max(1.f,std::min(180000.f,std::ceil(pile.remaining[i]*1000)))));}}
     }

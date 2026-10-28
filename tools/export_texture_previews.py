@@ -51,6 +51,7 @@ def export(client,source,out):
  known_missing.update((0,a) for a in report.get('missing_land_graphics',[]))
  images=[];missing=[]
  for image,size in enumerate(sizes):
+  if size==(1,1):images.append(Image.new('RGBA',(1,1)));continue
   if image not in mapping:
    assert size==(1,1),(image,size);images.append(Image.new('RGBA',(1,1)));continue
   kind,art=mapping[image]

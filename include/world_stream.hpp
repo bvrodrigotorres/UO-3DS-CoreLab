@@ -7,7 +7,7 @@
 namespace lab {
 struct StreamFrame {
     World world;Journal radar;RoofCutaway roofs;
-    size_t bytes()const{size_t n=world.vertices.capacity()*sizeof(int)+world.land.capacity()*sizeof(Land)+world.objects.capacity()*sizeof(Object)+world.cells.capacity()*sizeof(std::vector<size_t>)+radar.map.capacity()+roofs.bytes();for(const auto&c:world.cells)n+=c.capacity()*sizeof(size_t);return n;}
+    size_t bytes()const{size_t n=world.vertices.capacity()*sizeof(int8_t)+world.land.capacity()*sizeof(Land)+world.objects.capacity()*sizeof(Object)+world.cells.bytes()+radar.map.capacity()+roofs.bytes();return n;}
 };
 struct StreamPlan {
     static constexpr int Side=64,Stride=16,Guard=16,MaxAheadObjects=12288;

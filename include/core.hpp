@@ -3,30 +3,34 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "cell_index.hpp"
 
 namespace lab {
 constexpr uint64_t Background=1, Wall=0x10, Impassable=0x40, Wet=0x80;
 constexpr uint64_t Surface=0x200, Bridge=0x400, Roof=0x10000000, Door=0x20000000;
 constexpr uint16_t NoImage=65535;
 struct Land {
-    uint16_t art=3, image=NoImage;
     uint64_t flags=0;
+    uint16_t art=3, image=NoImage;
     bool texture=false;
 };
 struct Object {
-    uint16_t art=0, hue=0, image=NoImage;
-    int x=0,y=0,z=0,height=0;
     uint64_t flags=0;
     uint32_t order=0;
+    int16_t x=0,y=0;
+    uint16_t art=0,hue=0,image=NoImage;
+    int8_t z=0;uint8_t height=0;
 };
+
+static_assert(sizeof(Land)==16&&sizeof(Object)==24,"World records must retain their bounded RAM layout");
 struct World {
     int width=0,height=0,originX=0,originY=0;
     int startX=0,startY=0,startZ=0,images=0;
     uint32_t compatiblePosition=0,compatibleInventory=0;
-    std::vector<int> vertices;
+    std::vector<int8_t> vertices;
     std::vector<Land> land;
     std::vector<Object> objects;
-    std::vector<std::vector<size_t>> cells;
+    CellIndex cells;
     void index();
     void moved(size_t index,int oldX,int oldY);
     bool contains(int x,int y) const;

@@ -18,7 +18,7 @@ bool meleeReach(const World&w,const Actor&a,const Actor&b){
     if(std::abs(a.z-b.z)>8||distance(a,b)>1||!w.contains(a.x,a.y)||!w.contains(b.x,b.y))return false;
     if(a.x==b.x&&a.y==b.y)return true;
     const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};
-    for(int d=0;d<8;++d)if(a.x+xs[d]==b.x&&a.y+ys[d]==b.y){Actor next;int actual;return step(w,a,d,next,actual)&&next.x==b.x&&next.y==b.y&&std::abs(next.z-b.z)<=8;}
+    for(int d=0;d<8;++d)if(a.x+xs[d]==b.x&&a.y+ys[d]==b.y){Actor next;int actual;return stepMobile(w,a,d,next,actual,canStandMobile(w,b,true,true),false)&&next.x==b.x&&next.y==b.y&&std::abs(next.z-b.z)<=8;}
     return false;
 }
 int Combat::roll(int lo,int hi){random=random*1664525u+1013904223u;return lo+int((random>>16)%unsigned(hi-lo+1));}
@@ -133,7 +133,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if(!n.alive){v.respawn-=dt;if(v.respawn>0)continue;bool placed=false;
             for(int radius=0;radius<=3&&!placed;++radius){for(int y=-radius;y<=radius&&!placed;++y){for(int x=-radius;x<=radius&&!placed;++x){
                 Actor a{n.home.x+x,n.home.y+y,n.home.z};
-                if(canStand(w,a)&&!npcs.occupied(a)&&!(distance(a,player)==0&&std::abs(a.z-player.z)<16)){n.position=n.from=a;n.alive=true;n.hostile=false;n.aggressionOrder=0;n.moving=false;n.progress=1;n.wait=1;n.namePresence={};v.hits=v.maximum;v.cooldown=1;placed=true;}
+                if(canStandMobile(w,a,n.swims,n.waterOnly)&&!npcs.occupied(a)&&!(distance(a,player)==0&&std::abs(a.z-player.z)<16)){n.position=n.from=a;n.alive=true;n.hostile=false;n.aggressionOrder=0;n.moving=false;n.progress=1;n.wait=1;n.namePresence={};v.hits=v.maximum;v.cooldown=1;placed=true;}
             }}}
             if(!placed)v.respawn=1;
         }

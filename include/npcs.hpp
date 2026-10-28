@@ -6,7 +6,7 @@
 namespace lab {
 struct Npc {
     Actor position,from,home;int direction=4,style=0;float progress=1,wait=1,animation=0;bool moving=false;
-    bool alive=true,hostile=false,aggressive=false,stationary=false;int maximumHits=0,meleeMin=0,meleeMax=0,respawnSeconds=20;
+    bool alive=true,hostile=false,aggressive=false,stationary=false,swims=false,waterOnly=false;int maximumHits=0,meleeMin=0,meleeMax=0,respawnSeconds=20;
     uint64_t aggressionOrder=0;NamePresence namePresence;std::string name,greeting,title;std::array<uint8_t,3>nameColor{{238,238,0}};uint16_t nameHue=0x35;int roam=3;bool animal=false;
 };
 struct NpcStyle {int pivotX=0,pivotY=0,width=0,height=0;unsigned bytes=0,checksum=0;};
@@ -49,5 +49,7 @@ public:
     std::vector<Draw> drawList(const World&,const Actor&,bool cutaway)const;
 };
 bool canStand(const World&,const Actor&);
+bool canStandMobile(const World&,const Actor&,bool swims,bool waterOnly);
+bool stepMobile(const World&,const Actor&,int direction,Actor&,int&actual,bool swims,bool waterOnly);
 bool drawBefore(const Draw&,const Draw&);
 }

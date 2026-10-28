@@ -26,7 +26,7 @@ int main(int argc,char**argv){
         first=false;
         std::cout<<"{\"kind\":"<<(int)d.kind<<",\"x\":"<<d.x<<",\"y\":"<<d.y<<",\"z\":"<<d.z<<",\"priority\":"<<d.priority<<",\"support\":"<<(lab::supportingFragment(w,d,actor,visualZ)?"true":"false");
         if(d.kind==lab::Kind::Land){const auto&l=w.land[d.index];auto h=lab::heights(w,d.x,d.y);std::cout<<",\"image\":"<<l.image<<",\"art\":"<<l.art<<",\"texture\":"<<l.texture<<",\"corners\":["<<h.top<<","<<h.right<<","<<h.bottom<<","<<h.left<<"]";}
-        else if(d.kind==lab::Kind::Static){const auto&o=w.objects[d.index];std::cout<<",\"image\":"<<o.image<<",\"art\":"<<o.art<<",\"hue\":"<<o.hue<<",\"height\":"<<o.height<<",\"order\":"<<o.order<<",\"flags\":"<<o.flags;}
+        else if(d.kind==lab::Kind::Static){const auto&o=w.objects[d.index];std::cout<<",\"image\":"<<o.image<<",\"art\":"<<o.art<<",\"hue\":"<<o.hue<<",\"height\":"<<int(o.height)<<",\"order\":"<<o.order<<",\"flags\":"<<o.flags;}
         std::cout<<"}";
     }
     int traversable=0;for(int direction=0;direction<8;++direction){lab::Actor next;int actual;if(lab::step(w,actor,direction,next,actual))++traversable;}

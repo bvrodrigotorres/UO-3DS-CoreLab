@@ -64,6 +64,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
+    def test_realm49_memory_and_aquatic_movement(self):
+        binary=Path(self.temp.name)/'realm49_tests'
+        sources=['tests/realm49_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_texture_previews(self):
         binary=Path(self.temp.name)/'texture_preview_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/texture_preview_tests.cpp'),'-o',str(binary)],check=True)
@@ -286,6 +292,10 @@ class SceneTests(unittest.TestCase):
             orc=creature_definition('orc',root)
             self.assertTrue(orc['aggressive'] and orc['stationary'])
             self.assertEqual((orc['body'],orc['hits']),(17,65))
+            (root/'Horse.cs').write_text('class Horse : BaseMount { Horse(string name) : base(name, 0xE2, 0x3EA0, AIType.AI_Animal, FightMode.Aggressor, 10) { Body = m_IDs[random*2]; SetHits(28,45); } }')
+            horse=creature_definition('Horse',root)
+            self.assertEqual(horse['body'],226)
+            self.assertFalse(horse['aggressive'])
 
     def test_spawner_identity_and_rectangles(self):
         import sys

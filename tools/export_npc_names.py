@@ -7,7 +7,7 @@ from export_journal import fnv
 
 def class_files(reference):
     files={}
-    for path in reference.rglob('*.cs'):
+    for path in sorted(reference.rglob('*.cs'),key=lambda p:('/Mobiles/' not in str(p),str(p))):
         for kind in re.findall(r'\bclass\s+(\w+)',path.read_text(errors='replace')):files.setdefault(kind.lower(),path)
     return files
 
@@ -41,11 +41,11 @@ def generate(requests,reference,hues,scene,population):
     records=[];report=[];files=class_files(reference)
     for i,row in enumerate(requests):
         name,title,protected=describe(row['type'],reference,files)
-        female=row['profile'] in ('female','tailor','Sarakki','Verity')
+        female=row['profile'] in ('female','tailor','Sarakki','Verity','Regina')
         if female:title=title.replace('guildmaster','guildmistress')
         if row['animal']:title='';name=name or 'a '+re.sub(r'(?<!^)(?=[A-Z])',' ',row['type']).lower()
         elif not name:
-            female=row['profile'] in ('female','tailor','Sarakki','Verity');pool=pools['female' if female else 'male']
+            female=row['profile'] in ('female','tailor','Sarakki','Verity','Regina');pool=pools['female' if female else 'male']
             name=pool[fnv((row['spawner']+row['type']+str(i)).encode())%len(pool)]
         hue=0x3B2 if row['animal'] else 0x35 if protected else 0x59
         entry=hue-1;offset=(entry//8)*708+4+(entry%8)*88+62
@@ -56,6 +56,14 @@ def generate(requests,reference,hues,scene,population):
     return struct.pack('<4sHHIII',b'UNL1',len(records),0,fnv(scene),fnv(population),fnv(body))+body,report
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--previous',type=Path)
     for key in ('requests','reference','client','scene','population','out'):p.add_argument('--'+key,type=Path,required=True)
-    a=p.parse_args();raw,report=generate(json.loads(a.requests.read_text()),a.reference,(a.client/'hues.mul').read_bytes(),a.scene.read_bytes(),a.population.read_bytes());a.out.write_bytes(raw);a.out.with_suffix('.json').write_text(json.dumps(report,indent=2));print('Exported',len(report),'names/titles; protected',sum(r['protected'] for r in report))
+    a=p.parse_args();requests=json.loads(a.requests.read_text());raw,report=generate(requests,a.reference,(a.client/'hues.mul').read_bytes(),a.scene.read_bytes(),a.population.read_bytes())
+    if a.previous:
+        old=json.loads((a.previous/'requests.json').read_text());names=(a.previous/'npc_names.bin').read_bytes();oldReport=json.loads((a.previous/'npc_names.json').read_text());body=bytearray(raw[20:])
+        assert names[:4]==b'UNL1' and len(names)==20+85*len(old) and struct.unpack_from('<I',names,16)[0]==fnv(names[20:])
+        for i,row in enumerate(old):
+            assert (row['spawner'],row['type'].lower())==(requests[i]['spawner'],requests[i]['type'].lower())
+            if row['animal']==requests[i]['animal']:body[i*85:(i+1)*85]=names[20+i*85:20+(i+1)*85];report[i]=oldReport[i]
+        header=bytearray(raw[:20]);struct.pack_into('<I',header,16,fnv(body));raw=header+body
+    a.out.write_bytes(raw);a.out.with_suffix('.json').write_text(json.dumps(report,indent=2));print('Exported',len(report),'names/titles; protected',sum(r['protected'] for r in report))
