@@ -5,6 +5,11 @@
 #include <fstream>
 #include <cstring>
 #include <cerrno>
+#ifdef __3DS__
+#include <3ds.h>
+#include <malloc.h>
+extern "C" u32 __ctru_heap_size;
+#endif
 namespace lab {
 namespace {
 // Original human creation hue/style identifiers, cross-checked against
@@ -105,12 +110,22 @@ bool CharacterAssets::fullPaperdoll()const{
     return ready();
 }
 uint16_t CharacterAssets::color(const Appearance&a,int field)const{switch(field){case 15:return clothColors[a.hatColor];case 16:return clothColors[a.neckColor];case 17:return clothColors[a.glovesColor];case 2:return skins[a.skin];case 4:return hairColors[a.hairColor]+1;case 6:return hairColors[a.beardColor]+1;case 8:return clothColors[a.shirtColor];case 10:return clothColors[a.pantsColor];case 12:return clothColors[a.bootsColor];case 13:return clothColors[a.robeColor];default:return 0;}}
+bool CharacterAssets::room(size_t bytes)const{
+#ifdef __3DS__
+    auto available=[](){auto info=mallinfo();return __ctru_heap_size>size_t(info.uordblks)?__ctru_heap_size-size_t(info.uordblks):0;};
+    if(available()<bytes+512*1024)trimCache();
+    return available()>=bytes+512*1024;
+#else
+    (void)bytes;return true;
+#endif
+}
 bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,int sample,uint16_t hue,bool partial,size_t destination)const{
     auto found=cache.find(file);
     if(found==cache.end()){
         std::ifstream f(root+file,std::ios::binary|std::ios::ate);if(!f||f.tellg()<604||f.tellg()>8*1024*1024)return false;
-        const size_t incoming=size_t(f.tellg());
-        while(!cache.empty()&&(cache.size()>=24||cacheBytes+incoming>4*1024*1024)){auto oldest=std::min_element(cacheUsed.begin(),cacheUsed.end(),[](const auto&a,const auto&b){return a.second<b.second;});auto victim=cache.find(oldest->first);cacheBytes-=victim->second.size();cache.erase(victim);cacheUsed.erase(oldest);}
+        const size_t incoming=size_t(f.tellg());if(incoming>CacheBudget)return false;
+        while(!cache.empty()&&(cache.size()>=24||cacheBytes+incoming>CacheBudget)){auto oldest=std::min_element(cacheUsed.begin(),cacheUsed.end(),[](const auto&a,const auto&b){return a.second<b.second;});auto victim=cache.find(oldest->first);cacheBytes-=victim->second.size();cache.erase(victim);cacheUsed.erase(oldest);}
+        if(!room(incoming))return false;
         std::vector<uint8_t>b(incoming);f.seekg(0);f.read((char*)b.data(),b.size());
         bool mount=!std::memcmp(b.data(),"UAM1",4);
         if(!f||(!mount&&std::memcmp(b.data(),"UAP1",4)&&std::memcmp(b.data(),"UAP2",4)&&std::memcmp(b.data(),"UAP3",4))||
@@ -137,7 +152,9 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
 bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame,bool combat)const{
     bool mounted=!doll&&(mask&MountedBank);mask&=~MountedBank;
     if(!ready()||!a.valid()||(mask&~EquipmentAppearanceMask)||onlyFrame>int(mounted?MountedFrames-1:71))return false;
-    const size_t area=doll?260*237:mounted?128*128:96*112;int count=doll||onlyFrame>=0?1:mounted?MountedFrames:72;out.assign(area*count,0);
+    const size_t area=doll?260*237:mounted?128*128:96*112;int count=doll||onlyFrame>=0?1:mounted?MountedFrames:72;
+    if(out.capacity()<area*count&&!room(area*count*sizeof(uint16_t)))return false;
+    out.assign(area*count,0);
     std::vector<std::pair<int,uint16_t>>layers;
     layers.push_back({400+a.female,color(a,2)});
     if(!a.realClothes&&a.shoes&&!(mask&4))layers.push_back({480,color(a,12)});

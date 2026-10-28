@@ -354,7 +354,7 @@ int main(){
         lab::setQuestMarker(authentic?quests.marker(npcs,inventory):lab::QuestMarker{});
         // Pump only rendering/I/O. Never advance NPCs, combat, doors or timers
         // while paused, including after a developer teleport.
-        if(pausedResources.pending()){
+        { // Keep servicing retries/uploads throughout pause, even after clean frames.
             lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
             pausedResources.observe(lab::rendererResourceWaits(),lab::rendererTextureError());
         }
@@ -416,7 +416,7 @@ int main(){
                 lab::Actor destination;if(developerEditor(*w,npcs,destination)){
                     actor=destination;from=actor;moving=false;progress=1;animationPhase=0;alignCamera();npcPush.reset();inventoryDrag.cancel();inventory.closeContainer();combat.attacking=false;combat.target=-1;
                     for(auto&n:npcs.combatants())n.hostile=false;
-                    npcs.prepareWindow(*w,actor);lab::invalidateRenderList();saveMessage="TELETRANSPORTE COMPLETADO";
+                    npcs.prepareWindow(*w,actor);lab::invalidateRenderList();pausedResources.restart();saveMessage="TELETRANSPORTE COMPLETADO";
                     bool saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink)&&persistVitals();positionCheckpoint().result(actor,pauseAt,saved);
                 }
                 now=osGetTime();pausePad=0;frames=0;

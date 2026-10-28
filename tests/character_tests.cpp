@@ -23,6 +23,9 @@ void syntheticAssets(const std::string&root){
     put(layer,16,fnv(layer,20));write(root+"0-400.bin",layer);
     CharacterAssets bank;assert(bank.load(root));Appearance a;a.hair=a.beard=a.shirt=a.pants=a.shoes=0;std::vector<uint16_t>pixels;
     assert(bank.compose(a,0,pixels)&&pixels.size()==72*96*112);assert(bank.compose(a,0,pixels,true)&&pixels.size()==260*237);
+    assert(bank.cachedBytes()<=CharacterAssets::CacheBudget);bank.trimCache();assert(bank.cachedBytes()==0);
+    auto oversized=layer;oversized.resize(CharacterAssets::CacheBudget+1);put(oversized,12,oversized.size()-20);put(oversized,16,fnv(oversized,20));write(root+"0-400.bin",oversized);
+    assert(!bank.compose(a,0,pixels)&&bank.cachedBytes()==0);write(root+"0-400.bin",layer);
     // A valid checksum must not permit a sparse run past the end of a frame.
     layer[604+2]=255;layer[604+3]=255;put(layer,16,fnv(layer,20));write(root+"0-400.bin",layer);assert(bank.load(root));assert(!bank.compose(a,0,pixels));
     // Bad palette checksum and truncated data fail without retaining stale data.

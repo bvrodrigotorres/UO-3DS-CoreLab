@@ -12,6 +12,9 @@ int main(int argc,char**argv){
  Inventory bag;bag.init(w,root+"bag.sav");PlayerStatus status;Combat combat;combat.reset(npcs);
  // A stale manual target must not hide an attacking troll, even beyond its home leash.
  combat.target=1;combat.attacking=true;combat.update(w,npcs,player,false,.05f,status,bag);assert(combat.target==0&&combat.attacking&&combat.vitals()[0].hits<100);
+ // Cycling to a neutral target while taking hits must keep the explicit choice.
+ combat.select(npcs,player,true);assert(combat.target==1);combat.update(w,npcs,player,false,.05f,status,bag);assert(combat.target==1&&combat.attacking);
+ combat.select(npcs,player,true);assert(combat.target==0);
  // A second active enemy cannot steal this first focus; neutral animals are never queued.
  npcs.engage(1);combat.update(w,npcs,player,false,.05f,status,bag);assert(combat.target==0);rat.hostile=false;troll.alive=false;combat.update(w,npcs,player,false,.05f,status,bag);assert(!combat.attacking&&combat.target==-1);
  Npcs quiet;Combat heal;heal.reset(quiet);bag.backpack={{5,1},{3,3},{2,3}};status.hits=1;assert(!heal.repeatHealing(bag,status));assert(heal.useHealing(bag,1,status)&&status.lastHealing==3);

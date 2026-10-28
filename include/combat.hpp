@@ -13,7 +13,7 @@ struct BloodPool {bool active=false;Actor position;float age=0;unsigned variant=
 struct MobVitals {int hits=0,maximum=0;float respawn=0,cooldown=1,flash=0;};
 class Combat {
     std::vector<MobVitals>mob;float swing=0,regen=0,strike=0;uint32_t random=0x234567;
-    bool automaticDefense=false,suppressDefense=false;float healCooldown=0,bandageRemaining=0;int bandageHeal=0;unsigned healingRevisionValue=0;
+    bool automaticDefense=false,suppressDefense=false,manualFocus=false;float healCooldown=0,bandageRemaining=0;int bandageHeal=0;unsigned healingRevisionValue=0;
     void defend(Npcs&,const Actor&);
     Actor playerPosition{};unsigned visualSerial=0;
     void damageVisual(const Actor&,int amount,bool player,int npc,CombatText kind=CombatText::Damage);

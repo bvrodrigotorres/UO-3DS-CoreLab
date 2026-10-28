@@ -34,7 +34,7 @@ void Combat::reset(const Npcs&npcs){
     for(auto&c:corpses)c=Corpse{};
     for(auto&e:damage)e=DamageVisual{};
     for(auto&p:blood)p=BloodPool{};
-    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=bandageRemaining=0;bandageHeal=0;healingRevisionValue=0;swing=regen=strike=0;message.clear();
+    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=manualFocus=false;healCooldown=bandageRemaining=0;bandageHeal=0;healingRevisionValue=0;swing=regen=strike=0;message.clear();
 }
 void Combat::shiftWindow(int dx,int dy){
     auto shift=[&](Actor&a){a.x+=dx;a.y+=dy;};shift(playerPosition);
@@ -43,16 +43,16 @@ void Combat::shiftWindow(int dx,int dy){
     for(auto&p:blood)if(p.active)shift(p.position);
 }
 void Combat::select(const Npcs&npcs,const Actor&a,bool cycle){
-    automaticDefense=false;
+    automaticDefense=false;manualFocus=true;
     std::vector<int>choices;for(size_t i=0;i<npcs.all().size();++i){const auto&n=npcs.all()[i];if(npcs.simulates(i)&&attackable(n)&&distance(n.position,a)<=8&&std::abs(n.position.z-a.z)<=8)choices.push_back(int(i));}
-    if(choices.empty()){target=-1;attacking=false;message="NO HAY CRIATURAS CERCANAS";return;}
+    if(choices.empty()){manualFocus=false;target=-1;attacking=false;message="NO HAY CRIATURAS CERCANAS";return;}
     std::stable_sort(choices.begin(),choices.end(),[&](int l,int r){return distance(npcs.all()[l].position,a)<distance(npcs.all()[r].position,a);});
     auto found=std::find(choices.begin(),choices.end(),target);
     target=cycle&&found!=choices.end()?choices[(size_t(found-choices.begin())+1)%choices.size()]:choices[0];
     message="OBJETIVO: "+npcs.all()[target].name;
 }
 void Combat::toggle(const Npcs&npcs,const Actor&a){
-    if(attacking){attacking=false;automaticDefense=false;suppressDefense=true;message="ATAQUE DETENIDO";return;}
+    if(attacking){attacking=false;automaticDefense=manualFocus=false;suppressDefense=true;message="ATAQUE DETENIDO";return;}
     if(target<0||target>=int(npcs.all().size())||!attackable(npcs.all()[target])||distance(a,npcs.all()[target].position)>8)select(npcs,a);
     if(target>=0){automaticDefense=suppressDefense=false;attacking=true;swing=0;message="ACERCATE AL OBJETIVO | A: PARAR";}
 }
@@ -85,10 +85,14 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     else {slot->loot={{22,uint16_t(roll(1,2))}};if(is("bird")||is("chicken"))slot->loot.push_back({24,uint16_t(roll(3,8))});
         else if(is("cow")||is("bull")||is("sheep")||is("deer")||is("hind")||is("bear")||is("wolf")||is("goat"))slot->loot.push_back({23,uint16_t(roll(1,3))});}
     message="CRIATURA MUERTA | MOCHILA: ABRIR CADAVER";
-    if(target==int(index)){target=-1;attacking=false;}
+    if(target==int(index)){target=-1;attacking=manualFocus=false;}
 }
 void Combat::defend(Npcs&npcs,const Actor&player){
     auto eligible=[&](int index){if(index<0||size_t(index)>=npcs.all().size()||!npcs.simulates(size_t(index)))return false;const auto&n=npcs.all()[index];return attackable(n)&&n.hostile&&!(n.maximumHits>0&&n.meleeMax==0)&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8;};
+    if(manualFocus){
+        if(target>=0&&size_t(target)<npcs.all().size()&&npcs.simulates(size_t(target))&&attackable(npcs.all()[target])&&distance(player,npcs.all()[target].position)<=8&&std::abs(player.z-npcs.all()[target].position.z)<=8)return;
+        manualFocus=false;
+    }
     if(automaticDefense&&eligible(target))return;
     if(attacking&&!automaticDefense&&eligible(target))return; // Keep an active manual opponent; stale/neutral selections cannot block defense.
     if(suppressDefense)return;

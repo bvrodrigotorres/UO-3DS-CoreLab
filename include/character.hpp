@@ -47,6 +47,10 @@ class CharacterAssets {
     mutable std::map<std::string,uint64_t>cacheUsed;mutable uint64_t cacheClock=0;mutable size_t cacheBytes=0;mutable std::vector<uint16_t>layerScratch;
     bool overlay(std::vector<uint16_t>&,const std::string&,int sample,uint16_t hue,bool partial=false,size_t destination=0)const;
 public:
+    static constexpr size_t CacheBudget=1536*1024;
+    size_t cachedBytes()const{return cacheBytes;}
+    void trimCache()const{cache.clear();cacheUsed.clear();cacheBytes=0;}
+    bool room(size_t bytes)const;
     bool load(const std::string&);
     bool ready()const{return !palettes.empty();}
     bool fullPaperdoll()const;
