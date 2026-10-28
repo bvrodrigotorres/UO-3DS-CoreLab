@@ -328,7 +328,7 @@ int main(){
     auto saves=std::make_unique<lab::AsyncSaves>();bool asyncReady=saves->start();
     lab::SaveSink sink;if(asyncReady){asyncWriter=saves.get();sink=[&](const std::string&path,std::vector<uint8_t>b){return saves->enqueue(path,std::move(b));};inventory.saveSink=sink;demoInventory.saveSink=sink;}
     auto queueVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus,std::rename,sink);if(!ok)saveMessage="ERROR SD: ESTADISTICAS PENDIENTES";return ok;};
-    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";return used;};
+    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!queueVitals())inventory.message="CURACION | GUARDADO PENDIENTE";return used;};
     inventory.prepareEquipment=[&](unsigned mask){unsigned key=mask|(playerStatus.mounted?lab::MountedBank:0);if(!lab::prepareEquipment(key,equipmentArt,equipmentError))return false;lab::warmEquipment(key,equipmentArt);return true;};
     if(playerStatus.mounted&&!inventory.prepareEquipment(inventory.equipmentMask())){playerStatus.mounted=false;saveMessage="CABALLO: ACTUALIZA LA CARPETA CHARACTER/MOUNTED";}
     lab::SkillsMenu skillsMenu;
@@ -449,7 +449,7 @@ int main(){
         }
         if(down&(KEY_X|KEY_A))npcPush.reset();
         if(down&KEY_SELECT)roofs=lab::nextRoofMode(roofs);
-        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";saveMessage=inventory.message;}
+        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!queueVitals())inventory.message="CURACION | GUARDADO PENDIENTE";saveMessage=inventory.message;}
         bool pageChanged=false;
         if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:pages.count-1))%pages.count;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
         touchPosition touch;
@@ -525,9 +525,11 @@ int main(){
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
         if(moving){progress+=dt/lab::movementSeconds(running,playerStatus.mounted);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
+        unsigned healingBefore=combat.healingRevision();
         if(authentic&&hasNpcs&&combat.update(*w,npcs,actor,moving,dt,playerStatus,inventory)){
             actor={w->startX,w->startY,w->startZ};moving=false;alignCamera();npcPush.reset();frames=0;animateThisFrame=false;lab::warmEquipment(inventory.equipmentMask(),equipmentArt);
         }
+        if(combat.healingRevision()!=healingBefore)queueVitals();
         if(combat.attacking&&combat.target>=0&&!moving){
             const auto&enemy=npcs.all()[combat.target];int tx=(enemy.position.x>actor.x)-(enemy.position.x<actor.x),ty=(enemy.position.y>actor.y)-(enemy.position.y<actor.y);
             const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};for(int d=0;d<8;++d)if(xs[d]==tx&&ys[d]==ty)facing=(d+1)&7;

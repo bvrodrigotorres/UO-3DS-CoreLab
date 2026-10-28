@@ -19,7 +19,7 @@ struct InventoryLayout {
 struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;
     int damageMin=0,damageMax=0;float delay=.85f;int protection=0,weight=1,price=1;
 };
-inline int itemHealing(unsigned type){return type==4?30:type==3?20:type==1?10:type==2?5:0;}
+inline int itemHealing(unsigned type){return type==4?30:type==3?15:type==1?10:type==2?5:0;}
 constexpr unsigned EquipmentAppearanceMask=2047u|(3u<<13)|(3u<<15)|(3u<<17)|(1u<<19)|(1u<<20);
 extern const std::array<ItemDef,ItemTypes> itemDefs;
 uint32_t inventoryWorldId(const World&);

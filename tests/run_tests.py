@@ -75,6 +75,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/startup_memory_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
         with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
+    def test_delayed_bandages(self):
+        binary=Path(self.temp.name)/'bandage_tests'
+        sources=['tests/bandage_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp','source/character.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
     def test_texture_previews(self):
         binary=Path(self.temp.name)/'texture_preview_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/texture_preview_tests.cpp'),'-o',str(binary)],check=True)

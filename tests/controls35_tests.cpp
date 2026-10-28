@@ -16,7 +16,7 @@ int main(int argc,char**argv){
  npcs.engage(1);combat.update(w,npcs,player,false,.05f,status,bag);assert(combat.target==0);rat.hostile=false;troll.alive=false;combat.update(w,npcs,player,false,.05f,status,bag);assert(!combat.attacking&&combat.target==-1);
  Npcs quiet;Combat heal;heal.reset(quiet);bag.backpack={{5,1},{3,3},{2,3}};status.hits=1;assert(!heal.repeatHealing(bag,status));assert(heal.useHealing(bag,1,status)&&status.lastHealing==3);
  bag.backpack.erase(bag.backpack.begin()); // Remember type, not previous slot.
- heal.update(w,quiet,player,true,3.1f,status,bag);status.hits=1;assert(heal.repeatHealing(bag,status)&&status.hits==21&&bag.backpack[0].count==1);
+ heal.update(w,quiet,player,true,3.1f,status,bag);status.hits=1;assert(heal.repeatHealing(bag,status)&&status.hits==1&&bag.backpack[0].count==1);heal.update(w,quiet,player,true,3,status,bag);assert(status.hits==16);
  heal.update(w,quiet,player,false,3.1f,status,bag);status.hits=1;assert(!heal.repeatHealing(bag,status,fail)&&bag.backpack[0].count==1&&status.hits==1&&status.lastHealing==3);
  assert(heal.repeatHealing(bag,status)&&bag.backpack[0].type==2);heal.update(w,quiet,player,false,3.1f,status,bag);status.hits=1;assert(!heal.repeatHealing(bag,status)&&bag.backpack[0].count==3); // No fallback to apples.
  // Pause saves landed position, resources, equipped items and the remembered consumable.

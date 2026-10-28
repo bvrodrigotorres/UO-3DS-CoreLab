@@ -766,6 +766,11 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
         std::string value=combatText(e);const auto color=combatTextColor(e);float x=overheadPixelOrigin(p.x-overheadFont.width(value)/2.f+int(e.seed%9)-4),y=overheadPixelOrigin(p.y-pivot-10-e.age*25),alpha=std::min(1.f,(1.2f-e.age)*4);
         labelText(x+1,y+1,value,false,0,0,0,alpha);labelText(x,y,value,true,0,0,0,alpha);labelText(x,y,value,false,color[0],color[1],color[2],alpha);
     }
+    if(combat&&combat->bandageWait()>0){
+        const std::string value=Combat::BandageMessage;auto p=project(cameraX,cameraY,footZ);
+        float x=overheadPixelOrigin(p.x-overheadFont.width(value)/2.f),y=overheadPixelOrigin(std::max(2.f,p.y-(status&&status->mounted?130:108)));
+        labelText(x+1,y+1,value,false,0,0,0);labelText(x,y,value,true,0,0,0);labelText(x,y,value,false,1,1,1);
+    }
     if(questMarker.active){
         const auto saved=pixelMode;pixelMode=PixelMode::Translucent;
         float dx=questMarker.x-cameraX,dy=questMarker.y-cameraY;

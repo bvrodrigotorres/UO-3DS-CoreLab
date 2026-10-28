@@ -34,7 +34,7 @@ void Combat::reset(const Npcs&npcs){
     for(auto&c:corpses)c=Corpse{};
     for(auto&e:damage)e=DamageVisual{};
     for(auto&p:blood)p=BloodPool{};
-    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=0;swing=regen=strike=0;message.clear();
+    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=false;healCooldown=bandageRemaining=0;bandageHeal=0;healingRevisionValue=0;swing=regen=strike=0;message.clear();
 }
 void Combat::shiftWindow(int dx,int dy){
     auto shift=[&](Actor&a){a.x+=dx;a.y+=dy;};shift(playerPosition);
@@ -102,11 +102,13 @@ bool Combat::useHealing(Inventory&inv,size_t index,PlayerStatus&status,SaveRenam
     unsigned type=inv.backpack[index].type;int amount=type==3?status.skills.bandageAmount():itemHealing(type);
     if(!amount){inv.message="ESTE OBJETO NO CURA";return false;}
     if(status.hits>=status.hitsMax){inv.message="YA TIENES TODA LA VIDA";return false;}
+    if(bandageHeal){inv.message=BandageMessage;return false;}
     if(healCooldown>0){inv.message="ESPERA PARA CURARTE";return false;}
     if(!inv.consume(index,renameFile))return false;
-    int recovered=std::min(amount,status.hitsMax-status.hits);status.hits+=recovered;status.lastHealing=type;status.healthVisible=6;status.recovered();healCooldown=3;
+    status.lastHealing=type;
+    if(type==3){bandageHeal=amount;healCooldown=bandageRemaining=status.skills.bandageSeconds();status.healthVisible=6;inv.message=BandageMessage;return true;}
+    int recovered=std::min(amount,status.hitsMax-status.hits);status.hits+=recovered;status.healthVisible=6;status.recovered();healCooldown=3;
     damageVisual(playerPosition,recovered,true,-1,CombatText::Healing);
-    if(type==3){status.skills.practice(Skill::Healing,std::min(1000,500+(status.hitsMax-status.hits+recovered)*10));status.skills.practice(Skill::Anatomy,750);}
     inv.message=std::string(itemDefs[type].name)+": +"+std::to_string(recovered)+" VIDA";return true;
 }
 bool Combat::meditate(PlayerStatus&status,const Inventory&inv){
@@ -123,7 +125,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     if(mob.size()!=npcs.all().size())reset(npcs);
     playerPosition=player;
     if(dt<=0)return false;
-    healCooldown=std::max(0.f,healCooldown-dt);status.skills.tick(dt);
+    healCooldown=std::max(0.f,healCooldown-dt);bandageRemaining=std::max(0.f,bandageRemaining-dt);status.skills.tick(dt);
     if(moving||attacking||inv.equipment[5]==21||inv.equipment[8]==27)meditating=false;
     for(auto&e:damage)if(e.active){e.age+=dt;if(e.age>=1.2f)e.active=false;}
     for(auto&p:blood)if(p.active){p.age+=dt;if(p.age>=3)p.active=false;}
@@ -162,12 +164,22 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         damage=std::max(1,damage*(100-status.resistance(&inv))/100);
         damage=std::min(status.hits,damage);meditating=false;suppressDefense=false;status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){
+            bandageHeal=0;bandageRemaining=healCooldown=0;
             status.mounted=false;status.hits=status.hitsMax;status.mana=status.manaMax;status.stamina=status.staminaMax;status.healthVisible=6;status.recoveryGoal=0;
             for(auto&other:npcs.combatants()){other.hostile=false;other.aggressionOrder=0;}
             attacking=automaticDefense=suppressDefense=false;target=-1;strike=0;inv.closeContainer();player={w.startX,w.startY,w.startZ};regen=0;message="HAS MUERTO | REGRESAS AL PUNTO INICIAL";return true;
         }
     }
     defend(npcs,player);
+    if(bandageHeal&&bandageRemaining<=0){
+        int recovered=std::max(0,std::min(bandageHeal,status.hitsMax-status.hits));bandageHeal=0;
+        if(status.hits>0&&recovered>0){
+            int missing=status.hitsMax-status.hits;status.hits+=recovered;status.healthVisible=6;status.recovered();
+            damageVisual(playerPosition,recovered,true,-1,CombatText::Healing);
+            status.skills.practice(Skill::Healing,std::min(1000,500+missing*10));status.skills.practice(Skill::Anatomy,750);
+            ++healingRevisionValue;inv.message="VENDAS: +"+std::to_string(recovered)+" VIDA";
+        }else inv.message="VENDAS FINALIZADAS";
+    }
     if(meditating){
         bool danger=false;for(const auto&n:npcs.all())if(n.alive&&n.hostile&&distance(player,n.position)<=8&&std::abs(player.z-n.position.z)<=8){danger=true;break;}
         if(danger||status.mana>=status.manaMax)meditating=false;
