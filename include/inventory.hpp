@@ -52,6 +52,8 @@ public:
     bool equip(size_t,SaveRename=std::rename);
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);
+    // Copy personal possessions only; containers and ground belong to their zone.
+    void copyPlayerFrom(const Inventory&old){backpack=old.backpack;equipment=old.equipment;lastEquipment=old.lastEquipment;quests=old.quests;dressed=old.dressed;accessories=old.accessories;closeContainer();}
     Bag backpack;
     std::array<QuestProgress,QuestCount>quests{};
     bool commitQuest(unsigned,const QuestProgress&,Bag,SaveRename=std::rename);

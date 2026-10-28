@@ -25,6 +25,12 @@ class SceneTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
+    def test_dungeon_journey_and_quest(self):
+        binary=Path(self.temp.name)/'journey51_tests'
+        sources=['tests/journey51_tests.cpp','source/quests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
     def test_upstream_differential_and_geometry(self):
         subprocess.run([str(self.binary)], check=True)
 

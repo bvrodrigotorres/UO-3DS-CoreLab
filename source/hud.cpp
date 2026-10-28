@@ -283,7 +283,7 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
 void drawQuests(uint8_t*fb,const QuestPanel&p){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
     text(fb,20,14,"CONVERSACIONES Y MISIONES",ink);
-    for(unsigned i=0;i<2;++i){box(fb,18+i*144,30,140,22,p.selected==i?gold:paper);text(fb,24+i*144,38,i?"SUMINISTROS":"CEMENTERIO",ink);}
+    for(unsigned i=0;i<QuestCount;++i){box(fb,18+i*95,30,93,22,p.selected==i?gold:paper);text(fb,21+i*95,38,i==0?"CEMENTERIO":i==1?"SUMINISTROS":"ALCANTARILLAS",ink);}
     text(fb,20,60,p.speaker,ink,1,46);text(fb,20,72,p.profession,ink,1,46);box(fb,18,85,284,1,gold);
     for(unsigned i=0;i<3;++i)text(fb,20,94+i*13,p.dialogue[i],ink,1,46);
     text(fb,20,139,p.heading,ink,1,46);text(fb,20,153,p.objective,ink,1,46);text(fb,20,167,p.reward,ink,1,46);

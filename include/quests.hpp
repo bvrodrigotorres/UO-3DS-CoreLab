@@ -3,7 +3,7 @@
 #include "combat.hpp"
 namespace lab {
 class Quests {
-    std::array<int,QuestCount>offers{{-1,-1}};
+    std::array<int,QuestCount>offers{{-1,-1,-1}};
     unsigned topic=0;
 public:
     unsigned selected=0;

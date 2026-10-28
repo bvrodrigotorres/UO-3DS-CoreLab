@@ -24,6 +24,7 @@ struct DeveloperMenu {
         auto vendor=[&](const char*label,const std::vector<std::string>&titles){int best=100000000;const Npc*chosen=nullptr;for(const auto&n:npcs.all())if(n.alive&&!n.animal){std::string title=n.title;std::transform(title.begin(),title.end(),title.begin(),[](unsigned char c){return char(std::tolower(c));});bool matches=false;for(const auto&t:titles)if(title.find(t)!=std::string::npos)matches=true;if(!matches)continue;int dx=n.position.x-w.startX,dy=n.position.y-w.startY,score=dx*dx+dy*dy;if(score<best){best=score;chosen=&n;}}
             Actor target=chosen?chosen->position:Actor{},landing;destinations.push_back({label,target,chosen&&safeTeleportTile(w,npcs,target,landing)});};
         vendor("HERRERO / ARMAS",{"smith","armorer"});vendor("PROVEEDOR",{"provisioner"});vendor("SASTRE",{"tailor"});vendor("JOYAS",{"jewel","provisioner"});vendor("SANADOR",{"healer"});
+        if(w.contains(1491-w.originX,1640-w.originY)){fixed("ENTRADA ALCANTARILLAS",1491,1640,24);}
         fixed("CEMENTERIO",1378,1488,10);fixed("BOSQUE OESTE / ENEMIGOS",1240,1463,0);fixed("BOSQUE NORTE / ENEMIGOS",1377,1381,0);fixed("PUERTO DE BRITAIN",1485,1762,0);
         if(w.width>512||w.height>512)for(bool hostile:{true,false}){
             const Npc*chosen=nullptr;int best=2147483647;

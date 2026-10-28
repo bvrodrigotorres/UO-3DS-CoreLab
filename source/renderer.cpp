@@ -309,7 +309,7 @@ bool loadAtlases(int images,std::string&error,const std::string&root){
     std::ifstream layout(root+"atlas_layout.bin",std::ios::binary);
     if(layout){std::vector<uint8_t>b(9);layout.read((char*)b.data(),b.size());b.resize(size_t(layout.gcount()));if(!readAtlasLayout(b,slots)){error="INVALID ATLAS LAYOUT";return false;}}
     atlasSlots=slots;worldRead.pending=-1;
-    streamed=images>512;atlasRoot=root;textureFailure=false;worldRetry.assign((images+int(atlasSlots)-1)/int(atlasSlots),0);
+    streamed=images>512||atlasSlots<32;atlasRoot=root;textureFailure=false;worldRetry.assign((images+int(atlasSlots)-1)/int(atlasSlots),0);
     if(streamed){
         std::ifstream f(root+"image_sizes.bin",std::ios::binary);
         std::vector<unsigned char>b(8+size_t(images)*4+size_t((images+int(atlasSlots)-1)/int(atlasSlots))*4);
