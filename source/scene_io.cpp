@@ -32,7 +32,7 @@ public:
 };
 }
 
-bool loadWorld(const std::string&path,World&out,std::string&error,bool buildIndex){
+bool loadWorld(const std::string&path,World&out,std::string&error,bool fullGeometry){
     std::ifstream f(path,std::ios::binary);
     if(!f){error="No scene.bin; using built-in demo";return false;}
     f.seekg(0,std::ios::end);auto length=f.tellg();f.seekg(0);
@@ -49,18 +49,30 @@ bool loadWorld(const std::string&path,World&out,std::string&error,bool buildInde
     }
     size_t expected=32+(w.width+1)*(w.height+1)+w.width*w.height*13+count*26;
     if(expected!=size_t(length)){error="Scene length mismatch";return false;}
-    w.vertices.reserve((w.width+1)*(w.height+1));w.land.reserve(w.width*w.height);w.objects.reserve(count);
-    for(int i=0;i<(w.width+1)*(w.height+1);++i)w.vertices.push_back((int8_t)read(1));
+    uint32_t positionHash=2166136261u,inventoryHash=2166136261u;
+    auto add=[](uint32_t&hash,uint64_t value,unsigned bytes){for(unsigned i=0;i<bytes;++i){hash=(hash^uint8_t(value))*16777619u;value>>=8;}};
+    if(fullGeometry){w.vertices.reserve((w.width+1)*(w.height+1));w.land.reserve(w.width*w.height);w.objects.reserve(count);}
+    else {for(int v:{w.width,w.height,w.originX,w.originY})add(positionHash,uint64_t(v),8);for(int v:{w.originX,w.originY,w.width,w.height})add(inventoryHash,uint32_t(v),4);}
+    for(int i=0;i<(w.width+1)*(w.height+1);++i){int z=(int8_t)read(1);if(fullGeometry)w.vertices.push_back(z);else add(positionHash,uint64_t(z),8);}
     auto imageOK=[&](unsigned n){return n==NoImage||n<(unsigned)w.images;};
     for(int i=0;i<w.width*w.height;++i){
         Land l;l.art=read(2);l.image=read(2);l.flags=read(8);unsigned mode=read(1);l.texture=mode==1;
-        if(!imageOK(l.image)||mode>1){error="Invalid land image";return false;}w.land.push_back(l);
+        if(!imageOK(l.image)||mode>1){error="Invalid land image";return false;}
+        if(fullGeometry)w.land.push_back(l);else {add(positionHash,l.art,8);add(positionHash,l.flags,8);}
     }
     for(unsigned i=0;i<count;++i){
         Object o;o.x=read(2);o.y=read(2);o.z=(int8_t)read(1);o.height=read(1);o.art=read(2);o.hue=read(2);o.image=read(2);o.flags=read(8);o.order=read(4);unsigned pad=read(2);
-        if(!w.contains(o.x,o.y)||!imageOK(o.image)||pad){error="Invalid object";return false;}w.objects.push_back(o);
+        if(!w.contains(o.x,o.y)||!imageOK(o.image)||pad){error="Invalid object";return false;}
+        if(fullGeometry)w.objects.push_back(o);
+        else {
+            for(int v:{int(o.art),int(o.x),int(o.y),int(o.z),int(o.height)})add(positionHash,uint64_t(v),8);
+            add(positionHash,o.flags,8);
+            for(int v:{int(o.art),int(o.x),int(o.y),int(o.z)})add(inventoryHash,uint32_t(v),4);
+            if((o.art>=0xE40&&o.art<=0xE43)||o.art==0xE80||o.art==0x9AB||o.art==0xE7C)w.objects.push_back(o);
+        }
     }
     if(!reader.ok){error="Truncated scene";return false;}
+    if(!fullGeometry){w.compatiblePosition=positionHash;w.compatibleInventory=inventoryHash;}
     std::ifstream migration(path+".saves",std::ios::binary);
     if(migration){
         unsigned char a[16];migration.read((char*)a,16);
@@ -69,7 +81,7 @@ bool loadWorld(const std::string&path,World&out,std::string&error,bool buildInde
         if(!migration||migration.peek()!=EOF||std::memcmp(a,"UWC1",4)||u(4)!=hash||!u(8)||!u(12)){error="Invalid save migration";return false;}
         w.compatiblePosition=u(8);w.compatibleInventory=u(12);
     }
-    if(buildIndex)w.index();
+    if(fullGeometry)w.index();
     out=std::move(w);error.clear();return true;
 }
 }

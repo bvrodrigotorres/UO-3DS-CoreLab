@@ -131,9 +131,12 @@ def resolve_doors(rows,additions,generated,source,side):
     return remaining,result,promoted
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--all-decorations',type=Path,nargs='+');p.add_argument('--client',type=Path,required=True);p.add_argument('--reference',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--x',type=int,default=1488);p.add_argument('--y',type=int,default=1596);p.add_argument('--side',type=int,default=32);args=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--reference-world',type=Path);p.add_argument('--all-decorations',type=Path,nargs='+');p.add_argument('--client',type=Path,required=True);p.add_argument('--reference',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--x',type=int,default=1488);p.add_argument('--y',type=int,default=1596);p.add_argument('--side',type=int,default=32);args=p.parse_args()
     if args.out.exists():raise FileExistsError(args.out)
     ox,oy,side=args.x,args.y,args.side
+    if args.reference_world:
+        from audit_region_sources import audit,require_match
+        require_match(audit(args.client,args.reference_world,ox,oy,side))
     additions=[]
     files=sorted(f for root in args.all_decorations for f in root.rglob('*.cfg')) if args.all_decorations else [args.reference/n for n in ('britain.cfg','patches.cfg')]
     for file in files:

@@ -155,15 +155,25 @@ int main(){
     startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
     const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
-    std::string worldRoot=std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
+    const std::string completeRoot=baseRoot+"britain-complete/";
+    const std::string priorRoot=std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":baseRoot+"britain-expanded/";
+    std::string worldRoot=std::ifstream(completeRoot+"ready.bin").good()?completeRoot:std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
     std::string error;bool available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
     std::string migrationMessage;
+    auto restorePrior=[&](){privateWorld=lab::World{};worldRoot=priorRoot;available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);};
+    if(!available&&worldRoot==completeRoot){restorePrior();migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
+    if(available&&worldRoot==completeRoot){
+        const std::string realm=baseRoot+"britain-realm/";
+        bool realmSaved=std::ifstream(realm+"campaign.sav").good()||std::ifstream(realm+"campaign.sav.bak").good()||std::ifstream(realm+"inventory-private.sav").good();
+        if(!lab::migrateRegion(realmSaved?realm:baseRoot+"britain-expanded/",worldRoot,privateWorld,migrationMessage))restorePrior();
+    }
     if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
     if(available&&worldRoot==baseRoot+"britain-realm/"&&!lab::migrateRegion(baseRoot+"britain-expanded/",worldRoot,privateWorld,migrationMessage)){
         worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
     }
     if(available&&worldRoot==baseRoot+"britain-expanded/")lab::migrateRegion(baseRoot+"britain-large/",worldRoot,privateWorld,migrationMessage);
     if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);
+    if(!available&&worldRoot==completeRoot){restorePrior();if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
     if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error)&&lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
     const lab::World canonicalPrivate=lab::positionSnapshot(privateWorld);
     lab::World legacyPrivate;lab::Doors doors;std::string doorError;
@@ -555,7 +565,7 @@ int main(){
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||now-lastHud>=200||down||pageChanged||saveNotice){
             lastHud=now;
-            lab::HudInfo hud{authentic?(w->width>32?"BRITAIN "+std::to_string(w->width)+"X"+std::to_string(w->height):"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
+            lab::HudInfo hud{authentic?(w->width>32?"BRITAIN "+std::string(worldRoot==completeRoot?"COMPLETA ":"")+std::to_string(w->width)+"X"+std::to_string(w->height):"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
             if(pages.page==0){
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};

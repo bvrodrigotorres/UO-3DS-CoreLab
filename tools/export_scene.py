@@ -196,6 +196,8 @@ def static_image(art, graphic):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--per-page',type=int,choices=(2,8),default=8)
+    p.add_argument('--reference-world',type=Path,help='Require exact source agreement with exploration')
+    p.add_argument('--texture-client',type=Path,help='Optional original texture files from another compatible installation')
     p.add_argument('--decorations', type=Path, help='Private audited ServUO region manifest')
     p.add_argument('--client', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -214,6 +216,9 @@ def main():
     if out.exists():
         p.error('Output directory must not exist')
     client = args.client.expanduser().resolve()
+    if args.reference_world:
+        from audit_region_sources import audit,require_match
+        require_match(audit(client,args.reference_world,args.x,args.y,args.side))
     lands, data = tiledata(find(client, 'tiledata.mul'))
     reader = MapReader(client)
     grid = []
@@ -237,7 +242,8 @@ def main():
     if not Art.initialize():
         raise ValueError('Cannot initialize Ultima SDK Art')
     palette, images, identical = {}, [], {};missing_lands=set();inert_statics=set()
-    texture_files = (find(client, 'texidx.mul', False), find(client, 'texmaps.mul', False))
+    texture_client=(args.texture_client or client).expanduser().resolve()
+    texture_files = (find(texture_client, 'texidx.mul', False), find(texture_client, 'texmaps.mul', False))
     def picture(kind, graphic):
         key = (kind, graphic)
         if key in palette:

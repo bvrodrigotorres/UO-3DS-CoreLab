@@ -20,7 +20,10 @@ std::vector<uint8_t>read(const std::string&p){std::ifstream f(p,std::ios::binary
 }
 int main(int argc,char**argv){
     assert(argc>=2);std::string root=std::string(argv[1])+"/",oldRoot=root+"old/",newRoot=root+"new/",error;mkdir(oldRoot.c_str(),0700);mkdir(newRoot.c_str(),0700);
-    World old;old.width=old.height=8;old.originX=1408;old.originY=1536;old.startX=old.startY=2;old.vertices.assign(81,0);old.land.resize(64);Object chest;chest.art=0xe42;chest.x=chest.y=2;old.objects={chest};old.index();scene(oldRoot+"scene.bin",old);
+    World old;old.width=old.height=8;old.originX=1408;old.originY=1536;old.startX=old.startY=2;old.vertices.assign(81,0);old.land.resize(64);Object chest;chest.art=0xe42;chest.x=chest.y=2;old.objects={chest};old.vertices[0]=-7;old.land[0].flags=0xFEDCBA9876543210ull;Object marker;marker.x=marker.y=0;marker.art=321;marker.z=-7;marker.height=255;marker.flags=0xFEDCBA9876543210ull;old.objects.insert(old.objects.begin(),marker);old.index();scene(oldRoot+"scene.bin",old);
+    World summary;assert(loadWorld(oldRoot+"scene.bin",summary,error,false));
+    assert(summary.land.empty()&&summary.vertices.empty()&&summary.cells.empty()&&summary.objects.size()==1);
+    assert(summary.compatiblePosition==positionSnapshot(old).compatiblePosition&&summary.compatibleInventory==inventoryWorldId(old));
     World large;large.width=large.height=512;large.originX=1216;large.originY=1344;large.startX=large.startY=194;large.vertices.assign(513*513,0);large.land.resize(512*512);chest.x=chest.y=194;large.objects={chest};chest.x=chest.y=400;large.objects.push_back(chest);large.index();scene(newRoot+"scene.bin",large);
     World loaded;assert(loadWorld(newRoot+"scene.bin",loaded,error)&&loaded.width==512);
     auto snapshot=positionSnapshot(large);assert(snapshot.vertices.empty()&&snapshot.objects.empty()&&snapshot.cells.empty()&&snapshot.land.empty());

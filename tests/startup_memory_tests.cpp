@@ -39,7 +39,7 @@ void operator delete(void*p)noexcept{release(p);}void operator delete[](void*p)n
 void operator delete(void*p,size_t)noexcept{release(p);}void operator delete[](void*p,size_t)noexcept{release(p);}
 int main(int argc,char**argv){
     assert(argc==2);std::string root=std::string(argv[1])+"/",error;
-    fixture(root+"realm.bin",768,171867);fixture(root+"previous.bin",512,119117);
+    fixture(root+"realm.bin",768,171867);fixture(root+"previous.bin",768,171867);
     limit=30*1024*1024;peak=live;
     // Reserve 5 MiB for SDK, HUD, renderer metadata and other startup residents.
     std::vector<unsigned char>sdk(5*1024*1024);
@@ -49,11 +49,11 @@ int main(int argc,char**argv){
         assert(realm.compatiblePosition==123&&realm.compatibleInventory==456);
         assert(realm.objects.back().order==171866&&realm.objects.back().z==-7&&realm.objects.back().height==255&&realm.objects.back().flags==0xFEDCBA9876543210ull);
         assert(lab::loadWorld(root+"previous.bin",previous,error,false));
-        assert(previous.width==512&&realm.width==768&&previous.cells.empty());
+        assert(previous.width==768&&realm.width==768&&previous.cells.empty()&&previous.land.empty()&&previous.vertices.empty());
         // Corrupt a sidecar hash; failed loading must preserve the caller's world.
         previous={};std::fstream side(root+"previous.bin.saves",std::ios::binary|std::ios::in|std::ios::out);side.seekp(4);side.put(0);side.close();
         assert(!lab::loadWorld(root+"previous.bin",previous,error,false)&&previous.width==0);
-        std::cout<<"Startup memory: 768 region + previous 512 region + 5 MiB SDK reserve; peak "<<peak<<" / "<<limit<<" bytes; streamed sidecar hash and record boundaries OK\n";
+        std::cout<<"Startup memory: 768 region + previous 768 region + 5 MiB SDK reserve; peak "<<peak<<" / "<<limit<<" bytes; streamed sidecar hash and record boundaries OK\n";
     }catch(const std::bad_alloc&){std::cerr<<"Startup exceeds 30 MiB budget; peak before failure "<<peak<<" bytes\n";return 1;}
     return 0;
 }
