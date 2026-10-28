@@ -63,8 +63,9 @@ bool developerEditor(const lab::World&w,const lab::Npcs&npcs,lab::Actor&landing)
         if(confirm&&menu->resolve(w,npcs,landing))return true;
     }return false;
 }
+struct EditorReadFence {unsigned state=lab::pauseRendererReads();~EditorReadFence(){lab::resumeRendererReads(state);}};
 bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearance,lab::Inventory&bag,const lab::PlayerStatus&status){
-    C3D_FrameSync();lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
+    EditorReadFence fence;lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
     while(aptMainLoop()){
         if(changed){unsigned key=lab::Inventory::appearanceKey(editor.desired);valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";changed=false;}
         auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
@@ -88,7 +89,7 @@ bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearanc
 }
 bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,const std::array<int,11>&,std::string&)>&commit,const lab::Inventory*owned=nullptr){
     if(!assets.ready()||!assets.fullPaperdoll())return false;
-    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(owned)editor.useWardrobe(*owned);if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
+    EditorReadFence fence;lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(owned)editor.useWardrobe(*owned);if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
     while(aptMainLoop()){
         if(changed){

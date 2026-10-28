@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#include <functional>
 #include "inventory.hpp"
 #include <array>
 #include <map>
@@ -40,6 +41,7 @@ struct AppearanceEditor {
     std::string value(int field)const;
     int hit(int x,int y)const;
 };
+using LayerPainter=std::function<void(unsigned,const std::vector<uint16_t>&)>;
 class CharacterAssets {
     std::string root;
     std::vector<uint16_t>palettes;
@@ -55,7 +57,7 @@ public:
     bool ready()const{return !palettes.empty();}
     bool fullPaperdoll()const;
     // Fixed original anchor and dimensions, shared by every outfit and layer.
-    bool compose(const Appearance&,unsigned mask,std::vector<uint16_t>&frames,bool doll=false,int onlyFrame=-1,bool combat=false)const;
+    bool compose(const Appearance&,unsigned mask,std::vector<uint16_t>&frames,bool doll=false,int onlyFrame=-1,bool combat=false,const LayerPainter& painter={})const;
     bool dolls(const Appearance&,std::vector<uint8_t>&)const;
     bool portrait(const Appearance&,unsigned,std::vector<uint8_t>&)const;
     uint16_t color(const Appearance&,int field)const;

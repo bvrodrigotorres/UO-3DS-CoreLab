@@ -113,8 +113,8 @@ uint16_t CharacterAssets::color(const Appearance&a,int field)const{switch(field)
 bool CharacterAssets::room(size_t bytes)const{
 #ifdef __3DS__
     auto available=[](){auto info=mallinfo();return __ctru_heap_size>size_t(info.uordblks)?__ctru_heap_size-size_t(info.uordblks):0;};
-    if(available()<bytes+512*1024)trimCache();
-    return available()>=bytes+512*1024;
+    if(available()<bytes+2*1024*1024)trimCache();
+    return available()>=bytes+2*1024*1024;
 #else
     (void)bytes;return true;
 #endif
@@ -149,12 +149,13 @@ bool CharacterAssets::overlay(std::vector<uint16_t>&out,const std::string&file,i
     for(size_t i=0;i<layer.size();++i)if(layer[i]&1){uint16_t c=layer[i];if(hue&&(!partial||((c>>11)==(c>>6&31)&&(c>>11)==(c>>1&31)))){uint16_t h=palettes[(hue-1)*32+(c>>11)];c=((h>>10&31)<<11)|((h>>5&31)<<6)|((h&31)<<1)|1;}out[destination+i]=c;}
     return true;
 }
-bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame,bool combat)const{
+bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint16_t>&out,bool doll,int onlyFrame,bool combat,const LayerPainter&painter)const{
     bool mounted=!doll&&(mask&MountedBank);mask&=~MountedBank;
     if(!ready()||!a.valid()||(mask&~EquipmentAppearanceMask)||onlyFrame>int(mounted?MountedFrames-1:71))return false;
     const size_t area=doll?260*237:mounted?128*128:96*112;int count=doll||onlyFrame>=0?1:mounted?MountedFrames:72;
-    if(out.capacity()<area*count&&!room(area*count*sizeof(uint16_t)))return false;
-    out.assign(area*count,0);
+    const size_t output=area*(painter?1:count);
+    if(out.capacity()<output&&!room(output*sizeof(uint16_t)))return false;
+    out.assign(output,0);
     std::vector<std::pair<int,uint16_t>>layers;
     layers.push_back({400+a.female,color(a,2)});
     if(!a.realClothes&&a.shoes&&!(mask&4))layers.push_back({480,color(a,12)});
@@ -184,7 +185,9 @@ bool CharacterAssets::compose(const Appearance&a,unsigned mask,std::vector<uint1
             int sample=doll?144:frame+((mask&1)?(mounted?128:72):0);
             const std::string folder=mounted?"mounted/":combat&&!doll?"combat/":"";
             int sex=graphic==200&&mounted?0:a.female;
-            if(!overlay(out,folder+std::to_string(sex)+"-"+std::to_string(graphic)+".bin",sample,hue,false,i*area))return false;
+            if(painter)std::fill(out.begin(),out.end(),0);
+            if(!overlay(out,folder+std::to_string(sex)+"-"+std::to_string(graphic)+".bin",sample,hue,false,painter?0:i*area))return false;
+            if(painter)painter(unsigned(i),out);
         }return true;
     };
     if(mounted&&!paint(200,0)){out.clear();return false;}

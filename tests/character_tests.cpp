@@ -23,6 +23,9 @@ void syntheticAssets(const std::string&root){
     put(layer,16,fnv(layer,20));write(root+"0-400.bin",layer);
     CharacterAssets bank;assert(bank.load(root));Appearance a;a.hair=a.beard=a.shirt=a.pants=a.shoes=0;std::vector<uint16_t>pixels;
     assert(bank.compose(a,0,pixels)&&pixels.size()==72*96*112);assert(bank.compose(a,0,pixels,true)&&pixels.size()==260*237);
+    std::vector<uint16_t>expected,scratch,streamed;assert(bank.compose(a,0,expected));streamed.assign(expected.size(),0);
+    assert(bank.compose(a,0,scratch,false,-1,false,[&](unsigned frame,const std::vector<uint16_t>&layer){assert(layer.size()==96*112);for(size_t i=0;i<layer.size();++i)if(layer[i]&1)streamed[frame*layer.size()+i]=layer[i];}));
+    assert(streamed==expected&&scratch.size()==96*112);
     assert(bank.cachedBytes()<=CharacterAssets::CacheBudget);bank.trimCache();assert(bank.cachedBytes()==0);
     auto oversized=layer;oversized.resize(CharacterAssets::CacheBudget+1);put(oversized,12,oversized.size()-20);put(oversized,16,fnv(oversized,20));write(root+"0-400.bin",oversized);
     assert(!bank.compose(a,0,pixels)&&bank.cachedBytes()==0);write(root+"0-400.bin",layer);

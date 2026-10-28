@@ -15,7 +15,7 @@ LDFLAGS := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(TARGET).map
 LDFLAGS += $(foreach call,open close read write lseek fstat stat unlink rename,-Wl,--wrap=_$(call)_r)
 LIBS := -lcitro2d -lcitro3d -lctru -lm
 LIBDIRS := $(CTRULIB) $(PORTLIBS)
-APP_TITLE := UO CoreLab v0.50.1
+APP_TITLE := UO CoreLab v0.50.2
 APP_DESCRIPTION := Independent scene and walking experiment
 APP_AUTHOR := bvrodrigotorres
 export TOPDIR := $(CURDIR)

@@ -12,6 +12,8 @@ namespace lab {
 bool rendererInit();
 bool loadGroundIcons(const ItemIcons&);
 void rendererShutdown();
+unsigned pauseRendererReads();
+void resumeRendererReads(unsigned);
 bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
 bool selectEquipment(unsigned);
 void clearAppearance();

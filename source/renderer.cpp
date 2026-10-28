@@ -70,22 +70,38 @@ static Appearance characterAppearance;
 static void freeOutfit(Outfit*p){if(!p)return;if(p->custom){C3D_TexDelete(&p->texture);if(p->mounted)C3D_TexDelete(&p->second);}else if(p->legacy)C2D_SpriteSheetFree(p->legacy);delete p;}
 static C2D_Image outfitImage(Outfit*p,unsigned n){return p->custom?C2D_Image{p->mounted&&n>=64?&p->second:&p->texture,&p->frames[n]}:C2D_SpriteSheetGetImage(p->legacy,n);}
 static size_t outfitBytes(Outfit*p){return p->custom?p->texture.size+(p->mounted?p->second.size:0):C2D_SpriteSheetGetImage(p->legacy,0).tex->size;}
-static Outfit*customOutfit(const std::vector<uint16_t>&pixels,bool mounted=false){
-    if(pixels.size()!=(mounted?128*128*128:72*96*112))return nullptr;
+static Outfit*allocateCustomOutfit(bool mounted){
     auto*p=new Outfit;
     if(!C3D_TexInit(&p->texture,1024,1024,GPU_RGBA5551)){delete p;return nullptr;}
     if(mounted&&!C3D_TexInit(&p->second,1024,1024,GPU_RGBA5551)){C3D_TexDelete(&p->texture);delete p;return nullptr;}
     p->custom=true;p->mounted=mounted;std::memset(p->texture.data,0,p->texture.size);
     if(mounted)std::memset(p->second.data,0,p->second.size);
-    auto*data=static_cast<uint16_t*>(p->texture.data);
     const unsigned width=mounted?128:96,height=mounted?128:112,count=mounted?128:72,across=mounted?8:10;
     for(unsigned n=0;n<count;++n){unsigned index=mounted?n%64:n,left=index%across*width,top=index/across*height;
-        if(mounted&&n==64)data=static_cast<uint16_t*>(p->second.data);
-        p->frames[n]={static_cast<uint16_t>(width),static_cast<uint16_t>(height),left/1024.f,1-top/1024.f,(left+width)/1024.f,1-(top+height)/1024.f};
-        for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)data[characterTexel(left+x,top+y,1024)]=pixels[n*width*height+y*width+x];}
-    if(mounted){C3D_TexFlush(&p->second);C3D_TexSetFilter(&p->second,GPU_NEAREST,GPU_NEAREST);}
-    C3D_TexFlush(&p->texture);C3D_TexSetFilter(&p->texture,GPU_NEAREST,GPU_NEAREST);return p;
+        p->frames[n]={static_cast<uint16_t>(width),static_cast<uint16_t>(height),left/1024.f,1-top/1024.f,(left+width)/1024.f,1-(top+height)/1024.f};}
+    return p;
 }
+static void uploadCharacterLayer(Outfit*p,unsigned n,const uint16_t*pixels){
+    const unsigned width=p->mounted?128:96,height=p->mounted?128:112,index=p->mounted?n%64:n,across=p->mounted?8:10;
+    const unsigned left=index%across*width,top=index/across*height;
+    auto*data=static_cast<uint16_t*>(p->mounted&&n>=64?p->second.data:p->texture.data);
+    for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x){auto pixel=pixels[y*width+x];if(pixel&1)data[characterTexel(left+x,top+y,1024)]=pixel;}
+}
+static void flushCharacter(Outfit*p){
+    if(p->mounted){C3D_TexFlush(&p->second);C3D_TexSetFilter(&p->second,GPU_NEAREST,GPU_NEAREST);}
+    C3D_TexFlush(&p->texture);C3D_TexSetFilter(&p->texture,GPU_NEAREST,GPU_NEAREST);
+}
+static Outfit*composeOutfit(const CharacterAssets&assets,const Appearance&a,unsigned mask,bool mounted,bool combat){
+    Outfit*p=allocateCustomOutfit(mounted);if(!p)return nullptr;
+    std::vector<uint16_t>scratch;
+    // Decode one layer/frame into 21/32 KiB and merge directly into linear GPU
+    // storage. The previous outfit remains alive until the new bank is complete.
+    if(!assets.compose(a,mask|(mounted?MountedBank:0),scratch,false,-1,combat,[&](unsigned frame,const std::vector<uint16_t>&pixels){uploadCharacterLayer(p,frame,pixels.data());})){
+        freeOutfit(p);return nullptr;
+    }
+    flushCharacter(p);return p;
+}
+
 static unsigned outfitMask=~0u;
 static EquipmentCache<Outfit*>outfitCache;
 static void clearOutfits(){while(outfitCache.victim(~0u)>=0)freeOutfit(outfitCache.remove(unsigned(outfitCache.victim(~0u))));}
@@ -120,6 +136,7 @@ static bool npcImage(int style,unsigned frame,C2D_Image&image,bool fallback=true
     image=C2D_SpriteSheetGetImage(npcSheets[style],frame);return true;
 }
 static void prepareNpcPoses(const Npcs&npcs,const Combat*combat,const std::vector<Draw>&draws,float cameraX,float cameraY,float footZ){
+    if(!poseReader||!poseReader->start()){++resourceWaits;textureFailure=true;return;}
     std::vector<NpcPoseNeed>needed;
     for(const auto&d:draws){int style=-1;unsigned frame=0;float x=d.x,y=d.y,z=d.z;
         if(d.kind==Kind::Npc){const auto&n=npcs.all()[d.index];style=n.style;frame=avatarImage(n.direction,n.moving,false,unsigned(n.animation),40);x=n.from.x+(n.position.x-n.from.x)*n.progress;y=n.from.y+(n.position.y-n.from.y)*n.progress;z=n.from.z+(n.position.z-n.from.z)*n.progress;}
@@ -419,9 +436,7 @@ bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
     if(characterAppearance.enabled&&characterAssets&&art.currentKey!=mask&&!characterAssets->portrait(characterAppearance,mask,portrait))return false;
     if(auto cached=outfitCache.get(key)){outfit=cached;outfitMask=key;if(!portrait.empty()){art.currentDoll=std::move(portrait);art.currentKey=mask;}error.clear();return true;}
     if(art.dolls.empty()&&art.currentDoll.empty()){error="FALTAN RECURSOS DE EQUIPO";return mask==0;}
-    std::vector<uint16_t>customPixels;
     bool custom=characterAppearance.enabled&&characterAssets;
-    if(custom&&!characterAssets->compose(characterAppearance,mask|(mounted?MountedBank:0),customPixels,false,-1,combatBank)){error="PERSONAJE: CAPAS INCOMPLETAS";return false;}
     char path[128];std::snprintf(path,sizeof path,"sdmc:/3ds/UO-3DS-CoreLab/equip_%02u.t3x",mask);
     if(combatBank&&!custom)return false;
     if(!custom&&!equipmentChecksum(path,art.checksums[mask])){error="EQUIPO: ATLAS INVALIDO";return false;}
@@ -439,7 +454,7 @@ bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
     }
     if(linearSpaceFree()<required+reserve){error="EQUIPO: MEMORIA RESERVADA";return false;}
     Outfit*next=nullptr;
-    if(custom)next=customOutfit(customPixels,mounted);
+    if(custom)next=composeOutfit(*characterAssets,characterAppearance,mask,mounted,combatBank);
     else {auto sheet=C2D_SpriteSheetLoad(path);
         if(sheet&&C2D_SpriteSheetCount(sheet)==72){next=new Outfit;next->legacy=sheet;auto image=outfitImage(next,0);C3D_TexSetFilter(image.tex,GPU_NEAREST,GPU_NEAREST);}
         else if(sheet)C2D_SpriteSheetFree(sheet);
@@ -450,13 +465,13 @@ bool prepareEquipment(unsigned key,const EquipmentArt&art,std::string&error){
 }
 void clearAppearance(){C3D_FrameSync();clearOutfits();outfit=nullptr;outfitMask=99;characterAssets=nullptr;characterAppearance=Appearance{};}
 bool applyAppearance(const CharacterAssets&assets,const Appearance&a,EquipmentArt&art,unsigned mask,std::string&error){
-    std::vector<uint8_t>dolls;std::vector<uint16_t>pixels;
-    if(!assets.portrait(a,mask,dolls)||!assets.compose(a,mask,pixels)){error="FALTAN CAPAS DE PERSONALIZACION";return false;}
+    std::vector<uint8_t>dolls;
+    if(!assets.portrait(a,mask,dolls)){error="FALTAN CAPAS DE PERSONALIZACION";return false;}
     C3D_FrameSync();
     // Editor transitions may discard streamed world pages, never world data.
     if(streamed){for(auto&sheet:sheets)if(sheet){C2D_SpriteSheetFree(sheet);sheet=nullptr;}bytes=0;}
     while(linearSpaceFree()<4*1024*1024){int victim=outfitCache.victim(outfitMask,outfitMask^4096u);if(victim<0)break;freeOutfit(outfitCache.remove(unsigned(victim)));}
-    auto*next=customOutfit(pixels);if(!next){error="PERSONALIZACION: SIN MEMORIA";return false;}
+    auto*next=composeOutfit(assets,a,mask,false,false);if(!next){error="PERSONALIZACION: SIN MEMORIA";return false;}
     clearOutfits();
     characterAssets=&assets;characterAppearance=a;art.currentDoll=std::move(dolls);art.currentKey=mask;art.playerName=a.name;
     outfitCache.insert(mask,next,outfitBytes(next));outfit=next;outfitMask=mask;error.clear();return true;
@@ -536,6 +551,16 @@ unsigned renderListBuilds(){return renderCache.rebuilds;}
 void invalidateRenderList(){renderCache.invalidate();}
 void setWorldLookAhead(int dx,int dy){lookAheadX=dx;lookAheadY=dy;if(!dx&&!dy)aheadRenderCache.release();}
 void adoptWorldView(RoofCutaway&&prepared){renderCache.invalidate();aheadRenderCache.invalidate();roofCutaway=std::move(prepared);}
+unsigned pauseRendererReads(){
+    C3D_FrameSync();unsigned state=(resourceReader?1u:0u)|(poseReader?2u:0u);
+    resourceReader.reset();poseReader.reset();worldRead.pending=-1;pendingPoses.clear();
+    std::fill(worldRetry.begin(),worldRetry.end(),0);std::fill(poseRetry.begin(),poseRetry.end(),0);
+    return state;
+}
+void resumeRendererReads(unsigned state){
+    if(state&1){resourceReader.reset(new AsyncResources);if(!resourceReader->start())resourceReader.reset();}
+    if(state&2){poseReader.reset(new AsyncResources);poseReader->start();}
+}
 void releaseWorldResources(){
     C3D_FrameSync();
     // Join the CPU reader before releasing its ready buffers. No scene or GPU
