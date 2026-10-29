@@ -398,23 +398,26 @@ int main(){
         bool saved=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,inventory,playerStatus,saveMessage);
         inventory.saveSink=sink;if(!saved)return false;
         const auto before=journey;const auto beforeActor=actor;const int originX=w->originX,originY=w->originY;
-        auto rollback=[&](){
+        auto rollback=[&](const char*stage){
             bool ok=loadScene(before.zone);journey=before;actor=beforeActor;
             if(ok){npcs.reset(*w,actor);combat.reset(npcs);combat.locate(actor);quests.setup(*w,npcs);}
             else {sceneFatal=true;quit=true;}
-            moving=false;alignCamera();saveMessage="ERROR SD: VIAJE CANCELADO, PARTIDA CONSERVADA";return false;
+            moving=false;alignCamera();saveMessage=std::string("ERROR VIAJE: ")+stage;inventory.message=saveMessage;return false;
         };
-        if(!loadScene(zone))return rollback();
+        if(!loadScene(zone))return rollback("CARGAR DESTINO");
         auto next=std::make_unique<lab::Inventory>();
         const std::string tag=zone?"sewers":"private";
         next->init(privateWorld,saveRoot+savePrefix+"inventory-"+tag+".sav");
-        if(!next->healthy())return rollback();
+        if(!next->healthy())return rollback("LEER MOCHILA");
         next->copyPlayerFrom(inventory);
         lab::Journey destination=before;destination.zone=zone;
         if(zone)destination.returnPoint={beforeActor.x+originX,beforeActor.y+originY,beforeActor.z};
         lab::Actor landing=zone?lab::Actor{6032-w->originX,1499-w->originY,31}:death?lab::Actor{w->startX,w->startY,w->startZ}:lab::Actor{before.returnPoint.x-w->originX,before.returnPoint.y-w->originY,before.returnPoint.z};
-        lab::Actor safe;if(!lab::safeTeleportTile(*w,npcs,landing,safe))return rollback();landing=safe;
-        if(!next->checkpoint()||!lab::savePosition(saveRoot+savePrefix+"position-"+tag+".sav",canonicalPrivate,landing,saveMessage)||!lab::saveVitals(saveRoot+savePrefix+"vitals-"+tag+".sav",playerStatus)||!destination.save(saveRoot+savePrefix+"journey.sav"))return rollback();
+        lab::Actor safe;if(!lab::safeTeleportTile(*w,npcs,landing,safe))return rollback("PUNTO DE LLEGADA");landing=safe;
+        if(!next->checkpoint())return rollback("GUARDAR MOCHILA");
+        if(!lab::savePosition(saveRoot+savePrefix+"position-"+tag+".sav",canonicalPrivate,landing,saveMessage))return rollback("GUARDAR POSICION");
+        if(!lab::saveVitals(saveRoot+savePrefix+"vitals-"+tag+".sav",playerStatus))return rollback("GUARDAR ESTADO");
+        if(!destination.save(saveRoot+savePrefix+"journey.sav"))return rollback("CONFIRMAR VIAJE");
         auto prepare=inventory.prepareEquipment;auto use=inventory.useItem;
         inventory=std::move(*next);inventory.saveSink=sink;inventory.prepareEquipment=prepare;inventory.useItem=use;
         journey=destination;actor=landing;moving=false;alignCamera();animationPhase=0;npcPush.reset();inventoryDrag.cancel();

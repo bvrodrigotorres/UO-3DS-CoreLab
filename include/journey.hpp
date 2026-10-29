@@ -14,7 +14,15 @@ struct Journey {
     Actor returnPoint{1492,1640,24};
     static uint32_t hash(const unsigned char*b){uint32_t h=2166136261u;for(unsigned i=0;i<24;++i)h=(h^b[i])*16777619u;return h;}
     bool load(const std::string&path){
-        std::ifstream f(path,std::ios::binary);if(!f){struct stat st;if(::stat(path.c_str(),&st)==0||errno!=ENOENT)return false;if(::stat((path+".bak").c_str(),&st)==0||errno!=ENOENT)return false;return true;}
+        struct stat st;std::string input=path;
+        if(::stat(path.c_str(),&st)!=0){
+            if(errno!=ENOENT)return false;
+            input=path+".bak";
+            if(::stat(input.c_str(),&st)!=0){if(errno!=ENOENT)return false;*this=Journey{};return true;}
+        }
+        // Only recover an absent primary. Corrupt records must fail closed;
+        // selecting an older zone silently could discard recent possessions.
+        std::ifstream f(input,std::ios::binary);if(!f)return false;
         std::array<unsigned char,28>b{};if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF)return false;
         auto get=[&](unsigned p){uint32_t v=0;for(unsigned i=0;i<4;++i)v|=uint32_t(b[p+i])<<(8*i);return v;};
         if(get(0)!=0x31524a55||get(4)>1||get(20)!=0||get(24)!=hash(b.data()))return false;
@@ -28,7 +36,20 @@ struct Journey {
         put(0,0x31524a55);put(4,zone);put(8,returnPoint.x);put(12,returnPoint.y);put(16,returnPoint.z);put(24,hash(b.data()));
         std::string tmp=path+".tmp";FILE*f=std::fopen(tmp.c_str(),"wb");if(!f)return false;
         bool ok=std::fwrite(b.data(),1,b.size(),f)==b.size();if(std::fflush(f))ok=false;if(std::fclose(f))ok=false;
-        if(ok&&renameFile(tmp.c_str(),path.c_str())==0)return true;
+        if(!ok){std::remove(tmp.c_str());return false;}
+        // FSUSER_RenameFile on the 3DS SD never overwrites an existing path.
+        // Rotate the old authority first, exactly as position/inventory saves do.
+        // Destination possessions are already durable before this commit.
+        const std::string backup=path+".bak";struct stat st;
+        bool exists=::stat(path.c_str(),&st)==0;
+        if(!exists&&errno!=ENOENT){std::remove(tmp.c_str());return false;}
+        if(exists){
+            if((std::remove(backup.c_str())!=0&&errno!=ENOENT)||renameFile(path.c_str(),backup.c_str())!=0){std::remove(tmp.c_str());return false;}
+        }
+        if(renameFile(tmp.c_str(),path.c_str())==0)return true;
+        // A failed restore leaves the backup readable by load(), including
+        // recovery after an interruption between the two successful renames.
+        if(exists)renameFile(backup.c_str(),path.c_str());
         std::remove(tmp.c_str());return false;
     }
 };
