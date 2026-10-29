@@ -227,7 +227,7 @@ int main(){
     }
     bool namesOk=true;
     if(hasNpcs&&npcs.hasPopulation())namesOk=npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
-    if(hasNpcs)npcs.reset(privateWorld,actor);
+    if(hasNpcs){npcs.loadCombatProfiles(worldRoot+"npc_combat.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);npcs.reset(privateWorld,actor);}
     lab::Inventory inventory;inventory.init(privateWorld,saveRoot+savePrefix+"inventory-"+zoneTag()+".sav");
     lab::Inventory demoInventory;demoInventory.init(demo,saveRoot+savePrefix+"inventory-demo.sav");
     lab::ItemIcons itemIcons;itemIcons.load("sdmc:/3ds/UO-3DS-CoreLab/items.bin");lab::loadGroundIcons(itemIcons);
@@ -267,6 +267,7 @@ int main(){
         hasJournal=lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
         hasNpcs=npcs.loadPopulation(worldRoot+"population.bin",worldRoot+"scene.bin",privateWorld,npcError);
         if(!hasJournal||!hasNpcs||!npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError))return false;
+        npcs.loadCombatProfiles(worldRoot+"npc_combat.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
         if(!lab::loadAtlases(privateWorld.images,error,worldRoot)||!lab::loadPopulationAtlases(npcs,worldRoot,npcError))return false;
         w=&privateWorld;return true;
     };

@@ -20,7 +20,7 @@ bool Quests::cemetery(const World&w,const Npc&n){
     bool undead=name.find("skeleton")!=std::string::npos||name.find("zombie")!=std::string::npos||name.find("wraith")!=std::string::npos||name.find("spectre")!=std::string::npos||name.find("ghoul")!=std::string::npos;
     return n.animal&&undead&&x>=1330&&x<=1410&&y>=1425&&y<=1520;
 }
-unsigned Quests::owned(const Inventory&bag,unsigned type){unsigned total=0;for(auto s:bag.backpack)if(s.type==type)total+=s.count;return total;}
+unsigned Quests::owned(const Inventory&bag,unsigned type){unsigned total=0;for(auto s:bag.backpack)if(s.type==type||(type<BaseItemTypes&&itemBase(s.type)==int(type)))total+=s.count;return total;}
 void Quests::setup(const World&w,const Npcs&npcs){
     offers={{-1,-1,-1}};selected=0;message.clear();topic=0;
     for(unsigned q=0;q<QuestCount;++q){int best=2147483647;
@@ -61,7 +61,7 @@ bool Quests::interact(const World&w,const Npcs&npcs,const Actor&a,Inventory&bag,
     if(!ready(selected,bag)){message=selected==0?"EL CEMENTERIO AUN NO ESTA A SALVO":selected==2?"FALTAN ENEMIGOS EN LAS ALCANTARILLAS":"NECESITAS 3 PANES Y 5 VENDAS";return false;}
     Bag items=bag.backpack;
     if(selected==1){remove(items,1,3);remove(items,3,5);}
-    if(!add(items,0,selected==0?150:selected==2?250:80)||(selected==0&&!add(items,3,5))||(selected==2&&!add(items,28,1))){message="LIBERA ESPACIO O GUARDA ORO";return false;}
+    if(!add(items,0,selected==0?150:selected==2?250:80)||(selected==0&&!add(items,3,5))||(selected==2&&!add(items,magicItem(28,3,0),1))){message="LIBERA ESPACIO O GUARDA ORO";return false;}
     q.state=2;
     if(!bag.commitQuest(selected,q,std::move(items),renameFile)){message=bag.message;return false;}
     message=selected==0?"PREMIO: $150 Y 5 VENDAS":selected==2?"PREMIO: $250 Y ANILLO DE PODER":"PREMIO: $80 | SUMINISTROS ENTREGADOS";return true;

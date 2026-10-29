@@ -34,7 +34,7 @@ void Combat::reset(const Npcs&npcs){
     for(auto&c:corpses)c=Corpse{};
     for(auto&e:damage)e=DamageVisual{};
     for(auto&p:blood)p=BloodPool{};
-    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=manualFocus=false;healCooldown=bandageRemaining=0;bandageHeal=0;healingRevisionValue=0;swing=regen=strike=0;message.clear();
+    playerPosition={};visualSerial=0;meditating=false;meditationPulse=0;target=-1;attacking=false;automaticDefense=suppressDefense=manualFocus=false;healCooldown=bandageRemaining=0;bandageHeal=0;healingRevisionValue=regenerationTicks=0;swing=regen=strike=0;message.clear();
 }
 void Combat::shiftWindow(int dx,int dy){
     auto shift=[&](Actor&a){a.x+=dx;a.y+=dy;};shift(playerPosition);
@@ -56,7 +56,7 @@ void Combat::toggle(const Npcs&npcs,const Actor&a){
     if(target<0||target>=int(npcs.all().size())||!attackable(npcs.all()[target])||distance(a,npcs.all()[target].position)>8)select(npcs,a);
     if(target>=0){automaticDefense=suppressDefense=false;attacking=true;swing=0;message="ACERCATE AL OBJETIVO | A: PARAR";}
 }
-void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
+void Combat::kill(size_t index,Npcs&npcs,Inventory&inv,int luck){
     auto pool=std::find_if(blood.begin(),blood.end(),[](const BloodPool&p){return !p.active;});
     if(pool==blood.end())pool=std::max_element(blood.begin(),blood.end(),[](const BloodPool&a,const BloodPool&b){return a.age<b.age;});
     *pool={true,npcs.all()[index].position,0,unsigned(roll(0,6))};
@@ -71,19 +71,29 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv){
     auto is=[&](const char*s){return species.find(s)!=std::string::npos;};
     bool undead=is("skeleton")||is("zombie")||is("wraith")||is("spectre");
     bool armed=is("orc")||is("ratman")||is("lizardman")||is("ogre")||is("ettin")||is("troll");
-    if(undead||armed||is("gazer")||is("gargoyle")||is("harpy")||is("mongbat")){
+    if(is("el devorador")){
+        slot->loot={{0,uint16_t(roll(300,450))},{3,10},{4,1},{4,1},{23,5}};
+        slot->loot.push_back({uint16_t(rollEquipment(4,random,luck,0)),1});
+        slot->loot.push_back({uint16_t(rollEquipment(3,random,luck,2)),1});
+        slot->loot.push_back({uint16_t(rollEquipment(2,random,luck,1)),1});
+    }else if(undead||armed||is("gazer")||is("gargoyle")||is("harpy")||is("mongbat")){
         int tier=n.maximumHits>=150?3:n.maximumHits>=60?2:1;
         slot->loot.push_back({0,uint16_t(roll(8*tier,20*tier))});
         if(armed)slot->loot.push_back({3,1});
         if(is("harpy"))slot->loot.push_back({24,uint16_t(roll(5,12))});
         if(undead){slot->loot.push_back({25,uint16_t(roll(1,3))});slot->loot.push_back({3,uint16_t(roll(1,3))});if(roll(0,3)==0)slot->loot.push_back({4,1});}
-        if((armed||undead)&&roll(0,7)==0)slot->loot.push_back({uint16_t(roll(28,29)),1});
+        if((armed||undead)&&roll(0,7)==0)slot->loot.push_back({uint16_t(rollEquipment(tier>1?1:0,random,luck,2)),1});
         if(armed||is("skeleton")){if(roll(0,2)==0)slot->loot.push_back({uint16_t(tier==1?5:roll(16,18)),1});
             if(roll(0,3)==0)slot->loot.push_back({uint16_t(tier==1?19:tier==2?20:21),1});
             if(roll(0,4)==0)slot->loot.push_back({uint16_t(tier==1?26:27),1});}
     }else if(is("corpser")||is("reaper")){slot->loot={{3,uint16_t(roll(2,5))}};}
     else {slot->loot={{22,uint16_t(roll(1,2))}};if(is("bird")||is("chicken"))slot->loot.push_back({24,uint16_t(roll(3,8))});
         else if(is("cow")||is("bull")||is("sheep")||is("deer")||is("hind")||is("bear")||is("wolf")||is("goat"))slot->loot.push_back({23,uint16_t(roll(1,3))});}
+    if(!is("el devorador")){for(auto&item:slot->loot){if(item.type>=BaseItemTypes)continue;if(itemDefs[item.type].slot>=0){
+        unsigned base=item.type;uint32_t seed=random;unsigned generated=rollEquipment(n.maximumHits>=60?1:0,seed,luck,unsigned(itemDefs[base].slot==0?0:itemDefs[base].slot>=9?2:1));random=seed;
+        item.type=uint16_t(magicItem(base,itemQuality(generated),itemPower(generated)));
+    }
+    }}
     message="CRIATURA MUERTA | MOCHILA: ABRIR CADAVER";
     if(target==int(index)){target=-1;attacking=manualFocus=false;}
 }
@@ -117,7 +127,7 @@ bool Combat::useHealing(Inventory&inv,size_t index,PlayerStatus&status,SaveRenam
 }
 bool Combat::meditate(PlayerStatus&status,const Inventory&inv){
     if(status.mana>=status.manaMax){message="YA TIENES TODO EL MANA";return false;}
-    if(attacking||inv.equipment[5]==21||inv.equipment[8]==27){message="MEDITAR: SIN COMBATE NI PLACAS";return false;}
+    if(attacking||itemBase(inv.equipment[5])==21||itemBase(inv.equipment[8])==27){message="MEDITAR: SIN COMBATE NI PLACAS";return false;}
     meditating=true;meditationPulse=0;message="MEDITANDO: NO TE MUEVAS";return true;
 }
 bool Combat::repeatHealing(Inventory&inv,PlayerStatus&status,SaveRename renameFile){
@@ -130,7 +140,7 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
     playerPosition=player;
     if(dt<=0)return false;
     healCooldown=std::max(0.f,healCooldown-dt);bandageRemaining=std::max(0.f,bandageRemaining-dt);status.skills.tick(dt);
-    if(moving||attacking||inv.equipment[5]==21||inv.equipment[8]==27)meditating=false;
+    if(moving||attacking||itemBase(inv.equipment[5])==21||itemBase(inv.equipment[8])==27)meditating=false;
     for(auto&e:damage)if(e.active){e.age+=dt;if(e.age>=1.2f)e.active=false;}
     for(auto&p:blood)if(p.active){p.age+=dt;if(p.age>=3)p.active=false;}
     status.healthVisible=std::max(0.f,status.healthVisible-dt);status.flash=std::max(0.f,status.flash-dt);swing=std::max(0.f,swing-dt);strike=std::max(0.f,strike-dt);
@@ -151,12 +161,19 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         swing=status.attackDelay(&inv);
         if(status.stamina>0){auto&n=npcs.combatants()[target];auto&v=mob[target];npcs.engage(size_t(target));strike=.45f;--status.stamina;
             int difficulty=std::max(100,std::min(1000,v.maximum*5+n.meleeMax*15));Skill weapon=weaponSkill(inv.equipment[0]);
-            bool hit=!status.skills.ready||roll(0,999)<status.skills.hitChance(weapon,difficulty);
+            bool hit=!status.skills.ready||roll(0,999)<std::min(950,status.skills.hitChance(weapon,difficulty)*(100+PlayerStatus::bonus(&inv,&ItemDef::hitChance,45))/100);
             status.skills.practice(weapon,difficulty,hit);
-            if(hit){int dealt=std::min(v.hits,roll(status.damageMin(&inv),status.damageMax(&inv)));v.hits-=dealt;damageVisual(n.position,dealt,false,target);v.flash=.15f;status.skills.practice(Skill::Tactics,difficulty);status.skills.practice(Skill::Anatomy,difficulty);}
+            if(hit){
+                std::array<uint8_t,5>types{{100,0,0,0,0}};int weaponType=inv.equipment[0];
+                if(weaponType>=0){const auto&d=itemDefs[weaponType];if(d.element){types[0]=100-d.elementShare;types[d.element]=d.elementShare;}}
+                std::array<int,5>resists{};for(unsigned c=0;c<5;++c)resists[c]=n.resistances[c];
+                int dealt=std::min(v.hits,elementalDamage(roll(status.damageMin(&inv),status.damageMax(&inv)),types,resists));v.hits-=dealt;damageVisual(n.position,dealt,false,target);v.flash=.15f;status.skills.practice(Skill::Tactics,difficulty);status.skills.practice(Skill::Anatomy,difficulty);
+                if(dealt&&status.hits<status.hitsMax&&PlayerStatus::bonus(&inv,&ItemDef::lifeLeech,50)>0&&roll(0,99)<PlayerStatus::bonus(&inv,&ItemDef::lifeLeech,50)){int healed=std::min(status.hitsMax-status.hits,std::max(1,dealt/3));if(healed>0){status.hits+=healed;status.recovered();damageVisual(player,healed,true,-1,CombatText::Healing);++healingRevisionValue;}}
+                if(dealt&&status.mana<status.manaMax&&PlayerStatus::bonus(&inv,&ItemDef::manaLeech,50)>0&&roll(0,99)<PlayerStatus::bonus(&inv,&ItemDef::manaLeech,50)){status.mana=std::min(status.manaMax,status.mana+std::max(1,dealt/3));++healingRevisionValue;}
+            }
             else {message="FALLASTE EL GOLPE";damageVisual(n.position,0,false,target,CombatText::Miss);}
             status.healthVisible=6;
-            if(v.hits==0)kill(size_t(target),npcs,inv);
+            if(v.hits==0)kill(size_t(target),npcs,inv,status.totalLuck(&inv));
         }
     }
     defend(npcs,player);
@@ -164,8 +181,10 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if(!npcs.simulates(i)||(n.maximumHits>0&&n.meleeMax==0)||!n.alive||!n.animal||!n.hostile||n.moving||moving||v.cooldown>0||!meleeReach(w,n.position,player))continue;
         v.cooldown=1.25f;int damage=roll(n.meleeMin?n.meleeMin:n.name.find("dog")!=std::string::npos?4:2,n.meleeMax?n.meleeMax:n.name.find("dog")!=std::string::npos?7:4);
         if(status.skills.ready){int difficulty=std::max(100,std::min(1000,v.maximum*5+n.meleeMax*15));int chance=std::max(100,std::min(950,(difficulty+500)*1000/(2*(int(status.skills.value(weaponSkill(inv.equipment[0])))+500))));
+            chance=chance*100/(100+PlayerStatus::bonus(&inv,&ItemDef::defenseChance,45));
             if(roll(0,999)>=chance){message="ESQUIVAS EL GOLPE";damageVisual(player,0,true,-1,CombatText::Miss);status.skills.practice(weaponSkill(inv.equipment[0]),difficulty,false);continue;}}
-        damage=std::max(1,damage*(100-status.resistance(&inv))/100);
+        std::array<int,5>resists{};for(unsigned c=0;c<5;++c)resists[c]=status.resistance(&inv,c);
+        damage=elementalDamage(damage,n.damageTypes,resists);
         damage=std::min(status.hits,damage);meditating=false;suppressDefense=false;status.hits-=damage;status.tookDamage();damageVisual(player,damage,true,-1);status.flash=.15f;message="RECIBES "+std::to_string(damage)+" DE DANO";
         if(status.hits==0){
             bandageHeal=0;bandageRemaining=healCooldown=0;
@@ -189,7 +208,8 @@ bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,Pl
         if(danger||status.mana>=status.manaMax)meditating=false;
         else {meditationPulse+=dt;if(meditationPulse>=1){meditationPulse-=1;status.mana=std::min(status.manaMax,status.mana+1+int(status.skills.value(Skill::Meditation)/250));status.skills.practice(Skill::Meditation,1000);}}
     }
-    regen+=dt;if(regen>=1){regen-=1;status.mana=std::min(status.manaMax,status.mana+1);status.stamina=std::min(status.staminaMax,status.stamina+1);if(status.healthVisible<=0)status.hits=std::min(status.hitsMax,status.hits+1);}
+    regen+=dt;if(regen>=1){regen-=1;status.mana=std::min(status.manaMax,status.mana+1+PlayerStatus::bonus(&inv,&ItemDef::regenMana,5));status.stamina=std::min(status.staminaMax,status.stamina+1+PlayerStatus::bonus(&inv,&ItemDef::regenStamina,5));
+        int regeneration=(++regenerationTicks%4==0)?PlayerStatus::bonus(&inv,&ItemDef::regenLife,5):0;if(status.healthVisible<=0||regeneration)status.hits=std::min(status.hitsMax,status.hits+(status.healthVisible<=0?1:0)+regeneration);}
     status.recovered();
     return false;
 }

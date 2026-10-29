@@ -38,7 +38,7 @@ static C3D_Mtx projection;
 static int uniformProjection;
 static C3D_Tex white,labelFont,groundIcons,previewTexture;
 static bool previewsReady=false;static unsigned previewCount=0,previewRows=0;
-static bool groundIconsReady=false;static std::array<Tex3DS_SubTexture,ItemTypes>groundFrames;
+static bool groundIconsReady=false;static std::array<Tex3DS_SubTexture,BaseItemTypes>groundFrames;
 static OverheadFont overheadFont;
 static std::vector<C2D_SpriteSheet> sheets;
 static unsigned atlasSlots=32;
@@ -254,11 +254,11 @@ static void labelText(float x,float y,const std::string&text,bool outline,float 
 }
 
 bool loadGroundIcons(const ItemIcons&icons){
-    if(icons.rgba.size()!=ItemTypes*24*24*4)return false;
+    if(icons.rgba.size()!=BaseItemTypes*24*24*4)return false;
     C3D_FrameSync();if(groundIconsReady){C3D_TexDelete(&groundIcons);groundIconsReady=false;}
     if(!C3D_TexInit(&groundIcons,256,128,GPU_RGBA5551))return false;
     auto*pixels=static_cast<uint16_t*>(groundIcons.data);std::memset(pixels,0,groundIcons.size);
-    for(unsigned n=0;n<ItemTypes;++n){unsigned left=n%10*24,top=n/10*24;
+    for(unsigned n=0;n<BaseItemTypes;++n){unsigned left=n%10*24,top=n/10*24;
         groundFrames[n]={24,24,left/256.f,1-top/128.f,(left+24)/256.f,1-(top+24)/128.f};
         for(unsigned y=0;y<24;++y)for(unsigned x=0;x<24;++x){size_t p=(n*576+y*24+x)*4;unsigned c=icons.rgba[p+3]>127?((icons.rgba[p]>>3)<<11)|((icons.rgba[p+1]>>3)<<6)|((icons.rgba[p+2]>>3)<<1)|1:0;pixels[characterTexel(left+x,top+y,256)]=c;}}
     C3D_TexFlush(&groundIcons);C3D_TexSetFilter(&groundIcons,GPU_NEAREST,GPU_NEAREST);groundIconsReady=true;return true;
@@ -714,7 +714,7 @@ void drawWorld(C3D_RenderTarget*target,const World&w,const Actor&actor,float cam
             const auto&pile=inventory->ground[d.index/ChestSlots];size_t slot=d.index%ChestSlots;if(slot>=pile.items.size())continue;
             unsigned type=pile.items[slot].type;if(type>=ItemTypes)continue;
             float x=center.x-12+int(slot%3)*2-2,y=center.y-17+int(slot%2)*2;
-            if(groundIconsReady){C2D_Image image{&groundIcons,&groundFrames[type]};Point p[]={{x,y},{x+24,y},{x+24,y+24},{x,y+24}},uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);}
+            if(groundIconsReady){C2D_Image image{&groundIcons,&groundFrames[itemBase(type)]};Point p[]={{x,y},{x+24,y},{x+24,y+24},{x,y+24}},uv[4];uvFor(image,uv);quad(p,uv,image.tex,1,1,1,1);}
             else rect(x+5,y+12,12,8,.55f,.36f,.13f);
         }else if(d.kind==Kind::Blood){
             const auto&pool=combat->blood[d.index];auto foot=project(pool.position.x,pool.position.y,pool.position.z);pixelMode=PixelMode::Translucent;float alpha=std::min(1.f,(3-pool.age)*2);

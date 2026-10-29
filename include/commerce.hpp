@@ -11,7 +11,7 @@ public:
     int selected()const{return selectedType;}
     bool purchase()const{return buying;}
     unsigned price(unsigned type,bool buy)const{return type>0&&type<ItemTypes?unsigned(buy?itemDefs[type].price:std::max(1,itemDefs[type].price/2)):0;}
-    bool accepts(unsigned type)const{return std::find(stock.begin(),stock.end(),type)!=stock.end();}
+    bool accepts(unsigned type)const{return std::find(stock.begin(),stock.end(),unsigned(itemBase(type)))!=stock.end();}
     bool update(const World&,const Npcs&,const Actor&);
     void tap(const World&,const Npcs&,const Actor&,Inventory&,int,int);
 };

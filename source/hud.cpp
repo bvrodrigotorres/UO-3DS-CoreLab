@@ -22,6 +22,7 @@
 namespace lab {
 namespace {
 struct Color {uint8_t r,g,b;};
+Color qualityColor(unsigned type){static const Color colors[]={{90,65,40},{40,105,45},{35,95,190},{110,45,160},{160,85,5}};return colors[itemQuality(type)];}
 static int canvasWidth=320;
 struct Glyph {char letter;const char*rows;};
 // Original compact bitmap alphabet. Row values are five-bit hexadecimal masks.
@@ -188,8 +189,10 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     auto pair=[&](int col,int row,int current,int maximum){int x=ox+8+col*60+29,y=oy+17+row*20;text(fb,x,y+1,std::to_string(current),ink,1,5);box(fb,x-2,y+9,29,1,ink);text(fb,x,y+11,std::to_string(maximum),ink,1,5);};
     value(0,0,std::to_string(stats.strength));value(0,1,std::to_string(stats.dexterity));value(0,2,std::to_string(stats.intelligence));
     pair(1,0,stats.hits,stats.hitsMax);pair(1,1,stats.stamina,stats.staminaMax);pair(1,2,stats.mana,stats.manaMax);
-    value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.luck));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
-    value(3,0,std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv)));value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers+(stats.mounted?1:0))+"/"+std::to_string(stats.followersMax));
+    value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.totalLuck(inv)));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
+    std::string damageRange=std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv));
+    if(damageRange.size()>6)pair(3,0,stats.damageMin(inv),stats.damageMax(inv));else value(3,0,damageRange);
+    value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers+(stats.mounted?1:0))+"/"+std::to_string(stats.followersMax));
     if(stats.mounted){box(fb,199,204,58,1,gold);box(fb,199,222,58,1,gold);}
     for(int row=0;row<5;++row)text(fb,ox+270,oy+18+row*12,std::to_string(stats.resistance(inv,row)),ink,1,3);
 
@@ -206,10 +209,12 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
             box(fb,x,y,InventoryLayout::Width,InventoryLayout::Height,ink);box(fb,x+1,y+1,InventoryLayout::Width-2,InventoryLayout::Height-2,slotColor);
             if(offset+n>=items.size())continue;
             auto item=items[offset+n];if(item.type>=ItemTypes)continue;
-            if(icons&&icons->rgba.size()==ItemTypes*24*24*4){
-                for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t p=(item.type*24*24+iy*24+ix)*4;
+            if(itemQuality(item.type)){box(fb,x+1,y+1,39,33,qualityColor(item.type));box(fb,x+3,y+3,35,29,slotColor);}
+            if(icons&&icons->rgba.size()==BaseItemTypes*24*24*4){
+                for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t p=(itemBase(item.type)*24*24+iy*24+ix)*4;
                     if(icons->rgba[p+3]>127)pixel(fb,x+8+ix,y+3+iy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
             }else text(fb,x+3,y+7,itemDefs[item.type].name,{244,222,160},1,6);
+            if(itemQuality(item.type)){box(fb,x+2,y+1,8,9,qualityColor(item.type));text(fb,x+3,y+2,std::string(1,"NEMRL"[itemQuality(item.type)]),{255,255,255},1,1);}
             std::string count=std::to_string(item.count);box(fb,x+40-int(count.size())*6,y+26,int(count.size())*6,8,ink);
             text(fb,x+40-int(count.size())*6,y+27,count,{244,222,160},1,5);
         }
@@ -225,7 +230,7 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
     if(!failed&&inv.useMode){text(fb,18,29,inv.message,ink,1,47);}
     else if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
-        std::string detail=d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(inv.detailType==3&&status?status->skills.bandageAmount():itemHealing(unsigned(inv.detailType)))+" VIDA";else if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
+        std::string detail=(itemQuality(inv.detailType)?std::string(qualityName(itemQuality(inv.detailType)))+" | ":"")+d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(inv.detailType==3&&status?status->skills.bandageAmount():itemHealing(unsigned(inv.detailType)))+" VIDA";else if(itemBase(inv.detailType)==28)detail+=" | VER BONOS EN EQUIPO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
         text(fb,18,29,detail,ink,1,47);}
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
@@ -233,7 +238,7 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     if(inv.saveFailed){box(fb,18,28,282,9,{231,213,177});text(fb,18,29,"ERROR SD: CAMBIOS PENDIENTES",{170,25,20});}
     else if(inv.savePending)box(fb,145,19,4,5,gold);
     if(drag&&drag->active&&drag->dragging){int x=std::max(0,std::min(295,drag->x-12)),y=std::max(0,std::min(215,drag->y-12));
-        box(fb,x,y,25,25,gold);if(icons&&icons->rgba.size()==ItemTypes*24*24*4&&drag->item.type<ItemTypes)for(int yy=0;yy<24;++yy)for(int xx=0;xx<24;++xx){size_t p=(drag->item.type*576+yy*24+xx)*4;if(icons->rgba[p+3]>127)pixel(fb,x+xx,y+yy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
+        box(fb,x,y,25,25,gold);if(icons&&icons->rgba.size()==BaseItemTypes*24*24*4&&drag->item.type<ItemTypes)for(int yy=0;yy<24;++yy)for(int xx=0;xx<24;++xx){size_t p=(itemBase(drag->item.type)*576+yy*24+xx)*4;if(icons->rgba[p+3]>127)pixel(fb,x+xx,y+yy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
     }
 
 }
@@ -243,13 +248,14 @@ void drawEquipmentMenu(uint8_t*top,uint8_t*bottom,const EquipmentMenu&e,const Ap
     const Color ink={55,37,22},paper={231,213,177},gold={174,131,64};
     (void)bag;auto staged=std::make_unique<Inventory>();staged->equipment=e.desired;
     canvasWidth=400;box(top,112,13,268,16,paper);text(top,140,17,"EQUIPAMIENTO",ink);
-    box(top,218,178,158,41,{176,160,127});text(top,222,181,"DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get())),ink);
-    text(top,222,194,"PROTECCION "+std::to_string(status.resistance(staged.get()))+"%",ink);
-    text(top,222,207,"X: GIRAR",ink);
+    box(top,216,55,175,176,paper);text(top,221,59,"PROPIEDADES DEL OBJETO",ink,1,27);
+    int selected=e.desired[e.row];if(selected>=0){auto lines=itemDetails(unsigned(selected));int y=71;for(size_t i=0;i<lines.size()&&i<17;++i,y+=8)text(top,221,y,lines[i],i==1?qualityColor(unsigned(selected)):ink,1,27);}
+    text(top,221,211,"TOTAL DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get())),ink,1,27);
+    text(top,221,222,"FIS "+std::to_string(status.resistance(staged.get()))+"% | SUERTE "+std::to_string(status.totalLuck(staged.get())),ink,1,27);
     canvasWidth=320;drawHudFrame(bottom,{},false,true);text(bottom,18,15,"EQUIPAMIENTO",ink);text(bottom,18,31,"L/R: HOJA | PAD: ELEGIR / CAMBIAR",ink,1,48);
     box(bottom,249,25,54,17,gold);text(bottom,254,30,std::to_string(e.page()+1)+"/2 >",ink);
     for(int r=0;r<6;++r){int slot=e.page()*6+r;if(slot>=11)break;int y=46+r*22;box(bottom,18,y,285,20,slot==e.row?gold:paper);text(bottom,22,y+7,equipmentSlotNames[slot],ink,1,11);text(bottom,133,y+7,"<",ink);text(bottom,146,y+7,e.desired[slot]<0?"SIN EQUIPAR":itemDefs[e.desired[slot]].name,ink,1,24);text(bottom,292,y+7,">",ink);}
-    int t=e.desired[e.row];std::string detail=t<0?"SIN OBJETO EN ESTA RANURA":t==28?"EFECTO: +2 AL DANO":t==29?"EFECTO: +5% PROTECCION FISICA":itemDefs[t].slot==0?"DANO "+std::to_string(itemDefs[t].damageMin)+"-"+std::to_string(itemDefs[t].damageMax)+" | "+std::to_string(int(itemDefs[t].delay*1000))+" MS":"PROTECCION FISICA: "+std::to_string(itemDefs[t].protection)+"%";
+    std::string detail="DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get()))+" | RES FISICA "+std::to_string(status.resistance(staged.get()))+"%";
     text(bottom,20,183,detail,ink,1,47);text(bottom,20,194,"A: CAMBIAR | START: APLICAR",ink);text(bottom,20,205,e.message.empty()?"SOLO OBJETOS QUE YA POSEES":e.message,ink,1,47);
     box(bottom,18,216,132,18,gold);text(bottom,33,222,"B: CANCELAR",ink);box(bottom,170,216,133,18,gold);text(bottom,185,222,"APLICAR",ink);
 }
@@ -265,7 +271,7 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
         if(!side&&size_t(n+shop.bagPage*12)<inv.backpack.size())type=inv.backpack[n+shop.bagPage*12].type;
         if(type<0||type>=int(ItemTypes))continue;
         if(shop.selected()==type&&shop.purchase()==bool(side)){box(fb,x+1,y+1,39,33,gold);}
-        if(icons&&icons->rgba.size()==ItemTypes*24*24*4)for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t at=(type*576+iy*24+ix)*4;if(icons->rgba[at+3]>127)pixel(fb,x+8+ix,y+1+iy,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
+        if(icons&&icons->rgba.size()==BaseItemTypes*24*24*4)for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t at=(itemBase(type)*576+iy*24+ix)*4;if(icons->rgba[at+3]>127)pixel(fb,x+8+ix,y+1+iy,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
         else text(fb,x+2,y+5,itemDefs[type].name,ink,1,6);
         unsigned count=0;for(auto owned:inv.backpack)if(owned.type==type)count+=owned.count;
         std::string quantity=std::to_string(count);int qx=x+39-int(quantity.size())*6;box(fb,qx,y+1,int(quantity.size())*6,8,ink);text(fb,qx,y+2,quantity,{244,222,160},1,5);
@@ -277,7 +283,7 @@ void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemI
     if(shop.selected()>0)message=(shop.purchase()?"COMPRAR ":"VENDER ")+std::string(itemDefs[shop.selected()].name)+" POR $"+std::to_string(shop.price(unsigned(shop.selected()),shop.purchase()));
     if(shop.message.find("COMPRADO")==0||shop.message.find("VENDIDO")==0||shop.message.find("NO DISPONIBLE")!=std::string::npos||shop.message.find("NO COMPRA")!=std::string::npos||shop.message.find("ERROR")!=std::string::npos||shop.message.find("INSUFICIENTE")!=std::string::npos||shop.message.find("LLENA")!=std::string::npos)message=shop.message;
     text(fb,18,225,message,ink,1,47);
-    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
+    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=itemQuality(shop.selected())?std::string(qualityName(itemQuality(shop.selected())))+" | "+powerName(itemPower(shop.selected())):shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
 }
 
 void drawQuests(uint8_t*fb,const QuestPanel&p){

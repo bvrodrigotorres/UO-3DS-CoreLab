@@ -1,3 +1,3 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-namespace lab { inline constexpr const char* Version="0.51"; }
+namespace lab { inline constexpr const char* Version="0.52"; }

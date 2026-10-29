@@ -96,6 +96,7 @@ bool Npcs::loadPopulation(const std::string&path,const std::string&scene,const W
         if((npc.aggressive&&!npc.animal)||(npc.stationary&&!npc.animal)||npc.style>=int(styles)||npc.roam>120||n(at+10,2)>(aquatic?31u:extended?7u:1u)||(npc.waterOnly&&!npc.swims)||!canStandMobile(w,npc.position,npc.swims,npc.waterOnly)||b[at+43]){error="POBLACION: POSICION INVALIDA";return false;}
         if(extended){npc.maximumHits=n(at+44,2);npc.meleeMin=n(at+46,2);npc.meleeMax=n(at+48,2);npc.respawnSeconds=n(at+50,2);if(npc.maximumHits<1||npc.maximumHits>2000||npc.meleeMin<0||npc.meleeMax<npc.meleeMin||npc.meleeMax>100||npc.respawnSeconds<1||npc.respawnSeconds>3600){error="POBLACION: COMBATE INVALIDO";return false;}}
         npc.name=std::string((const char*)b.data()+at+12);npc.greeting=npc.animal?"":npc.name+": SALUDOS, VIAJERO";npc.wait=1+(i%10)*.15f;next.push_back(npc);}
+    sceneIdentity=sceneHash;populationIdentity=hash(b.data(),b.size());sceneSource=scene;populationSource=path;
     deathFrames=extended;art=std::move(nextArt);original=std::move(next);error.clear();return true;
 }
 bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::string&population,std::string&error){
@@ -116,6 +117,19 @@ bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::s
         next[i].greeting=next[i].animal?"":next[i].name+": SALUDOS, VIAJERO";
     }
     original=std::move(next);error.clear();return true;
+}
+bool Npcs::loadCombatProfiles(const std::string&path,const std::string&scene,const std::string&population,std::string&error){
+    std::ifstream f(path,std::ios::binary);if(!f){error="FALTAN RESISTENCIAS NPC";return false;}
+    error="RESISTENCIAS NPC INVALIDAS";
+    std::vector<unsigned char>b(20+original.size()*10);if(!f.read((char*)b.data(),b.size())||f.peek()!=EOF||std::memcmp(b.data(),"UCR1",4))return false;
+    auto get=[&](size_t p,unsigned n){uint32_t v=0;for(unsigned i=0;i<n;++i)v|=uint32_t(b[p+i])<<(8*i);return v;};
+    uint32_t sceneHash=sceneIdentity,popHash=populationIdentity,hash=2166136261u;
+    if((scene!=sceneSource||population!=populationSource)&&(!fileHash(scene,24*1024*1024,sceneHash)||!fileHash(population,65536,popHash)))return false;
+    for(size_t i=20;i<b.size();++i)hash=(hash^b[i])*16777619u;
+    if(get(4,2)!=original.size()||get(6,2)||get(16,4)!=hash||get(8,4)!=sceneHash||get(12,4)!=popHash)return false;
+    for(size_t i=0;i<original.size();++i){unsigned sum=0;for(unsigned c=0;c<5;++c){if(b[20+i*10+c]>100||b[25+i*10+c]>100)return false;sum+=b[25+i*10+c];}if(sum!=100)return false;}
+    for(size_t i=0;i<original.size();++i)for(unsigned c=0;c<5;++c){original[i].resistances[c]=b[20+i*10+c];original[i].damageTypes[c]=b[25+i*10+c];}
+    error.clear();return true;
 }
 void Npcs::reset(const World&w,const Actor&player){
     windowed=false;simulation.clear();placement.clear();
