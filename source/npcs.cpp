@@ -88,7 +88,7 @@ bool Npcs::loadPopulation(const std::string&path,const std::string&scene,const W
     auto n=[&](size_t p,int count){uint32_t value=0;for(int i=0;i<count;++i)value|=uint32_t(b[p+i])<<(8*i);return value;};
     bool aquatic=b[3]=='3',extended=b[3]!='1';unsigned stride=extended?52:44;
     unsigned count=n(4,2),styles=n(6,2);
-    if(!count||count>1024||!styles||styles>64||b.size()!=16+styles*16+count*stride||hash(b.data()+16,b.size()-16)!=n(12,4)||!fileHash(scene,24*1024*1024,sceneHash)||sceneHash!=n(8,4)){error="POBLACION: MAPA O CHECKSUM INVALIDO";return false;}
+    if(!count||count>1024||!styles||styles>64||b.size()!=16+styles*16+count*stride||hash(b.data()+16,b.size()-16)!=n(12,4)||!sceneFileHash(w,scene,24*1024*1024,sceneHash)||sceneHash!=n(8,4)){error="POBLACION: MAPA O CHECKSUM INVALIDO";return false;}
     std::vector<NpcStyle>nextArt;std::vector<Npc>next;
     for(unsigned i=0;i<styles;++i){size_t at=16+i*16;NpcStyle a;a.pivotX=int16_t(n(at,2));a.pivotY=int16_t(n(at+2,2));a.width=n(at+4,2);a.height=n(at+6,2);a.bytes=n(at+8,4);a.checksum=n(at+12,4);
         if(!a.width||!a.height||a.width>192||a.height>192||std::abs(a.pivotX)>256||std::abs(a.pivotY)>256||!a.bytes||a.bytes>2*1024*1024+4096){error="POBLACION: ATLAS INVALIDO";return false;}nextArt.push_back(a);}
@@ -106,7 +106,9 @@ bool Npcs::loadNames(const std::string&path,const std::string&scene,const std::s
     auto invalid=[&](){error="NOMBRES: ARCHIVO INVALIDO O AUSENTE";return false;};
     if(!read(path,b,128*1024)||b.size()<20||std::memcmp(b.data(),"UNL1",4))return invalid();
     auto n=[&](size_t p,int count){uint32_t v=0;for(int i=0;i<count;++i)v|=uint32_t(b[p+i])<<(8*i);return v;};
-    if(n(4,2)!=original.size()||n(6,2)||b.size()!=20+85*original.size()||hash(b.data()+20,b.size()-20)!=n(16,4)||!fileHash(scene,24*1024*1024,sceneHash)||sceneHash!=n(8,4)||!read(population,popRaw,65536)||hash(popRaw.data(),popRaw.size())!=n(12,4))return invalid();
+    uint32_t popHash=populationIdentity;sceneHash=sceneIdentity;
+    if(sceneSource.empty()||populationSource.empty()||scene!=sceneSource||population!=populationSource){if(!fileHash(scene,24*1024*1024,sceneHash)||!read(population,popRaw,65536))return invalid();popHash=hash(popRaw.data(),popRaw.size());}
+    if(n(4,2)!=original.size()||n(6,2)||b.size()!=20+85*original.size()||hash(b.data()+20,b.size()-20)!=n(16,4)||sceneHash!=n(8,4)||popHash!=n(12,4))return invalid();
     auto next=original;
     for(size_t i=0;i<next.size();++i){size_t at=20+85*i;
         if(!b[at]||b[at+31]||b[at+79])return invalid();

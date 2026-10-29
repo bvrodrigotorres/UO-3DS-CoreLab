@@ -19,6 +19,7 @@
 #include "resource_preparation.hpp"
 #include "quests.hpp"
 #include "journey.hpp"
+#include "startup_probe.hpp"
 #include <3ds.h>
 #include <cstdio>
 #include <cmath>
@@ -64,7 +65,7 @@ bool developerEditor(const lab::World&w,const lab::Npcs&npcs,lab::Actor&landing)
         if(confirm&&menu->resolve(w,npcs,landing))return true;
     }return false;
 }
-struct EditorReadFence {unsigned state=lab::pauseRendererReads();~EditorReadFence(){lab::resumeRendererReads(state);}};
+struct EditorReadFence {unsigned state=graphicsReady?lab::pauseRendererReads():0;~EditorReadFence(){if(graphicsReady)lab::resumeRendererReads(state);}};
 void tradeEditor(const lab::World&w,const lab::Npcs&npcs,const lab::Actor&actor,lab::Inventory&bag,lab::Commerce&shop,lab::PlayerStatus&status,const lab::ItemIcons&icons,const std::function<bool()>&saveVitals){
     EditorReadFence fence;C3D_FrameSync();
     auto menu=std::make_unique<lab::TradeMenu>();menu->refresh(shop,bag);u64 repeat=0;bool first=true;
@@ -176,6 +177,54 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
     return false;
 }
 
+struct BootstrapUI {
+    lab::StartupProbe probe;lab::StartMenu menu;lab::MenuAction choice=lab::MenuAction::None;
+    lab::Appearance created;bool createdReady=false;std::unique_ptr<lab::CharacterAssets>assets;
+    explicit BootstrapUI(const std::string&base):probe(base){menu.options=probe.options;menu.message=probe.message;menu.selected=probe.canContinue?1:0;}
+};
+bool initialMenu(BootstrapUI&boot,const std::string&base){
+    u64 nextPad=0;bool touching=false;int x=0,y=0,lastX=0,lastY=0;
+    while(aptMainLoop()){
+        startupFrame(&boot.menu,boot.probe.canContinue);hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
+        if(down&KEY_START)return false;
+        if(down&KEY_B)boot.menu.back();
+        circlePosition pad;hidCircleRead(&pad);u64 now=osGetTime();int d=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
+        if(!d)nextPad=0;else if(now>=nextPad){boot.menu.move(d);nextPad=now+180;}
+        bool accept=down&KEY_A;
+        if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);x=lastX=t.px;y=lastY=t.py;touching=true;}
+        if((held&KEY_TOUCH)&&touching){touchPosition t;hidTouchRead(&t);lastX=t.px;lastY=t.py;}
+        if((hidKeysUp()&KEY_TOUCH)&&touching){touching=false;int hit=boot.menu.hit(x,y);if(hit>=0&&std::abs(lastX-x)<12&&std::abs(lastY-y)<12){boot.menu.selected=hit;accept=true;}}
+        if(!accept)continue;
+        auto previous=boot.menu.options;auto action=boot.menu.activate(boot.probe.canContinue);
+        if(previous.roofs!=boot.menu.options.roofs||previous.zoom!=boot.menu.options.zoom||previous.page!=boot.menu.options.page){
+            std::string error;if(!boot.menu.options.save(boot.probe.optionsRoot+"options.sav",error)){boot.menu.options=previous;boot.menu.message=error;}else boot.menu.message="OPCIONES GUARDADAS";
+        }
+        if(action==lab::MenuAction::Exit)return false;
+        if(action==lab::MenuAction::Continue){boot.choice=action;return true;}
+        if(action==lab::MenuAction::NewGame){
+            startupFrame(nullptr,false,"PREPARANDO PERSONALIZACION",1);
+            if(!boot.assets)boot.assets=std::make_unique<lab::CharacterAssets>();
+            if(!boot.assets->ready())boot.assets->load(base+"character/");
+            if(!boot.assets->ready()||!boot.assets->fullPaperdoll()){
+                if(!lab::startupFile(boot.probe.worldRoot+"scene.bin")){boot.choice=action;return true;}
+                boot.menu.back();boot.menu.message="ACTUALIZA CHARACTER A V0.25";continue;
+            }
+            lab::Appearance initial;initial.enabled=initial.realClothes=true;
+            boot.createdReady=appearanceEditor(*boot.assets,initial,0,true,[&](const lab::Appearance&a,const std::array<int,11>&,std::string&message){
+                std::vector<uint8_t>dolls;std::vector<uint16_t>frames;
+                if(!boot.assets->dolls(a,dolls)||!boot.assets->compose(a,7,frames)){message="FALTAN CAPAS DE EQUIPAMIENTO";return false;}
+                // Only a draft here: no campaign files are replaced until the
+                // selected world and the complete new save have been validated.
+                boot.created=a;return true;
+            });
+            boot.assets->trimCache();
+            if(boot.createdReady){boot.choice=action;return true;}
+            boot.menu.back();nextPad=0;hidScanInput();
+        }
+    }
+    return false;
+}
+
 }
 
 int main(){
@@ -184,6 +233,10 @@ int main(){
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
+    const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
+    auto boot=std::make_unique<BootstrapUI>(baseRoot);
+    if(!initialMenu(*boot,baseRoot)){gfxExit();return 0;}
+    startupFrame(nullptr,false,"PREPARANDO EL MUNDO",1);
     if(!C3D_Init(lab::FrameCommandBytes)){gfxExit();return 1;}
     graphicsReady=true;
     auto target=C3D_RenderTargetCreate(240,400,GPU_RB_RGBA8,GPU_RB_DEPTH16);
@@ -191,14 +244,16 @@ int main(){
     C3D_RenderTargetSetOutput(target,GFX_TOP,GFX_LEFT,GX_TRANSFER_FLIP_VERT(0)|GX_TRANSFER_OUT_TILED(0)|GX_TRANSFER_RAW_COPY(0)|GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8)|GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
     startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
-    const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
     const std::string completeRoot=baseRoot+"britain-complete/";
     const std::string priorRoot=std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":baseRoot+"britain-expanded/";
-    std::string worldRoot=std::ifstream(completeRoot+"ready.bin").good()?completeRoot:std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
+    std::string worldRoot=lab::startupWorldRoot(baseRoot);
+    const bool directSewers=boot->probe.directSewers(boot->choice);
+    const std::string requestedTown=worldRoot;
+    if(directSewers)worldRoot=baseRoot+"britain-sewers/";
     std::string error;bool available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
     std::string migrationMessage;
     auto restorePrior=[&](){privateWorld=lab::World{};worldRoot=priorRoot;available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);};
-    if(!available&&worldRoot==completeRoot){restorePrior();migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
+    if(!directSewers&&!available&&worldRoot==completeRoot){restorePrior();migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
     if(available&&worldRoot==completeRoot){
         const std::string realm=baseRoot+"britain-realm/";
         bool realmSaved=std::ifstream(realm+"campaign.sav").good()||std::ifstream(realm+"campaign.sav.bak").good()||std::ifstream(realm+"inventory-private.sav").good();
@@ -212,10 +267,11 @@ int main(){
     if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);
     if(!available&&worldRoot==completeRoot){restorePrior();if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
     if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error)&&lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
-    const std::string saveRoot=worldRoot,townRoot=worldRoot,sewerRoot=baseRoot+"britain-sewers/";
+    const std::string saveRoot=directSewers?requestedTown:worldRoot,townRoot=saveRoot,sewerRoot=baseRoot+"britain-sewers/";
     lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
     lab::Journey journey;bool journeyOk=journey.load(saveRoot+savePrefix+"journey.sav");
-    if(journeyOk&&journey.zone){
+    if(directSewers&&(!available||!journey.zone))journeyOk=false;
+    if(journeyOk&&journey.zone&&worldRoot!=sewerRoot){
         lab::releaseWorldResources();privateWorld=lab::World{};worldRoot=sewerRoot;
         journeyOk=std::ifstream(sewerRoot+"ready.bin").good()&&lab::loadWorld(worldRoot+"scene.bin",privateWorld,error)&&lab::loadAtlases(privateWorld.images,error,worldRoot);
     }
@@ -233,7 +289,7 @@ int main(){
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
     lab::TouchPages pages;pages.count=6;lab::Journal journal;std::string journalError;
-    bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
+    bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError,&privateWorld);
     bool authentic=available,moving=false;int facing=4,actual=0,frames=0;
     lab::World*w=authentic?&privateWorld:&demo;
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
@@ -270,13 +326,13 @@ int main(){
     lab::EquipmentArt equipmentArt;std::string equipmentError;
     bool hasEquipment=equipmentArt.load("sdmc:/3ds/UO-3DS-CoreLab/equipment.bin");
     if(!hasEquipment)equipmentError="FALTA EQUIPMENT.BIN";
-    lab::CharacterAssets characterAssets;characterAssets.load(baseRoot+"character/");
+    lab::CharacterAssets characterAssets;if(boot->assets&&boot->assets->ready()){characterAssets=std::move(*boot->assets);boot->assets.reset();}else characterAssets.load(baseRoot+"character/");
     lab::Appearance appearance;
     bool appearanceOk=appearance.load(saveRoot+savePrefix+"appearance.sav");
     lab::StatusArt statusArt;statusArt.load(baseRoot+"status.bin");
     std::string combatArtError;if(hasNpcs&&npcs.hasPopulation()){if(!npcs.hasDeathFrames())lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);std::string bloodError;if(!lab::loadBloodArt(baseRoot,bloodError))combatArtError=bloodError;}
     startupFrame(nullptr,false,"PREPARADO",5);
-    lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");menu.message=migrationMessage;
+    lab::StartMenu menu=boot->menu;menu.page=lab::MenuPage::Main;menu.options.load(saveRoot+"options.sav");menu.message=migrationMessage;
     lab::Actor probe;std::string probeMessage;
     bool positionSaved=lab::loadPosition(positionPath(),savedWorld(),probe,probeMessage);
     if(!positionSaved&&authentic&&hasDoors)positionSaved=lab::loadPosition(positionPath(),legacyPrivate,probe,probeMessage);
@@ -299,7 +355,7 @@ int main(){
         if(!hasDoors)return false;
         legacyPrivate=lab::positionSnapshot(privateWorld,doors.baseObjects);
         privateWorld.compatiblePosition=canonicalPrivate.compatiblePosition;privateWorld.compatibleInventory=lab::inventoryWorldId(privateWorld);
-        hasJournal=lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
+        hasJournal=lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError,&privateWorld);
         hasNpcs=npcs.loadPopulation(worldRoot+"population.bin",worldRoot+"scene.bin",privateWorld,npcError);
         if(!hasJournal||!hasNpcs||!npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError))return false;
         npcs.loadCombatProfiles(worldRoot+"npc_combat.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
@@ -340,6 +396,9 @@ int main(){
     bool started=false,touching=false;int touchX=0,touchY=0,touchLastX=0,touchLastY=0;
     u64 nextPad=0;
     while(aptMainLoop()&&!started&&!quit){
+        auto action=boot->choice;boot->choice=lab::MenuAction::None;
+        if(action==lab::MenuAction::Continue&&!canContinue)continue;
+        if(action==lab::MenuAction::None){
         startupFrame(&menu,canContinue);hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
         if(down&KEY_START){quit=true;continue;}
         if(down&KEY_B)menu.back();
@@ -352,12 +411,14 @@ int main(){
         if((held&KEY_TOUCH)&&touching){touchPosition t;hidTouchRead(&t);touchLastX=t.px;touchLastY=t.py;}
         if((hidKeysUp()&KEY_TOUCH)&&touching){touching=false;int hit=menu.hit(touchX,touchY);if(hit>=0&&std::abs(touchLastX-touchX)<12&&std::abs(touchLastY-touchY)<12){menu.selected=hit;accept=true;}}
         if(!accept)continue;
-        auto oldOptions=menu.options;auto action=menu.activate(canContinue);
+        auto oldOptions=menu.options;action=menu.activate(canContinue);
         if(menu.options.roofs!=oldOptions.roofs||menu.options.zoom!=oldOptions.zoom||menu.options.page!=oldOptions.page){
             std::string message;if(!menu.options.save(saveRoot+"options.sav",message)){menu.options=oldOptions;menu.message=message;}else menu.message="OPCIONES GUARDADAS";
         }
+        }
         if(action==lab::MenuAction::Exit){quit=true;continue;}
         if(action==lab::MenuAction::NewGame){
+            if(boot->createdReady){boot->createdReady=false;started=freshGame(boot->created);if(!started){auto message=menu.message;menu.back();menu.message=message;}continue;}
             if(!characterAssets.ready()||!characterAssets.fullPaperdoll()){
                 if(!available){lab::Appearance diagnostic;started=freshGame(diagnostic);continue;}
                 menu.message="ACTUALIZA CHARACTER A V0.25";continue;

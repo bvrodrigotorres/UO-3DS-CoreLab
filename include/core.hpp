@@ -27,6 +27,8 @@ struct World {
     int width=0,height=0,originX=0,originY=0;
     int startX=0,startY=0,startZ=0,images=0;
     uint32_t compatiblePosition=0,compatibleInventory=0;
+    // Identity of the successfully decoded source, never a persistent file cache.
+    std::string sceneSource;uint32_t sceneChecksum=0;size_t sceneBytes=0;
     std::vector<int8_t> vertices;
     std::vector<Land> land;
     std::vector<Object> objects;

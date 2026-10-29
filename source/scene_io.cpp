@@ -10,12 +10,12 @@ namespace {
 // when the previous region is still alive. A whole-file buffer doubled RAM.
 class SceneReader {
     std::ifstream&file;
-    std::array<unsigned char,4096>buffer{};
+    std::vector<unsigned char>buffer;
     size_t remaining,at=0,used=0;
 public:
     bool ok=true;
     uint32_t hash=2166136261u;
-    SceneReader(std::ifstream&f,size_t bytes):file(f),remaining(bytes){}
+    SceneReader(std::ifstream&f,size_t bytes):file(f),buffer(32768),remaining(bytes){}
     uint64_t read(unsigned n){
         uint64_t result=0;
         for(unsigned i=0;i<n;++i){
@@ -81,6 +81,7 @@ bool loadWorld(const std::string&path,World&out,std::string&error,bool fullGeome
         if(!migration||migration.peek()!=EOF||std::memcmp(a,"UWC1",4)||u(4)!=hash||!u(8)||!u(12)){error="Invalid save migration";return false;}
         w.compatiblePosition=u(8);w.compatibleInventory=u(12);
     }
+    w.sceneSource=path;w.sceneChecksum=reader.hash;w.sceneBytes=size_t(length);
     if(fullGeometry)w.index();
     out=std::move(w);error.clear();return true;
 }

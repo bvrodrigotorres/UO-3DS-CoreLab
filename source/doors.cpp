@@ -16,7 +16,7 @@ bool Doors::load(const std::string&path,const std::string&scene,const World&w,st
     if(!read(path,b)||b.size()<16||std::memcmp(b.data(),"UOD1",4)){error="No valid doors.bin";return false;}
     auto n=[&](size_t p,int count){uint32_t v=0;for(int i=0;i<count;++i)v|=uint32_t(b[p+i])<<(8*i);return v;};
     unsigned count=n(6,2),base=n(8,4);
-    if(n(4,2)!=1||count>1024||base>w.objects.size()||b.size()!=16+12*count||!fileHash(scene,24*1024*1024,hash)){error="Invalid door data";return false;}
+    if(n(4,2)!=1||count>1024||base>w.objects.size()||b.size()!=16+12*count||!sceneFileHash(w,scene,24*1024*1024,hash)){error="Invalid door data";return false;}
     if(hash!=n(12,4)){error="Doors belong to another scene";return false;}
     std::vector<DoorState>next;std::vector<int>indices(w.objects.size(),-1);
     for(unsigned i=0;i<count;++i){
