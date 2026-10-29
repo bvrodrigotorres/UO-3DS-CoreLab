@@ -22,6 +22,7 @@
 namespace lab {
 namespace {
 struct Color {uint8_t r,g,b;};
+Color qualityColor(unsigned type){static const Color colors[]={{90,65,40},{40,105,45},{35,95,190},{110,45,160},{160,85,5}};return colors[itemQuality(type)];}
 static int canvasWidth=320;
 struct Glyph {char letter;const char*rows;};
 // Original compact bitmap alphabet. Row values are five-bit hexadecimal masks.
@@ -93,11 +94,16 @@ static void drawHudFrame(uint8_t*fb,const HudInfo&info,bool paused,bool compact=
     for(const auto&line:info.lines){if(y>174)break;text(fb,20,y,line,ink);y+=spacing;}
     box(fb,17,181,286,1,ink);box(fb,17,183,286,1,gold);
     text(fb,20,189,"PAD: WALK | B: RUN | R: PAGE",ink);
-    text(fb,20,199,"Y: CURAR | A: ATACAR | X: OBJ",ink);
+    text(fb,20,199,"Y: VENDAS | A: ATACAR | X: OBJ",ink);
     text(fb,20,209,"SELECT: TECHOS | L/R: PAGINAS",ink);
     text(fb,20,219,"START: PAUSA | DESLIZA 1/6",ink);
 }
 void drawHud(uint8_t*fb,const HudInfo&info){drawHudFrame(fb,info,false);}
+void drawExpeditionHud(uint8_t*fb,const HudInfo&info){
+    drawHud(fb,info);const Color ink={55,37,22};box(fb,18,185,284,45,{218,195,148});
+    text(fb,20,189,"PAD: CAMINAR | B: CORRER",ink);text(fb,20,199,"A: ATACAR | Y: VENDAS | L/R: HOJAS",ink);
+    text(fb,20,209,"X: DESTINOS | START: PAUSA",ink);text(fb,20,219,"EN PAUSA: B VUELVE A TU PARTIDA",ink);
+}
 void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool meditating){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},muted={118,108,92};
     text(fb,20,14,"HABILIDADES",ink,2);text(fb,20,34,"TOTAL "+skillValue(skills.total())+" / 700.0",ink);text(fb,216,34,"MAX 100.0",ink);
@@ -114,18 +120,18 @@ void drawSkills(uint8_t*fb,const Skills&skills,const SkillsMenu&menu,bool medita
     box(fb,18,207,85,24,gold);box(fb,107,207,105,24,gold);box(fb,216,207,86,24,gold);
     text(fb,24,215,menu.all?"VER ACTIVAS":"VER TODAS",ink);text(fb,114,215,meditating?"MEDITANDO":"MEDITAR",ink);text(fb,222,215,"HOJA "+std::to_string(menu.sheet+1)+"/"+std::to_string(menu.sheets()),ink);
 }
-void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt,const Npcs*npcs){
+void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom,const std::string&message,const Inventory*inv,const EquipmentArt*equipment,const PlayerStatus*status,const StatusArt*statusArt,const Npcs*npcs,bool expedition){
     drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},dark={42,29,21};
-    (void)message;
+
     text(fb,20,14,"MINIMAPA",ink);text(fb,210,14,equipment&&!equipment->playerName.empty()?equipment->playerName:"PERSONAJE",ink,1,16);
     box(fb,192,25,1,116,gold);
     // Inverse isometric projection: same world axes as the top screen.
     // Sampling is bounded to the exported radar area; black outside it.
     float scale=float(std::max(1,std::min(4,zoom)));
-    struct RadarCache{const Journal*j=nullptr;const World*w=nullptr;const uint8_t*data=nullptr;Actor actor{};int zoom=0;bool valid=false;std::array<uint8_t,166*(JournalLayout::MapBottom-JournalLayout::MapTop)*3>pixels{};};
+    struct RadarCache{const Journal*j=nullptr;const World*w=nullptr;const uint8_t*data=nullptr;Actor actor{};int zoom=0,originX=0,originY=0;bool valid=false;std::array<uint8_t,166*(JournalLayout::MapBottom-JournalLayout::MapTop)*3>pixels{};};
     static RadarCache radar;
-    if(!radar.valid||radar.j!=j||radar.w!=&w||radar.data!=(j?j->map.data():nullptr)||radar.actor.x!=a.x||radar.actor.y!=a.y||radar.actor.z!=a.z||radar.zoom!=zoom){
+    if(!radar.valid||radar.j!=j||radar.w!=&w||radar.data!=(j?j->map.data():nullptr)||radar.actor.x!=a.x||radar.actor.y!=a.y||radar.actor.z!=a.z||radar.zoom!=zoom||radar.originX!=w.originX||radar.originY!=w.originY){
     for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){
         float sx=(x-103.f)/scale,sy=(y-float(JournalLayout::MapCenter))/scale;
         int wx=int(std::floor(a.x+w.originX+(sx+sy)*.5f));
@@ -140,7 +146,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         }
         size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;radar.pixels[at]=c.b;radar.pixels[at+1]=c.g;radar.pixels[at+2]=c.r;
     }
-        radar.j=j;radar.w=&w;radar.data=j?j->map.data():nullptr;radar.actor=a;radar.zoom=zoom;radar.valid=true;
+        radar.j=j;radar.w=&w;radar.data=j?j->map.data():nullptr;radar.actor=a;radar.zoom=zoom;radar.originX=w.originX;radar.originY=w.originY;radar.valid=true;
     }
     for(int y=JournalLayout::MapTop;y<JournalLayout::MapBottom;++y)for(int x=20;x<186;++x){size_t at=((y-JournalLayout::MapTop)*166+x-20)*3;pixel(fb,x,y,{radar.pixels[at+2],radar.pixels[at+1],radar.pixels[at]});}
     // Dynamic markers overlay the cached terrain; no map rebuild or texture upload.
@@ -155,7 +161,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     for(int d=-4;d<=4;++d){pixel(fb,103+d,JournalLayout::MapCenter,gold);pixel(fb,103,JournalLayout::MapCenter+d,gold);}
     box(fb,102,JournalLayout::MapCenter-1,3,3,{35,225,245});text(fb,175,JournalLayout::MapTop+2,"N",{244,222,160});
     text(fb,23,JournalLayout::ZoomTop,"-",ink);text(fb,153,JournalLayout::ZoomTop,"+",ink);
-    text(fb,56,JournalLayout::ZoomTop,"ZOOM "+std::to_string(zoom)+"X",ink);
+    text(fb,56,JournalLayout::ZoomTop,message=="PREPARANDO TERRENO..."?"CARGANDO...":"ZOOM "+std::to_string(zoom)+"X",ink);
     // The private image is the original human paperdoll gump, cropped/resized
     // by the exporter, not an invented equipment state or animated world sprite.
     if(inv&&equipment&&((equipment->currentKey==inv->equipmentMask()&&equipment->currentDoll.size()==76*104*4)||equipment->dolls.size()==8*76*104*4)){
@@ -168,7 +174,7 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
         for(int y=0;y<j->dollHeight;++y)for(int x=0;x<j->dollWidth;++x){size_t p=(y*j->dollWidth+x)*4;
             if(j->doll[p+3]>127)pixel(fb,ox+x,JournalLayout::MapTop+y,{j->doll[p],j->doll[p+1],j->doll[p+2]});}
     }else text(fb,205,86,"SIN IMAGEN",ink);
-    text(fb,205,JournalLayout::ZoomTop,"TOCA: EQUIPO",ink,1,17);
+    text(fb,205,JournalLayout::ZoomTop,expedition?"TOCA: VIAJAR":"TOCA: EQUIPO",ink,1,17);
     const PlayerStatus initial;const auto&stats=status?*status:initial;
     constexpr int ox=10,oy=146;
     if(statusArt&&statusArt->rgba.size()==300*82*4){
@@ -183,17 +189,19 @@ void drawJournal(uint8_t*fb,const World&w,const Actor&a,const Journal*j,int zoom
     auto pair=[&](int col,int row,int current,int maximum){int x=ox+8+col*60+29,y=oy+17+row*20;text(fb,x,y+1,std::to_string(current),ink,1,5);box(fb,x-2,y+9,29,1,ink);text(fb,x,y+11,std::to_string(maximum),ink,1,5);};
     value(0,0,std::to_string(stats.strength));value(0,1,std::to_string(stats.dexterity));value(0,2,std::to_string(stats.intelligence));
     pair(1,0,stats.hits,stats.hitsMax);pair(1,1,stats.stamina,stats.staminaMax);pair(1,2,stats.mana,stats.manaMax);
-    value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.luck));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
-    value(3,0,std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv)));value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers+(stats.mounted?1:0))+"/"+std::to_string(stats.followersMax));
+    value(2,0,std::to_string(stats.statCap));value(2,1,std::to_string(stats.totalLuck(inv)));pair(2,2,PlayerStatus::weight(inv),stats.weightMax());
+    std::string damageRange=std::to_string(stats.damageMin(inv))+"-"+std::to_string(stats.damageMax(inv));
+    if(damageRange.size()>6)pair(3,0,stats.damageMin(inv),stats.damageMax(inv));else value(3,0,damageRange);
+    value(3,1,std::to_string(PlayerStatus::gold(inv)));value(3,2,std::to_string(stats.followers+(stats.mounted?1:0))+"/"+std::to_string(stats.followersMax));
     if(stats.mounted){box(fb,199,204,58,1,gold);box(fb,199,222,58,1,gold);}
     for(int row=0;row<5;++row)text(fb,ox+270,oy+18+row*12,std::to_string(stats.resistance(inv,row)),ink,1,3);
 
 }
 
-void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag,const PlayerStatus*status){
+void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,const ItemIcons*icons,const InventoryDrag*drag,const PlayerStatus*status,bool trial){
     (void)w;(void)a;drawHudFrame(fb,{},false,true);
     const Color ink={55,37,22},gold={174,131,64},slotColor={151,118,76};
-    text(fb,18,18,"MOCHILA "+std::to_string(inv.backpack.size())+"/24",ink);
+    text(fb,18,18,std::string(trial?"PRUEBA ":"MOCHILA ")+std::to_string(inv.backpack.size())+"/"+std::to_string(BagSlots),ink);
     text(fb,170,18,inv.hasContainer()?inv.containerName():"SIN BOTIN CERCA",ink,1,22);
     box(fb,156,34,1,154,gold);
     auto bag=[&](const Bag&items,int left,size_t offset){
@@ -201,26 +209,28 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
             box(fb,x,y,InventoryLayout::Width,InventoryLayout::Height,ink);box(fb,x+1,y+1,InventoryLayout::Width-2,InventoryLayout::Height-2,slotColor);
             if(offset+n>=items.size())continue;
             auto item=items[offset+n];if(item.type>=ItemTypes)continue;
-            if(icons&&icons->rgba.size()==ItemTypes*24*24*4){
-                for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t p=(item.type*24*24+iy*24+ix)*4;
+            if(itemQuality(item.type)){box(fb,x+1,y+1,39,33,qualityColor(item.type));box(fb,x+3,y+3,35,29,slotColor);}
+            if(icons&&icons->rgba.size()==BaseItemTypes*24*24*4){
+                for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t p=(itemBase(item.type)*24*24+iy*24+ix)*4;
                     if(icons->rgba[p+3]>127)pixel(fb,x+8+ix,y+3+iy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
             }else text(fb,x+3,y+7,itemDefs[item.type].name,{244,222,160},1,6);
+            if(itemQuality(item.type)){box(fb,x+2,y+1,8,9,qualityColor(item.type));text(fb,x+3,y+2,std::string(1,"NEMRL"[itemQuality(item.type)]),{255,255,255},1,1);}
             std::string count=std::to_string(item.count);box(fb,x+40-int(count.size())*6,y+26,int(count.size())*6,8,ink);
             text(fb,x+40-int(count.size())*6,y+27,count,{244,222,160},1,5);
         }
     };
     bag(inv.backpack,InventoryLayout::Left,inv.bagPage*BagPageSlots);bag(inv.containerItems(),InventoryLayout::Right,0);
     auto button=[&](int x,int y,int width,int height,const std::string&label,bool active){box(fb,x,y,width,height,ink);box(fb,x+1,y+1,width-2,height-2,active?gold:Color{161,143,108});text(fb,x+7,y+(height-7)/2,label,ink);};
-    button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/2  >",true);
+    button(18,194,130,16,"HOJA "+std::to_string(inv.bagPage+1)+"/"+std::to_string(BagPages)+"  >",true);
     button(18,214,90,16,inv.useMode?"USAR":inv.equipMode?"EQUIPAR":"TRANSFERIR",true);
-    box(fb,116,214,32,17,ink);box(fb,118,216,28,13,{161,143,108});
+    if(!trial){box(fb,116,214,32,17,ink);box(fb,118,216,28,13,{161,143,108});
     box(fb,126,219,13,9,ink);box(fb,124,217,17,2,ink);box(fb,130,215,5,2,ink);
-    for(int x:{129,133,137})box(fb,x,221,1,5,{244,222,160});
+    for(int x:{129,133,137})box(fb,x,221,1,5,{244,222,160});}
     button(170,194,130,36,"SACAR TODO",inv.hasContainer()&&!inv.containerItems().empty());
     bool failed=inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos;
     if(!failed&&inv.useMode){text(fb,18,29,inv.message,ink,1,47);}
     else if(!failed&&inv.detailType>=0&&inv.detailType<int(ItemTypes)){const auto&d=itemDefs[inv.detailType];
-        std::string detail=d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(inv.detailType==3&&status?status->skills.bandageAmount():itemHealing(unsigned(inv.detailType)))+" VIDA";else if(inv.detailType==28)detail+=" +2 DANO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
+        std::string detail=(itemQuality(inv.detailType)?std::string(qualityName(itemQuality(inv.detailType)))+" | ":"")+d.name;if(itemHealing(unsigned(inv.detailType)))detail+=" +"+std::to_string(inv.detailType==3&&status?status->skills.bandageAmount():itemHealing(unsigned(inv.detailType)))+" VIDA";else if(itemBase(inv.detailType)==28)detail+=" | VER BONOS EN EQUIPO";else if(d.damageMax)detail+=" "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" / "+std::to_string(int(d.delay*1000))+"MS";else if(d.protection)detail+=" PROT "+std::to_string(d.protection)+"%";
         text(fb,18,29,detail,ink,1,47);}
     // Capacity/write failures remain visible without restoring the old footer.
     if(inv.message.find("ERROR")!=std::string::npos||inv.message.find("LLENA")!=std::string::npos||inv.message.find("ESPACIO")!=std::string::npos)
@@ -228,7 +238,7 @@ void drawInventory(uint8_t*fb,const World&w,const Actor&a,const Inventory&inv,co
     if(inv.saveFailed){box(fb,18,28,282,9,{231,213,177});text(fb,18,29,"ERROR SD: CAMBIOS PENDIENTES",{170,25,20});}
     else if(inv.savePending)box(fb,145,19,4,5,gold);
     if(drag&&drag->active&&drag->dragging){int x=std::max(0,std::min(295,drag->x-12)),y=std::max(0,std::min(215,drag->y-12));
-        box(fb,x,y,25,25,gold);if(icons&&icons->rgba.size()==ItemTypes*24*24*4&&drag->item.type<ItemTypes)for(int yy=0;yy<24;++yy)for(int xx=0;xx<24;++xx){size_t p=(drag->item.type*576+yy*24+xx)*4;if(icons->rgba[p+3]>127)pixel(fb,x+xx,y+yy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
+        box(fb,x,y,25,25,gold);if(icons&&icons->rgba.size()==BaseItemTypes*24*24*4&&drag->item.type<ItemTypes)for(int yy=0;yy<24;++yy)for(int xx=0;xx<24;++xx){size_t p=(itemBase(drag->item.type)*576+yy*24+xx)*4;if(icons->rgba[p+3]>127)pixel(fb,x+xx,y+yy,{icons->rgba[p],icons->rgba[p+1],icons->rgba[p+2]});}
     }
 
 }
@@ -238,47 +248,95 @@ void drawEquipmentMenu(uint8_t*top,uint8_t*bottom,const EquipmentMenu&e,const Ap
     const Color ink={55,37,22},paper={231,213,177},gold={174,131,64};
     (void)bag;auto staged=std::make_unique<Inventory>();staged->equipment=e.desired;
     canvasWidth=400;box(top,112,13,268,16,paper);text(top,140,17,"EQUIPAMIENTO",ink);
-    box(top,218,178,158,41,{176,160,127});text(top,222,181,"DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get())),ink);
-    text(top,222,194,"PROTECCION "+std::to_string(status.resistance(staged.get()))+"%",ink);
-    text(top,222,207,"X: GIRAR",ink);
+    box(top,216,55,175,176,paper);text(top,221,59,"PROPIEDADES DEL OBJETO",ink,1,27);
+    int selected=e.desired[e.row];if(selected>=0){auto lines=itemDetails(unsigned(selected));int y=71;for(size_t i=0;i<lines.size()&&i<17;++i,y+=8)text(top,221,y,lines[i],i==1?qualityColor(unsigned(selected)):ink,1,27);}
+    text(top,221,211,"TOTAL DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get())),ink,1,27);
+    text(top,221,222,"FIS "+std::to_string(status.resistance(staged.get()))+"% | SUERTE "+std::to_string(status.totalLuck(staged.get())),ink,1,27);
     canvasWidth=320;drawHudFrame(bottom,{},false,true);text(bottom,18,15,"EQUIPAMIENTO",ink);text(bottom,18,31,"L/R: HOJA | PAD: ELEGIR / CAMBIAR",ink,1,48);
     box(bottom,249,25,54,17,gold);text(bottom,254,30,std::to_string(e.page()+1)+"/2 >",ink);
     for(int r=0;r<6;++r){int slot=e.page()*6+r;if(slot>=11)break;int y=46+r*22;box(bottom,18,y,285,20,slot==e.row?gold:paper);text(bottom,22,y+7,equipmentSlotNames[slot],ink,1,11);text(bottom,133,y+7,"<",ink);text(bottom,146,y+7,e.desired[slot]<0?"SIN EQUIPAR":itemDefs[e.desired[slot]].name,ink,1,24);text(bottom,292,y+7,">",ink);}
-    int t=e.desired[e.row];std::string detail=t<0?"SIN OBJETO EN ESTA RANURA":t==28?"EFECTO: +2 AL DANO":t==29?"EFECTO: +5% PROTECCION FISICA":itemDefs[t].slot==0?"DANO "+std::to_string(itemDefs[t].damageMin)+"-"+std::to_string(itemDefs[t].damageMax)+" | "+std::to_string(int(itemDefs[t].delay*1000))+" MS":"PROTECCION FISICA: "+std::to_string(itemDefs[t].protection)+"%";
+    std::string detail="DANO "+std::to_string(status.damageMin(staged.get()))+"-"+std::to_string(status.damageMax(staged.get()))+" | RES FISICA "+std::to_string(status.resistance(staged.get()))+"%";
     text(bottom,20,183,detail,ink,1,47);text(bottom,20,194,"A: CAMBIAR | START: APLICAR",ink);text(bottom,20,205,e.message.empty()?"SOLO OBJETOS QUE YA POSEES":e.message,ink,1,47);
     box(bottom,18,216,132,18,gold);text(bottom,33,222,"B: CANCELAR",ink);box(bottom,170,216,133,18,gold);text(bottom,185,222,"APLICAR",ink);
 }
 
-void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemIcons*icons){
-    drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={226,213,177};
-    text(fb,18,12,"MOCHILA",ink);text(fb,170,12,shop.title,ink,1,21);
-    text(fb,18,24,"ORO: "+std::to_string(PlayerStatus::gold(&inv)),ink);
-    text(fb,170,24,"TIENDA",ink);
-    for(int side=0;side<2;++side)for(int n=0;n<12;++n){int x=(side?170:18)+n%3*44,y=38+n/3*38;
-        box(fb,x,y,41,35,ink);box(fb,x+1,y+1,39,33,paper);int type=-1;
-        if(side&&size_t(n)<shop.stock.size())type=int(shop.stock[n]);
-        if(!side&&size_t(n+shop.bagPage*12)<inv.backpack.size())type=inv.backpack[n+shop.bagPage*12].type;
-        if(type<0||type>=int(ItemTypes))continue;
-        if(shop.selected()==type&&shop.purchase()==bool(side)){box(fb,x+1,y+1,39,33,gold);}
-        if(icons&&icons->rgba.size()==ItemTypes*24*24*4)for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t at=(type*576+iy*24+ix)*4;if(icons->rgba[at+3]>127)pixel(fb,x+8+ix,y+1+iy,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
-        else text(fb,x+2,y+5,itemDefs[type].name,ink,1,6);
-        unsigned count=0;for(auto owned:inv.backpack)if(owned.type==type)count+=owned.count;
-        std::string quantity=std::to_string(count);int qx=x+39-int(quantity.size())*6;box(fb,qx,y+1,int(quantity.size())*6,8,ink);text(fb,qx,y+2,quantity,{244,222,160},1,5);
-        text(fb,x+2,y+26,shop.accepts(type)?"$"+std::to_string(shop.price(type,side!=0)):"--",ink,1,6);
-    }
-    box(fb,18,194,130,16,gold);text(fb,22,198,"HOJA "+std::to_string(shop.bagPage+1)+"/2 >",ink);
-    box(fb,170,194,130,16,gold);text(fb,176,198,shop.selected()<0?"ELIGE OBJETO":shop.purchase()?"COMPRAR 1":"VENDER 1",ink);
-    std::string message=shop.message;
-    if(shop.selected()>0)message=(shop.purchase()?"COMPRAR ":"VENDER ")+std::string(itemDefs[shop.selected()].name)+" POR $"+std::to_string(shop.price(unsigned(shop.selected()),shop.purchase()));
-    if(shop.message.find("COMPRADO")==0||shop.message.find("VENDIDO")==0||shop.message.find("NO DISPONIBLE")!=std::string::npos||shop.message.find("NO COMPRA")!=std::string::npos||shop.message.find("ERROR")!=std::string::npos||shop.message.find("INSUFICIENTE")!=std::string::npos||shop.message.find("LLENA")!=std::string::npos)message=shop.message;
-    text(fb,18,225,message,ink,1,47);
-    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
+namespace {
+const Color tradeInk{57,40,27},tradeGold{182,146,77},tradePaper{232,222,195},tradeMuted{119,104,82};
+void tradeIcon(uint8_t*fb,int x,int y,unsigned type,const ItemIcons*icons){
+    if(!icons||icons->rgba.size()!=BaseItemTypes*576*4)return;
+    for(int j=0;j<24;++j)for(int i=0;i<24;++i){auto at=(itemBase(type)*576+j*24+i)*4;if(icons->rgba[at+3]>127)pixel(fb,x+i,y+j,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
 }
+void tradeButton(uint8_t*fb,int x,int y,int width,const std::string&label,bool selected=false){
+    box(fb,x,y,width,24,tradeInk);box(fb,x+1,y+1,width-2,22,selected?tradeGold:tradePaper);text(fb,x+(width-int(label.size())*6)/2,y+9,label,tradeInk);
+}
+void tradeWrap(uint8_t*fb,int x,int y,const std::string&label,int width,int lines,Color color){
+    size_t at=0;for(int line=0;line<lines&&at<label.size();++line){size_t n=std::min(size_t(width),label.size()-at);if(at+n<label.size()){auto space=label.rfind(' ',at+n);if(space!=std::string::npos&&space>at)n=space-at;}text(fb,x,y+line*11,label.substr(at,n),color,1,width);at+=n;while(at<label.size()&&label[at]==' ')++at;}
+}
+}
+void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemIcons*icons){
+    drawHudFrame(fb,{},false,true);
+    text(fb,24,17,"MERCADO",tradeInk,2);text(fb,208,21,"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeInk,1,15);
+    text(fb,24,46,shop.title,tradeInk,1,44);text(fb,24,59,shop.profession,tradeMuted,1,44);
+    box(fb,24,76,272,1,tradeGold);
+    if(shop.available()){
+        text(fb,24,87,shop.stock.empty()?"MAESTRO DE HABILIDADES":"UNA MUESTRA DE SU TIENDA",tradeMuted);
+        for(unsigned i=0;i<std::min(size_t(4),shop.stock.size());++i){unsigned type=shop.stock[i];int x=24+int(i)*69;
+            box(fb,x,103,64,65,tradeGold);box(fb,x+1,104,62,63,tradePaper);tradeIcon(fb,x+20,109,type,icons);
+            unsigned count=0;for(auto owned:inv.backpack)if(owned.type==type)count+=owned.count;
+            text(fb,x+62-int(std::to_string(count).size())*6,106,std::to_string(count),tradeInk,1,5);
+            text(fb,x+4,140,itemDefs[type].name,tradeInk,1,9);text(fb,x+4,155,"$"+std::to_string(shop.price(type,true)),tradeInk,1,9);
+        }
+        if(shop.stock.empty())tradeWrap(fb,24,112,"APRENDE HABILIDADES RELACIONADAS CON SU PROFESION HASTA 30.0.",43,4,tradeInk);
+        else if(!shop.lessons.empty())text(fb,24,176,"TAMBIEN OFRECE ENTRENAMIENTO",tradeMuted);
+        tradeButton(fb,24,190,272,"COMERCIAR",true);
+        text(fb,47,218,"A / TOCAR: ABRIR Y PAUSAR",tradeInk);
+    }else {tradeWrap(fb,24,103,"ACERCATE A UN COMERCIANTE O MAESTRO PARA VER SUS MERCANCIAS Y LECCIONES.",42,5,tradeInk);text(fb,24,205,"EL MUNDO SIGUE EN MOVIMIENTO",tradeMuted);}
+}
+void drawTradeMenu(uint8_t*top,uint8_t*bottom,const Inventory&inv,const Commerce&shop,const TradeMenu&menu,const PlayerStatus&status,const ItemIcons*icons){
+    canvasWidth=400;box(top,0,0,400,240,{35,29,24});box(top,6,6,388,228,tradeGold);box(top,8,8,384,224,tradePaper);
+    text(top,19,18,shop.title,tradeInk,2,22);text(top,20,37,shop.profession,tradeMuted,1,40);text(top,287,37,"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeInk,1,15);
+    const char*tabs[]={"COMPRAR","VENDER","ENTRENAR"};
+    for(int t=0;t<3;++t)tradeButton(top,18+t*123,50,118,tabs[t],menu.tab==t);
+    unsigned first=unsigned(menu.row/6)*6;
+    if(menu.rows.empty())text(top,26,104,menu.tab==2?"NO OFRECE LECCIONES":"NO HAY OBJETOS PARA MOSTRAR",tradeMuted);
+    for(unsigned i=first;i<menu.rows.size()&&i<first+6;++i){unsigned id=menu.rows[i];int y=81+int(i-first)*20;bool selected=int(i)==menu.row;
+        box(top,18,y,230,19,selected?tradeGold:tradePaper);
+        if(menu.tab==2){text(top,24,y+3,skillDefs[id].name,tradeInk,1,29);text(top,207,y+3,skillValue(status.skills.entries[id].value),tradeInk,1,6);}
+        else {tradeIcon(top,22,y-2,id,icons);text(top,49,y+3,itemDefs[id].name,tradeInk,1,25);text(top,203,y+3,"$"+std::to_string(shop.price(id,menu.tab==0)),tradeInk,1,7);}
+    }
+    box(top,255,82,1,120,tradeGold);
+    if(!menu.rows.empty()){
+        unsigned id=menu.rows[menu.row];
+        if(menu.tab==2){text(top,269,86,"LECCION",tradeMuted);tradeWrap(top,269,103,skillDefs[id].name,18,2,tradeInk);text(top,269,131,"LIMITE 30.0",tradeInk);text(top,269,146,"$10 POR 1.0",tradeInk);tradeWrap(top,269,167,skillDefs[id].active?"MEJORA TU PERSONAJE":"SIN USO JUGABLE TODAVIA",18,3,tradeMuted);}
+        else {tradeIcon(top,307,86,id,icons);tradeWrap(top,269,118,itemDefs[id].name,18,3,tradeInk);text(top,269,155,"TIENES "+std::to_string(menu.owned(inv,id)),tradeInk,1,18);auto detail=itemDetails(id);if(!detail.empty())tradeWrap(top,269,171,detail[0],18,3,tradeMuted);}
+    }
+    text(top,20,207,std::to_string(menu.rows.empty()?0:menu.row+1)+" / "+std::to_string(menu.rows.size()),tradeMuted);
+    text(top,100,207,"EL MUNDO ESTA EN PAUSA",tradeMuted);
+    text(top,20,221,menu.confirming?"ELIGE CANTIDAD ABAJO | A: CONFIRMAR | B: VOLVER":"PAD: ELEGIR | L/R: PESTANAS | A: SELECCIONAR | B: SALIR",tradeInk,1,60);
+    canvasWidth=320;drawHudFrame(bottom,{},false,true);
+    text(bottom,25,17,menu.confirming?"CONFIRMAR OPERACION":"COMERCIO EN PAUSA",tradeInk);
+    for(int t=0;t<3;++t)tradeButton(bottom,24+t*92,34,88,tabs[t],menu.tab==t);
+    if(!menu.rows.empty()){
+        unsigned id=menu.confirming?menu.entry:menu.rows[menu.row];tradeWrap(bottom,24,70,menu.tab==2?skillDefs[id].name:itemDefs[id].name,44,2,tradeInk);
+        if(menu.confirming){
+            text(bottom,24,98,menu.tab==2?"SUBIR "+skillValue(status.skills.entries[id].value)+" A "+skillValue(status.skills.entries[id].value+menu.quantity):"CANTIDAD: "+std::to_string(menu.quantity)+"  /  "+std::to_string(menu.maximum),tradeInk);
+            tradeButton(bottom,24,119,62,"-",false);tradeButton(bottom,94,119,62,"+",false);tradeButton(bottom,164,119,62,"+10",false);tradeButton(bottom,234,119,62,"MAX",false);
+            text(bottom,24,153,(menu.tab==1?"RECIBES $":"PAGAS $")+std::to_string(menu.unitPrice*menu.quantity),tradeInk,2,21);
+        }else {text(bottom,24,104,"A: VER PRECIO Y CANTIDAD",tradeMuted);text(bottom,24,122,"IZQ/DER O L/R: CAMBIAR PESTANA",tradeMuted);text(bottom,24,140,"B: CERRAR Y VOLVER AL JUEGO",tradeMuted);}
+    }
+    std::string notice=menu.message;
+    if(notice.empty()&&menu.confirming&&menu.tab==2){unsigned sum=status.skills.total()+menu.quantity;if(sum>Skills::TotalCap)notice="BAJARAN "+skillValue(sum-Skills::TotalCap)+" DE SKILLS EN -";}
+    text(bottom,24,174,notice,tradeInk,1,45);
+    tradeButton(bottom,24,190,174,menu.confirming?(menu.tab==2?"PAGAR Y ENTRENAR":menu.tab==1?"VENDER":"COMPRAR"):"SELECCIONAR",true);
+    tradeButton(bottom,206,190,90,menu.confirming?"VOLVER":"SALIR");
+    text(bottom,24,218,menu.confirming?"PAD: +/-1 | ARRIBA/ABAJO: +/-10":"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeMuted,1,45);
+}
+
 
 void drawQuests(uint8_t*fb,const QuestPanel&p){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
     text(fb,20,14,"CONVERSACIONES Y MISIONES",ink);
-    for(unsigned i=0;i<2;++i){box(fb,18+i*144,30,140,22,p.selected==i?gold:paper);text(fb,24+i*144,38,i?"SUMINISTROS":"CEMENTERIO",ink);}
+    for(unsigned i=0;i<QuestCount;++i){box(fb,18+i*95,30,93,22,p.selected==i?gold:paper);text(fb,21+i*95,38,i==0?"CEMENTERIO":i==1?"SUMINISTROS":"ALCANTARILLAS",ink);}
     text(fb,20,60,p.speaker,ink,1,46);text(fb,20,72,p.profession,ink,1,46);box(fb,18,85,284,1,gold);
     for(unsigned i=0;i<3;++i)text(fb,20,94+i*13,p.dialogue[i],ink,1,46);
     text(fb,20,139,p.heading,ink,1,46);text(fb,20,153,p.objective,ink,1,46);text(fb,20,167,p.reward,ink,1,46);
@@ -312,7 +370,7 @@ void drawLoading(uint8_t*fb,const std::string&stage,int progress){
 }
 void drawDeveloperMenu(uint8_t*fb,const DeveloperMenu&m,const World&w){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
-    text(fb,18,15,"DESARROLLADOR",ink);text(fb,18,32,"TELETRANSPORTE | MUNDO PAUSADO",ink,1,38);box(fb,251,27,51,17,gold);text(fb,256,32,std::to_string(m.page()+1)+"/2 >",ink);
+    text(fb,18,15,"DESARROLLADOR",ink);text(fb,18,32,"TELETRANSPORTE | MUNDO PAUSADO",ink,1,38);box(fb,251,27,51,17,gold);text(fb,256,32,std::to_string(m.page()+1)+"/"+std::to_string((m.destinations.size()+4)/5)+" >",ink);
     for(int row=0;row<5;++row){int index=m.page()*5+row;if(index>=int(m.destinations.size()))break;int y=49+row*28;const auto&d=m.destinations[index];box(fb,18,y,285,25,index==m.selected?gold:paper);text(fb,24,y+4,d.name,ink,1,44);text(fb,24,y+15,d.available?"XY "+std::to_string(d.target.x+w.originX)+","+std::to_string(d.target.y+w.originY)+" Z "+std::to_string(d.target.z):"NO DISPONIBLE EN ESTE MAPA",ink,1,44);}
     text(fb,20,191,"PAD: ELEGIR | L/R: HOJA",ink);text(fb,20,202,m.message.empty()?"A / START: TELETRANSPORTAR":m.message,ink,1,46);
     box(fb,18,215,132,19,gold);text(fb,37,221,"B: VOLVER",ink);box(fb,170,215,133,19,gold);text(fb,178,221,"TELETRANSPORTAR",ink);
@@ -320,8 +378,8 @@ void drawDeveloperMenu(uint8_t*fb,const DeveloperMenu&m,const World&w){
 void drawPause(uint8_t*fb,const PauseMenu&m){
     drawHudFrame(fb,{},true);
     const Color ink={55,37,22},gold={174,131,64};
-    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO",m.developer?"DESARROLLADOR":"OPCIONES","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
-    for(int i=0;i<6;++i){int y=49+i*22;box(fb,25,y,270,20,ink);box(fb,27,y+2,266,16,i==m.selected?gold:Color{196,168,117});text(fb,36,y+10,i==m.selected?">":" ",ink);text(fb,50,y+10,rows[i],ink);}
+    const char*rows[]={"CONTINUAR","PERSONALIZAR PERSONAJE","EQUIPAMIENTO",m.developer?"DESARROLLADOR":"OPCIONES","EXPLORAR BRITANNIA (PRUEBA)","VOLVER AL MENU PRINCIPAL","SALIR DEL JUEGO"};
+    for(int i=0;i<7;++i){int y=50+i*19;box(fb,25,y,270,17,ink);box(fb,27,y+2,266,13,i==m.selected?gold:Color{196,168,117});text(fb,36,y+5,i==m.selected?">":" ",ink);text(fb,50,y+5,rows[i],ink);}
     box(fb,18,187,284,41,{218,195,148});text(fb,23,189,m.message.empty()?"EL MUNDO ESTA EN PAUSA":m.message,ink,1,45);
     text(fb,23,207,"PAD: ELEGIR | A: ACEPTAR | TACTIL",ink);text(fb,23,219,"START / B: CONTINUAR",ink);
 }

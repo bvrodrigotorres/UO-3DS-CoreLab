@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "core.hpp"
+#include "item_identity.hpp"
 #include "exploration.hpp"
 #include "save_dispatch.hpp"
 #include "quest_state.hpp"
+#include "skills.hpp"
 #include <array>
 #include <functional>
 namespace lab {
-constexpr size_t ItemTypes=30, BagSlots=24, ChestSlots=12, BagPageSlots=12;
+constexpr size_t BagSlots=36, ChestSlots=12, BagPageSlots=12, BagPages=BagSlots/BagPageSlots;
 struct InventoryLayout {
     static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
     static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
@@ -18,10 +20,24 @@ struct InventoryLayout {
 };
 struct ItemDef {uint16_t art;const char* name;bool stackable;int slot=-1;
     int damageMin=0,damageMax=0;float delay=.85f;int protection=0,weight=1,price=1;
+    std::array<int,5>resists{};
+    int damageIncrease=0,hitChance=0,defenseChance=0,swingSpeed=0,lifeLeech=0,manaLeech=0,regenLife=0,regenMana=0,regenStamina=0,luck=0,flatDamage=0;
+    int element=0,elementShare=0;
 };
-inline int itemHealing(unsigned type){return type==4?30:type==3?20:type==1?10:type==2?5:0;}
+inline int itemHealing(unsigned type){return type==4?30:type==3?15:type==1?10:type==2?5:0;}
 constexpr unsigned EquipmentAppearanceMask=2047u|(3u<<13)|(3u<<15)|(3u<<17)|(1u<<19)|(1u<<20);
-extern const std::array<ItemDef,ItemTypes> itemDefs;
+struct ItemCatalogue {
+    std::array<ItemDef,ItemTypes>data{};
+    std::array<std::array<char,64>,ItemTypes>names{};
+    ItemCatalogue();
+    const ItemDef&operator[](size_t i)const{return data[i<ItemTypes?i:0];}
+};
+extern const ItemCatalogue itemDefs;
+const char*qualityName(unsigned);
+const char*powerName(unsigned);
+std::vector<std::string>itemDetails(unsigned);
+// Rank: 0 common, 1 strong creature, 2 dungeon, 3 deep chest, 4 boss.
+unsigned rollEquipment(unsigned rank,uint32_t&seed,int luck=0,unsigned family=3);
 uint32_t inventoryWorldId(const World&);
 struct ItemStack {uint16_t type=0,count=0;};
 using Bag=std::vector<ItemStack>;
@@ -52,6 +68,10 @@ public:
     bool equip(size_t,SaveRename=std::rename);
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);
+    // Copy personal possessions only; containers and ground belong to their zone.
+    void copyPlayerFrom(const Inventory&old){backpack=old.backpack;equipment=old.equipment;lastEquipment=old.lastEquipment;quests=old.quests;trainingSerial=old.trainingSerial;trainingSkills=old.trainingSkills;dressed=old.dressed;accessories=old.accessories;closeContainer();}
+    uint32_t trainingSerial=0; Skills trainingSkills;
+    bool commitTraining(const Skills&,unsigned cost,SaveRename=std::rename);
     Bag backpack;
     std::array<QuestProgress,QuestCount>quests{};
     bool commitQuest(unsigned,const QuestProgress&,Bag,SaveRename=std::rename);
@@ -82,6 +102,7 @@ public:
     bool transfer(const World&,const Actor&,bool fromChest,size_t,SaveRename=std::rename);
     bool takeAll(const World&,const Actor&,SaveRename=std::rename);
     bool consume(size_t,SaveRename=std::rename);
+    bool tradeQuantity(bool buy,unsigned type,unsigned price,unsigned quantity,SaveRename=std::rename);
     bool trade(bool buy,unsigned type,unsigned price,SaveRename=std::rename);
     void tap(const World&,const Actor&,int x,int y);
 };

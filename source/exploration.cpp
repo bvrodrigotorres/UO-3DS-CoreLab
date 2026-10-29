@@ -82,7 +82,7 @@ char mapCell(const World&w,const Actor&a,int x,int y){
     bool floor=false;
     for(size_t i:w.cells[y*w.width+x]){
         const auto&o=w.objects[i];
-        if((o.flags&Impassable)&&o.z<a.z+16&&o.z+std::max(1,o.height)>a.z)return '#';
+        if((o.flags&Impassable)&&o.z<a.z+16&&o.z+std::max(1,int(o.height))>a.z)return '#';
         if((o.flags&Surface)&&o.z<=a.z+2&&o.z>=a.z-2)floor=true;
     }
     return floor?'+':'.';

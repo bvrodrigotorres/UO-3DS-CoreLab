@@ -195,6 +195,9 @@ def static_image(art, graphic):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--per-page',type=int,choices=(2,8),default=8)
+    p.add_argument('--reference-world',type=Path,help='Require exact source agreement with exploration')
+    p.add_argument('--texture-client',type=Path,help='Optional original texture files from another compatible installation')
     p.add_argument('--decorations', type=Path, help='Private audited ServUO region manifest')
     p.add_argument('--client', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -205,14 +208,17 @@ def main():
     p.add_argument('--spawn-y', type=int, default=1612)
     p.add_argument('--spawn-z', type=int, default=20)
     args = p.parse_args()
-    if not 1 <= args.side <= 512:
-        p.error('--side must be 1..512')
+    if not 1 <= args.side <= 768:
+        p.error('--side must be 1..768')
     if not args.x <= args.spawn_x < args.x+args.side or not args.y <= args.spawn_y < args.y+args.side or not -127 <= args.spawn_z <= 127:
         p.error('Spawn outside scene or invalid height')
     out = args.out.resolve()
     if out.exists():
         p.error('Output directory must not exist')
     client = args.client.expanduser().resolve()
+    if args.reference_world:
+        from audit_region_sources import audit,require_match
+        require_match(audit(client,args.reference_world,args.x,args.y,args.side))
     lands, data = tiledata(find(client, 'tiledata.mul'))
     reader = MapReader(client)
     grid = []
@@ -229,14 +235,15 @@ def main():
             raise ValueError('Decoration manifest belongs to another region')
         for obj in decoration['placements']+[d for d in decoration['doors'] if 'base_index' not in d]:
             rows.append(tuple(obj[k] for k in ('x','y','z','art','hue')))
-    if len(rows) > 131072:
-        raise ValueError('Scene exceeds 131072 objects; choose a smaller region')
+    if len(rows) > 262144:
+        raise ValueError('Scene exceeds 262144 objects; choose a smaller region')
     from ultima_sdk import Files, Art
     Files.set_directory(str(client))
     if not Art.initialize():
         raise ValueError('Cannot initialize Ultima SDK Art')
-    palette, images, identical = {}, [], {};missing_lands=set()
-    texture_files = (find(client, 'texidx.mul', False), find(client, 'texmaps.mul', False))
+    palette, images, identical = {}, [], {};missing_lands=set();inert_statics=set()
+    texture_client=(args.texture_client or client).expanduser().resolve()
+    texture_files = (find(texture_client, 'texidx.mul', False), find(texture_client, 'texmaps.mul', False))
     def picture(kind, graphic):
         key = (kind, graphic)
         if key in palette:
@@ -265,7 +272,10 @@ def main():
                     raise ValueError(f'Missing terrain texture {graphic}')
                 pixels.seek(offset)
                 image = pixels555(pixels.read(length), side, side)
-        if image is None or image.getbbox() is None or max(image.size) > 1024:
+        if (image is None or image.getbbox() is None) and kind=='static' and not (data[graphic][0]&(0x10|0x40|0x200|0x400|0x10000000|0x20000000)) and data[graphic][1]==0:
+            from PIL import Image
+            image=Image.new('RGBA',(1,1));inert_statics.add(graphic) # Original no-op static, without collision or visible art.
+        if image is None or (image.getbbox() is None and image.size!=(1,1)) or max(image.size) > 1024:
             raise ValueError(f'Invalid image {key}')
         digest=(image.size,hashlib.sha256(image.tobytes()).digest())
         if digest in identical:palette[key]=identical[digest];return palette[key]
@@ -307,10 +317,10 @@ def main():
     # a mixed terrain/building view. Logical slots remain 32 for compatibility.
     from PIL import Image
     packed=[];remap={}
-    for group in range(0,len(permutation),8):
-        if packed:
+    for group in range(0,len(permutation),args.per_page):
+        if packed and args.per_page==8:
             while len(packed)%32:packed.append(Image.new('RGBA',(1,1)))
-        for old in permutation[group:group+8]:remap[old]=len(packed);packed.append(images[old])
+        for old in permutation[group:group+args.per_page]:remap[old]=len(packed);packed.append(images[old])
     images=packed
     if len(images)>32768:raise ValueError('Paged image limit exceeded')
     next_cells=[]
@@ -335,22 +345,25 @@ def main():
     out.mkdir(parents=True)
     sources = out/'_private_sources'
     sources.mkdir()
-    for page in range((len(images)+31)//32):
+    for page in range((len(images)+args.per_page-1)//args.per_page if args.per_page==2 else (len(images)+31)//32):
         folder = sources/f'{page:02d}'
         folder.mkdir()
-        group = images[page*32:page*32+32]
+        slots=2 if args.per_page==2 else 32
+        group = images[page*slots:page*slots+slots]
         for i, image in enumerate(group):
             image.save(folder/f'{i:02d}.png')
         (folder/'page.t3s').write_text('--atlas -f rgba5551 -z none\n'+''.join(f'{i:02d}.png\n' for i in range(len(group))))
         subprocess.run([tex3ds, '-i', 'page.t3s', '-o', str(out/f'atlas_{page:02d}.t3x')], cwd=folder, check=True)
-    (out/'image_sizes.bin').write_bytes(struct.pack('<4sHH',b'UOI1',len(images),(len(images)+31)//32)+b''.join(struct.pack('<HH',*im.size) for im in images)+b''.join(struct.pack('<I',(out/f'atlas_{page:02d}.t3x').stat().st_size) for page in range((len(images)+31)//32)))
+    slots=2 if args.per_page==2 else 32;pages=(len(images)+slots-1)//slots
+    (out/'image_sizes.bin').write_bytes(struct.pack('<4sHH',b'UOI1',len(images),pages)+b''.join(struct.pack('<HH',*im.size) for im in images)+b''.join(struct.pack('<I',(out/f'atlas_{page:02d}.t3x').stat().st_size) for page in range(pages)))
+    if slots==2:(out/'atlas_layout.bin').write_bytes(struct.pack('<4sHH',b'UWP1',2,0))
     (out/'scene.bin').write_bytes(raw)
     if decoration:
         scene_hash=2166136261
         for byte in raw:scene_hash=((scene_hash^byte)*16777619)&0xffffffff
         (out/'doors.bin').write_bytes(struct.pack('<4sHHII',b'UOD1',1,len(door_records),base_count,scene_hash)+b''.join(door_records))
         (out/'decoration_manifest.json').write_text(json.dumps(decoration,indent=2)+'\n')
-    report = dict(missing_land_graphics=sorted(missing_lands),terrain_fallbacks=sorted(terrain_fallbacks),origin=[args.x, args.y], side=args.side, spawn=[args.spawn_x, args.spawn_y, args.spawn_z], objects=len(rows), images=len(images), roofs=sum(bool(data[r[3]][0] & 0x10000000) for r in rows), hued_objects=sum(r[4] != 0 for r in rows), sha256=hashlib.sha256(raw).hexdigest(), limitations=['Hues retained but not rendered in v0.1', 'Dynamic objects and multis not included', 'Experimental height ceiling, not full CrossUO roof connectivity'], source_files={name:hashlib.sha256(find(client,name).read_bytes()).hexdigest() for name in ['tiledata.mul','staidx0.mul']})
+    report = dict(invisible_original_statics=sorted(inert_statics),missing_land_graphics=sorted(missing_lands),terrain_fallbacks=sorted(terrain_fallbacks),origin=[args.x, args.y], side=args.side, spawn=[args.spawn_x, args.spawn_y, args.spawn_z], objects=len(rows), images=len(images), roofs=sum(bool(data[r[3]][0] & 0x10000000) for r in rows), hued_objects=sum(r[4] != 0 for r in rows), sha256=hashlib.sha256(raw).hexdigest(), limitations=['Hues retained but not rendered in v0.1', 'Dynamic objects and multis not included', 'Experimental height ceiling, not full CrossUO roof connectivity'], source_files={name:hashlib.sha256(find(client,name).read_bytes()).hexdigest() for name in ['tiledata.mul','staidx0.mul']})
     if decoration:
         report['base_objects']=base_count
         report['server_decoration']=len(decoration['placements'])

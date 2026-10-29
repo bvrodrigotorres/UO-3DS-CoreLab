@@ -32,7 +32,7 @@ int main(int argc,char**argv){
     Inventory resumed;resumed.init(w,folder+"inventory.sav");assert(resumed.restored&&PlayerStatus::gold(&resumed)==loot);
     inv.update(w,{2,2,0});assert(!inv.hasContainer());assert(!inv.openExternal(w,{2,2,0},body.loot,body.position,"CADAVER"));
     // A full bag cannot consume a corpse item; no equipped/stacked items vanish.
-    body.loot={{4,1}};inv.backpack.assign(BagSlots,{4,1});assert(combat.openCorpse(w,a,inv));assert(!inv.transfer(w,a,true,0)&&body.loot.size()==1);
+    body.loot={{4,1}};inv.backpack.assign(BagSlots,{5,1});assert(combat.openCorpse(w,a,inv));assert(!inv.transfer(w,a,true,0)&&body.loot.size()==1);
     float decay=body.decay;combat.update(w,npcs,a,false,0,stats,inv);assert(body.decay==decay);
     for(int i=0;i<410;++i)combat.update(w,npcs,a,false,.05f,stats,inv);
     assert(rat.alive&&combat.vitals()[0].hits==combat.vitals()[0].maximum&&body.active&&body.loot.size()==1);

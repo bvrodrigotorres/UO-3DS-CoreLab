@@ -17,14 +17,14 @@ int main(int argc,char**argv){
     std::vector<Actor>placed;std::vector<size_t>accepted;uint32_t seed=1947;
     auto taken=[&](const Actor&a){for(const auto&p:placed)if(p.x==a.x&&p.y==a.y&&std::abs(p.z-a.z)<16)return true;return false;};
     for(size_t at=0;at<b.size();at+=52){
-        Actor home{int(n(at)),int(n(at+2)),int(int16_t(n(at+4)))},chosen;unsigned range=n(at+8);bool animal=n(at+10)!=0,found=false;int permitted=255;
+        Actor home{int(n(at)),int(n(at+2)),int(int16_t(n(at+4)))},chosen;unsigned range=n(at+8);bool animal=(n(at+10)&1)!=0,found=false;int permitted=255;
         auto tryCell=[&](int x,int y){
             if(!w.contains(x,y))return false;
             if(n(at+10)&2)for(const auto&r:guards)if(x+w.originX>=r[0]&&x+w.originX<r[0]+r[2]&&y+w.originY>=r[1]&&y+w.originY<r[1]+r[3])return false;
             auto h=heights(w,x,y);std::vector<int>zs{h.average};
             {zs.push_back(home.z);for(auto i:w.cells[y*w.width+x]){const auto&o=w.objects[i];if((o.flags&Surface)&&!(o.flags&Roof))zs.push_back(o.z+((o.flags&Bridge)?o.height/2:o.height));}
                 std::stable_sort(zs.begin(),zs.end(),[&](int a,int b){return std::abs(a-home.z)<std::abs(b-home.z);});}
-            for(int z:zs){if(!animal&&std::abs(z-home.z)>permitted)continue;Actor a{x,y,z};if(canStand(w,a)&&!taken(a)){chosen=a;return true;}}
+            for(int z:zs){if(!animal&&std::abs(z-home.z)>permitted)continue;Actor a{x,y,z};if(canStandMobile(w,a,(n(at+10)&8)!=0,(n(at+10)&16)!=0)&&!taken(a)){chosen=a;return true;}}
             return false;
         };
         int minX=n(at+44),minY=n(at+46),maxX=n(at+48),maxY=n(at+50);

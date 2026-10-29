@@ -12,6 +12,8 @@ namespace lab {
 bool rendererInit();
 bool loadGroundIcons(const ItemIcons&);
 void rendererShutdown();
+unsigned pauseRendererReads();
+void resumeRendererReads(unsigned);
 bool prepareEquipment(unsigned,const EquipmentArt&,std::string&);
 bool selectEquipment(unsigned);
 void clearAppearance();
@@ -34,5 +36,10 @@ unsigned rendererUploads();
 bool hasRunAnimation();
 unsigned renderListBuilds();
 void invalidateRenderList();
+// Loading-screen-only fence: discard world pages and CPU staging, keep actors.
+void releaseWorldResources();
+class RoofCutaway;
+void adoptWorldView(RoofCutaway&&);
+void setWorldLookAhead(int dx,int dy);
 void setQuestMarker(const QuestMarker&);
 }

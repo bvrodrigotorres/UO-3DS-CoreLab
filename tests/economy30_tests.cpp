@@ -18,8 +18,8 @@ int main(int argc,char**argv){
     assert(bag.unequip(5)&&status.resistance(&bag)==0);assert(bag.toggleEquipment(5)&&status.resistance(&bag)==36);
     auto gold=PlayerStatus::gold(&bag);auto before=bag.backpack;assert(!bag.trade(true,5,35,fail));assert(PlayerStatus::gold(&bag)==gold&&bag.backpack.size()==before.size());
     assert(!bag.trade(true,5,65000));assert(!bag.trade(false,25,2));
-    bag.backpack.assign(BagSlots,{4,1});bag.backpack[0]={0,35};assert(bag.trade(true,5,35)&&bag.backpack.size()==BagSlots); // paying frees the coin slot
-    bag.backpack.assign(BagSlots,{4,1});assert(bag.trade(false,4,12)&&bag.backpack.size()==BagSlots&&PlayerStatus::gold(&bag)==12);
+    bag.backpack.assign(BagSlots,{5,1});bag.backpack[0]={0,35};assert(bag.trade(true,5,35)&&bag.backpack.size()==BagSlots); // paying frees the coin slot
+    bag.backpack.assign(BagSlots,{5,1});assert(bag.trade(false,5,12)&&bag.backpack.size()==BagSlots&&PlayerStatus::gold(&bag)==12);
     bag.backpack={{0,65535},{5,1}};assert(!bag.trade(false,5,17)&&bag.backpack.size()==2);
     bag.backpack={{0,1000}};Npcs npcs;npcs.combatants().clear();Npc smith;smith.position=smith.from=smith.home={6,5,0};smith.name="Smith";smith.title="the blacksmith";npcs.combatants().push_back(smith);Commerce shop;
     assert(shop.update(w,npcs,player)&&shop.available()&&shop.accepts(16)&&!shop.accepts(22));

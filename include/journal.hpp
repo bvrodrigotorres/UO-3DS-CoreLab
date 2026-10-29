@@ -8,7 +8,7 @@ struct Journal {
     int width=0,height=0,originX=0,originY=0,dollWidth=0,dollHeight=0;
     std::vector<uint8_t> map,doll;
 };
-bool loadJournal(const std::string&path,const std::string&scene,Journal&,std::string&error);
+bool loadJournal(const std::string&path,const std::string&scene,Journal&,std::string&error,const World*validated=nullptr);
 // One horizontal gesture changes one page; vertical drags and short taps do not.
 struct TouchPages {
     int page=0,count=3,zoom=2,startX=0,startY=0,lastX=0,lastY=0;bool active=false;

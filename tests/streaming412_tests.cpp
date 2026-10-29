@@ -20,6 +20,20 @@ int main(int argc,char**argv){
     }
     assert(uploads==64&&world.choose(needed,resident,retry,600)==-1);
     resident.assign(64,0);retry[0]=1000;assert(world.choose(needed,resident,retry,700)==1);world.pending=5;needed[5]=0;assert(world.choose(needed,resident,retry,700)==5);world.pending=-1;
+    // File numbers are unrelated to proximity. The far low-numbered page must
+    // not delay the player's floor, adjacent wall and the next visible ring.
+    std::vector<uint32_t>priority(64,1000);priority[63]=0;priority[20]=1;priority[9]=8;
+    std::vector<size_t>costs(64,16*1024);
+    assert(world.choose(needed,resident,retry,700,priority)==63);
+    auto batch=world.batch(needed,resident,retry,700,priority,costs,63);
+    assert(batch.size()==4&&batch[0]==63&&batch[1]==20&&batch[2]==9);
+    world.pending=20;priority[9]=0;
+    assert(world.choose(needed,resident,retry,700,priority)==20);
+    batch=world.batch(needed,resident,retry,700,priority,costs,20);assert(batch[0]==20&&batch[1]==9);
+    world.pending=-1;costs[9]=512*1024;
+    batch=world.batch(needed,resident,retry,700,priority,costs,63);assert(batch.size()==1);
+    needed[63]=0;batch=world.batch(needed,resident,retry,700,priority,costs,63);assert(batch.size()==1);needed[63]=1;
+    costs[9]=16*1024;
     // Movement frame changes every tick, reads complete seven ticks later.
     // Completed old phases are still admitted, and the four walking poses stay
     // available even after a slow storage cycle has finished.
@@ -40,5 +54,14 @@ int main(int argc,char**argv){
     for(int i=0;i<4;++i)assert(poses.request(root+std::to_string(i),4,0,true));
     assert(scenery.request(root+"4",4,0,true));ResourceRead file;wait([&]{return scenery.take(root+"4",file);});assert(file.valid);
     for(int i=0;i<4;++i){wait([&]{return poses.take(root+std::to_string(i),file);});assert(file.valid);}
+    // The actual disk worker can prepare the following pages while the first
+    // page is being uploaded; retained neighbours survive subsequent frames.
+    world.pending=0;std::vector<unsigned char>nearNeeded(5,1),nearResident(5);std::vector<uint64_t>nearRetry(5);
+    std::vector<uint32_t>nearPriority{0,1,2,3,4};std::vector<size_t>nearCosts(5,4);
+    auto nearBatch=world.batch(nearNeeded,nearResident,nearRetry,0,nearPriority,nearCosts,0);
+    std::vector<std::string>paths;for(int page:nearBatch)paths.push_back(root+std::to_string(page));
+    scenery.retain(paths);for(const auto&path:paths)assert(scenery.request(path,4,0,true));
+    for(int page:nearBatch){wait([&]{return scenery.take(root+std::to_string(page),file);});assert(file.valid&&file.bytes.size()==4);nearResident[unsigned(page)]=1;}
+    world.pending=-1;assert(world.choose(nearNeeded,nearResident,nearRetry,0,nearPriority)==4);
     std::cout<<"Streaming 41.2: all 64 terrain pages converge under delayed I/O; full walking cycles survive changing frames; independent bounded queues make progress together\n";
 }

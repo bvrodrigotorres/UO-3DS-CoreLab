@@ -5,6 +5,7 @@ local-output/
 __pycache__/
 *.pyc
 *.3dsx
+*.cia
 *.elf
 *.smdh
 *.map

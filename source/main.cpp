@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "core.hpp"
 #include "renderer.hpp"
+#include "expedition_ui.hpp"
 #include "character_depth.hpp"
 #include "performance.hpp"
 #include "mount.hpp"
@@ -17,6 +18,8 @@
 #include "region_migration.hpp"
 #include "resource_preparation.hpp"
 #include "quests.hpp"
+#include "journey.hpp"
+#include "startup_probe.hpp"
 #include <3ds.h>
 #include <cstdio>
 #include <cmath>
@@ -62,8 +65,44 @@ bool developerEditor(const lab::World&w,const lab::Npcs&npcs,lab::Actor&landing)
         if(confirm&&menu->resolve(w,npcs,landing))return true;
     }return false;
 }
+struct EditorReadFence {unsigned state=graphicsReady?lab::pauseRendererReads():0;~EditorReadFence(){if(graphicsReady)lab::resumeRendererReads(state);}};
+void tradeEditor(const lab::World&w,const lab::Npcs&npcs,const lab::Actor&actor,lab::Inventory&bag,lab::Commerce&shop,lab::PlayerStatus&status,const lab::ItemIcons&icons,const std::function<bool()>&saveVitals){
+    EditorReadFence fence;C3D_FrameSync();
+    auto menu=std::make_unique<lab::TradeMenu>();menu->refresh(shop,bag);u64 repeat=0;bool first=true;
+    // Caller flushes all pending saves before switching to synchronous transactions.
+    auto sink=std::move(bag.saveSink);bag.saveSink={};
+    while(aptMainLoop()){
+        auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
+        lab::drawTradeMenu(top,bottom,bag,shop,*menu,status,&icons);
+        GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+        hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();if(first){first=false;continue;}
+        if(down&(KEY_B|KEY_START)){if(menu->back())break;}
+        if(down&(KEY_L|KEY_R))menu->switchTab((down&KEY_R)?1:-1,shop,bag);
+        circlePosition pad;hidCircleRead(&pad);
+        int vertical=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
+        int horizontal=((held&KEY_RIGHT)||pad.dx>35)-((held&KEY_LEFT)||pad.dx< -35);
+        if(!vertical&&!horizontal)repeat=0;
+        else if(now>=repeat){
+            if(menu->confirming)menu->changeQuantity(horizontal-vertical*10);
+            else if(vertical)menu->move(vertical);else menu->switchTab(horizontal,shop,bag);
+            repeat=now+170;
+        }
+        bool accept=down&KEY_A;
+        if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);
+            if(t.py>=34&&t.py<58&&t.px>=24&&t.px<296)menu->switchTab(int((t.px-24)/92)-menu->tab,shop,bag);
+            else if(menu->confirming&&t.py>=119&&t.py<143&&t.px>=24&&t.px<296){int button=(t.px-24)/70;if(button==3)menu->quantity=menu->maximum;else menu->changeQuantity(button==0?-1:button==1?1:10);}
+            else if(t.py>=190&&t.py<214){if(t.px>=24&&t.px<198)accept=true;else if(t.px>=206&&t.px<296&&menu->back())break;}
+        }
+        if(accept){
+            if(shop.update(w,npcs,actor)||!shop.available()){menu->confirming=false;menu->refresh(shop,bag);menu->message="EL NPC YA NO ESTA DISPONIBLE";continue;}
+            if(menu->confirming){bool lesson=menu->tab==2;if(menu->execute(shop,bag,status)&&lesson&&!saveVitals())menu->message="LECCION GUARDADA: ESTADO PENDIENTE";}
+            else menu->quote(shop,bag,status);
+        }
+    }
+    bag.saveSink=std::move(sink);
+}
 bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearance,lab::Inventory&bag,const lab::PlayerStatus&status){
-    C3D_FrameSync();lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
+    EditorReadFence fence;lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
     while(aptMainLoop()){
         if(changed){unsigned key=lab::Inventory::appearanceKey(editor.desired);valid=assets.compose(appearance,key,doll,true)&&assets.compose(appearance,key,sprite,false,editor.direction*5);if(!valid)editor.message="FALTAN RECURSOS DE EQUIPO";changed=false;}
         auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
@@ -87,7 +126,7 @@ bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearanc
 }
 bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,unsigned equipment,bool fresh,const std::function<bool(const lab::Appearance&,const std::array<int,11>&,std::string&)>&commit,const lab::Inventory*owned=nullptr){
     if(!assets.ready()||!assets.fullPaperdoll())return false;
-    C3D_FrameSync();lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(owned)editor.useWardrobe(*owned);if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
+    EditorReadFence fence;lab::AppearanceEditor editor(initial,fresh);editor.equipment=equipment;if(owned)editor.useWardrobe(*owned);if(!fresh)editor.draft.robe=(equipment&2)?1:0;std::vector<uint16_t>doll,sprite;
     u64 repeat=0;bool changed=true,valid=false;
     while(aptMainLoop()){
         if(changed){
@@ -138,6 +177,54 @@ bool appearanceEditor(lab::CharacterAssets&assets,const lab::Appearance&initial,
     return false;
 }
 
+struct BootstrapUI {
+    lab::StartupProbe probe;lab::StartMenu menu;lab::MenuAction choice=lab::MenuAction::None;
+    lab::Appearance created;bool createdReady=false;std::unique_ptr<lab::CharacterAssets>assets;
+    explicit BootstrapUI(const std::string&base):probe(base){menu.options=probe.options;menu.message=probe.message;menu.selected=probe.canContinue?1:0;}
+};
+bool initialMenu(BootstrapUI&boot,const std::string&base){
+    u64 nextPad=0;bool touching=false;int x=0,y=0,lastX=0,lastY=0;
+    while(aptMainLoop()){
+        startupFrame(&boot.menu,boot.probe.canContinue);hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
+        if(down&KEY_START)return false;
+        if(down&KEY_B)boot.menu.back();
+        circlePosition pad;hidCircleRead(&pad);u64 now=osGetTime();int d=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
+        if(!d)nextPad=0;else if(now>=nextPad){boot.menu.move(d);nextPad=now+180;}
+        bool accept=down&KEY_A;
+        if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);x=lastX=t.px;y=lastY=t.py;touching=true;}
+        if((held&KEY_TOUCH)&&touching){touchPosition t;hidTouchRead(&t);lastX=t.px;lastY=t.py;}
+        if((hidKeysUp()&KEY_TOUCH)&&touching){touching=false;int hit=boot.menu.hit(x,y);if(hit>=0&&std::abs(lastX-x)<12&&std::abs(lastY-y)<12){boot.menu.selected=hit;accept=true;}}
+        if(!accept)continue;
+        auto previous=boot.menu.options;auto action=boot.menu.activate(boot.probe.canContinue);
+        if(previous.roofs!=boot.menu.options.roofs||previous.zoom!=boot.menu.options.zoom||previous.page!=boot.menu.options.page){
+            std::string error;if(!boot.menu.options.save(boot.probe.optionsRoot+"options.sav",error)){boot.menu.options=previous;boot.menu.message=error;}else boot.menu.message="OPCIONES GUARDADAS";
+        }
+        if(action==lab::MenuAction::Exit)return false;
+        if(action==lab::MenuAction::Continue){boot.choice=action;return true;}
+        if(action==lab::MenuAction::NewGame){
+            startupFrame(nullptr,false,"PREPARANDO PERSONALIZACION",1);
+            if(!boot.assets)boot.assets=std::make_unique<lab::CharacterAssets>();
+            if(!boot.assets->ready())boot.assets->load(base+"character/");
+            if(!boot.assets->ready()||!boot.assets->fullPaperdoll()){
+                if(!lab::startupFile(boot.probe.worldRoot+"scene.bin")){boot.choice=action;return true;}
+                boot.menu.back();boot.menu.message="ACTUALIZA CHARACTER A V0.25";continue;
+            }
+            lab::Appearance initial;initial.enabled=initial.realClothes=true;
+            boot.createdReady=appearanceEditor(*boot.assets,initial,0,true,[&](const lab::Appearance&a,const std::array<int,11>&,std::string&message){
+                std::vector<uint8_t>dolls;std::vector<uint16_t>frames;
+                if(!boot.assets->dolls(a,dolls)||!boot.assets->compose(a,7,frames)){message="FALTAN CAPAS DE EQUIPAMIENTO";return false;}
+                // Only a draft here: no campaign files are replaced until the
+                // selected world and the complete new save have been validated.
+                boot.created=a;return true;
+            });
+            boot.assets->trimCache();
+            if(boot.createdReady){boot.choice=action;return true;}
+            boot.menu.back();nextPad=0;hidScanInput();
+        }
+    }
+    return false;
+}
+
 }
 
 int main(){
@@ -146,6 +233,10 @@ int main(){
     // Draw the entire lower page into the hidden buffer, then present it.
     gfxSetDoubleBuffering(GFX_BOTTOM,true);
     startupFrame(nullptr,false,"INICIANDO EL JUEGO",0);
+    const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
+    auto boot=std::make_unique<BootstrapUI>(baseRoot);
+    if(!initialMenu(*boot,baseRoot)){gfxExit();return 0;}
+    startupFrame(nullptr,false,"PREPARANDO EL MUNDO",1);
     if(!C3D_Init(lab::FrameCommandBytes)){gfxExit();return 1;}
     graphicsReady=true;
     auto target=C3D_RenderTargetCreate(240,400,GPU_RB_RGBA8,GPU_RB_DEPTH16);
@@ -153,12 +244,43 @@ int main(){
     C3D_RenderTargetSetOutput(target,GFX_TOP,GFX_LEFT,GX_TRANSFER_FLIP_VERT(0)|GX_TRANSFER_OUT_TILED(0)|GX_TRANSFER_RAW_COPY(0)|GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8)|GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8)|GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
     startupFrame(nullptr,false,"CARGANDO BRITANNIA",1);
     lab::World demo=lab::demoWorld(),privateWorld;
-    const std::string baseRoot="sdmc:/3ds/UO-3DS-CoreLab/";
-    const std::string worldRoot=std::ifstream(baseRoot+"britain-expanded/scene.bin").good()?baseRoot+"britain-expanded/":std::ifstream(baseRoot+"britain-large/scene.bin").good()?baseRoot+"britain-large/":baseRoot;
+    const std::string completeRoot=baseRoot+"britain-complete/";
+    const std::string priorRoot=std::ifstream(baseRoot+"britain-realm/ready.bin").good()?baseRoot+"britain-realm/":baseRoot+"britain-expanded/";
+    std::string worldRoot=lab::startupWorldRoot(baseRoot);
+    const bool directSewers=boot->probe.directSewers(boot->choice);
+    const std::string requestedTown=worldRoot;
+    if(directSewers)worldRoot=baseRoot+"britain-sewers/";
     std::string error;bool available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
-    std::string migrationMessage;if(available&&worldRoot==baseRoot+"britain-expanded/")lab::migrateRegion(baseRoot+"britain-large/",worldRoot,privateWorld,migrationMessage);
+    std::string migrationMessage;
+    auto restorePrior=[&](){privateWorld=lab::World{};worldRoot=priorRoot;available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);};
+    if(!directSewers&&!available&&worldRoot==completeRoot){restorePrior();migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
+    if(available&&worldRoot==completeRoot){
+        const std::string realm=baseRoot+"britain-realm/";
+        bool realmSaved=std::ifstream(realm+"campaign.sav").good()||std::ifstream(realm+"campaign.sav.bak").good()||std::ifstream(realm+"inventory-private.sav").good();
+        if(!lab::migrateRegion(realmSaved?realm:baseRoot+"britain-expanded/",worldRoot,privateWorld,migrationMessage))restorePrior();
+    }
+    if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);migrationMessage="MAPA NUEVO INVALIDO: PARTIDA ANTERIOR CONSERVADA";}
+    if(available&&worldRoot==baseRoot+"britain-realm/"&&!lab::migrateRegion(baseRoot+"britain-expanded/",worldRoot,privateWorld,migrationMessage)){
+        worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
+    }
+    if(available&&worldRoot==baseRoot+"britain-expanded/")lab::migrateRegion(baseRoot+"britain-large/",worldRoot,privateWorld,migrationMessage);
     if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);
-    const lab::World canonicalPrivate=lab::positionSnapshot(privateWorld);
+    if(!available&&worldRoot==completeRoot){restorePrior();if(available)available=lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
+    if(!available&&worldRoot==baseRoot+"britain-realm/"){worldRoot=baseRoot+"britain-expanded/";available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error)&&lab::loadAtlases(privateWorld.images,error,worldRoot);migrationMessage="TEXTURAS NUEVAS INVALIDAS: PARTIDA ANTERIOR CONSERVADA";}
+    const std::string saveRoot=directSewers?requestedTown:worldRoot,townRoot=saveRoot,sewerRoot=baseRoot+"britain-sewers/";
+    lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
+    lab::Journey journey;bool journeyOk=journey.load(saveRoot+savePrefix+"journey.sav");
+    if(directSewers&&(!available||!journey.zone))journeyOk=false;
+    if(journeyOk&&journey.zone&&worldRoot!=sewerRoot){
+        lab::releaseWorldResources();privateWorld=lab::World{};worldRoot=sewerRoot;
+        journeyOk=std::ifstream(sewerRoot+"ready.bin").good()&&lab::loadWorld(worldRoot+"scene.bin",privateWorld,error)&&lab::loadAtlases(privateWorld.images,error,worldRoot);
+    }
+    if(!journeyOk){
+        while(aptMainLoop()){startupFrame(nullptr,false,"FALTA ALCANTARILLAS: REINSTALA MAPA. START: SALIR",0);hidScanInput();if(hidKeysDown()&(KEY_START|KEY_B))break;}
+        lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 1;
+    }
+    auto zoneTag=[&](){return journey.zone?"sewers":"private";};
+    lab::World canonicalPrivate=lab::positionSnapshot(privateWorld);
     lab::World legacyPrivate;lab::Doors doors;std::string doorError;
     bool hasDoors=available&&doors.load(worldRoot+"doors.bin",worldRoot+"scene.bin",privateWorld,doorError);
     if(hasDoors)legacyPrivate=lab::positionSnapshot(privateWorld,doors.baseObjects);
@@ -167,9 +289,7 @@ int main(){
     startupFrame(nullptr,false,"MAPA Y PERSONAJE",2);
     lab::RoofMode roofs=lab::RoofMode::Auto;
     lab::TouchPages pages;pages.count=6;lab::Journal journal;std::string journalError;
-    bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError);
-    const std::string saveRoot=worldRoot;
-    lab::Campaign campaign(saveRoot);campaign.load();std::string savePrefix=campaign.prefix();
+    bool hasJournal=available&&lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError,&privateWorld);
     bool authentic=available,moving=false;int facing=4,actual=0,frames=0;
     lab::World*w=authentic?&privateWorld:&demo;
     lab::Actor actor={w->startX,w->startY,w->startZ},from=actor;
@@ -177,7 +297,7 @@ int main(){
     std::string saveMessage;
     lab::PositionCheckpoint checkpoints[2];
     auto positionCheckpoint=[&]()->lab::PositionCheckpoint&{return checkpoints[authentic?1:0];};
-    auto positionPath=[&](){return saveRoot+savePrefix+(authentic?"position-private.sav":"position-demo.sav");};
+    auto positionPath=[&](){return saveRoot+savePrefix+(authentic?std::string("position-")+zoneTag()+".sav":"position-demo.sav");};
     auto savedWorld=[&]()->const lab::World&{return authentic?canonicalPrivate:demo;};
     auto restorePosition=[&](){
         if(lab::loadPosition(positionPath(),savedWorld(),actor,saveMessage)){positionCheckpoint().baseline(actor,osGetTime());return true;}
@@ -196,50 +316,75 @@ int main(){
             hasNpcs=npcs.loadPopulation(worldRoot+"population.bin",worldRoot+"scene.bin",privateWorld,npcError)&&lab::loadPopulationAtlases(npcs,worldRoot,npcError);
         else hasNpcs=lab::loadNpcAtlases(npcError);
     }
-    if(hasNpcs&&npcs.hasPopulation())npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
-    if(hasNpcs)npcs.reset(privateWorld,actor);
-    lab::Inventory inventory;inventory.init(privateWorld,saveRoot+savePrefix+"inventory-private.sav");
+    bool namesOk=true;
+    if(hasNpcs&&npcs.hasPopulation())namesOk=npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
+    if(hasNpcs){npcs.loadCombatProfiles(worldRoot+"npc_combat.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);npcs.reset(privateWorld,actor);}
+    lab::Inventory inventory;inventory.init(privateWorld,saveRoot+savePrefix+"inventory-"+zoneTag()+".sav");
     lab::Inventory demoInventory;demoInventory.init(demo,saveRoot+savePrefix+"inventory-demo.sav");
     lab::ItemIcons itemIcons;itemIcons.load("sdmc:/3ds/UO-3DS-CoreLab/items.bin");lab::loadGroundIcons(itemIcons);
     startupFrame(nullptr,false,"MOCHILA Y EQUIPAMIENTO",4);
     lab::EquipmentArt equipmentArt;std::string equipmentError;
     bool hasEquipment=equipmentArt.load("sdmc:/3ds/UO-3DS-CoreLab/equipment.bin");
     if(!hasEquipment)equipmentError="FALTA EQUIPMENT.BIN";
-    lab::CharacterAssets characterAssets;characterAssets.load(baseRoot+"character/");
+    lab::CharacterAssets characterAssets;if(boot->assets&&boot->assets->ready()){characterAssets=std::move(*boot->assets);boot->assets.reset();}else characterAssets.load(baseRoot+"character/");
     lab::Appearance appearance;
     bool appearanceOk=appearance.load(saveRoot+savePrefix+"appearance.sav");
     lab::StatusArt statusArt;statusArt.load(baseRoot+"status.bin");
     std::string combatArtError;if(hasNpcs&&npcs.hasPopulation()){if(!npcs.hasDeathFrames())lab::loadCombatArt(baseRoot,worldRoot+"population.bin",combatArtError);std::string bloodError;if(!lab::loadBloodArt(baseRoot,bloodError))combatArtError=bloodError;}
     startupFrame(nullptr,false,"PREPARADO",5);
-    lab::StartMenu menu;menu.options.load(saveRoot+"options.sav");menu.message=migrationMessage;
+    lab::StartMenu menu=boot->menu;menu.page=lab::MenuPage::Main;menu.options.load(saveRoot+"options.sav");menu.message=migrationMessage;
     lab::Actor probe;std::string probeMessage;
     bool positionSaved=lab::loadPosition(positionPath(),savedWorld(),probe,probeMessage);
     if(!positionSaved&&authentic&&hasDoors)positionSaved=lab::loadPosition(positionPath(),legacyPrivate,probe,probeMessage);
-    bool canContinue=appearanceOk&&campaign.valid&&(authentic?inventory.healthy():demoInventory.healthy())&&(positionSaved||(authentic?inventory.restored:demoInventory.restored));
+    bool canContinue=(!journey.zone||(inventory.restored&&hasNpcs&&hasJournal&&hasDoors&&namesOk))&&appearanceOk&&campaign.valid&&(authentic?inventory.healthy():demoInventory.healthy())&&(positionSaved||(authentic?inventory.restored:demoInventory.restored));
     menu.selected=canContinue?1:0;
     if(!appearanceOk)menu.message="PERSONALIZACION GUARDADA INVALIDA";
     else if(!campaign.valid)menu.message="ERROR AL LEER LA PARTIDA GUARDADA";
     else if(!(authentic?inventory.healthy():demoInventory.healthy()))menu.message="ERROR EN INVENTARIO GUARDADO";
+    if(journey.zone&&!canContinue)menu.message="ERROR ALCANTARILLAS: REVISA MAPA Y PARTIDA";
+    bool sceneFatal=false,quit=false;
+    auto loadScene=[&](unsigned zone){
+        startupFrame(nullptr,false,zone?"ENTRANDO EN LAS ALCANTARILLAS":"REGRESANDO A BRITAIN",1);
+        lab::releaseWorldResources();lab::setWorldLookAhead(0,0);lab::setQuestMarker({});
+        privateWorld=lab::World{};journal=lab::Journal{};npcs=lab::Npcs{};legacyPrivate=lab::World{};
+        worldRoot=zone?sewerRoot:townRoot;
+        available=lab::loadWorld(worldRoot+"scene.bin",privateWorld,error);
+        if(!available)return false;
+        canonicalPrivate=lab::positionSnapshot(privateWorld);
+        hasDoors=doors.load(worldRoot+"doors.bin",worldRoot+"scene.bin",privateWorld,doorError);
+        if(!hasDoors)return false;
+        legacyPrivate=lab::positionSnapshot(privateWorld,doors.baseObjects);
+        privateWorld.compatiblePosition=canonicalPrivate.compatiblePosition;privateWorld.compatibleInventory=lab::inventoryWorldId(privateWorld);
+        hasJournal=lab::loadJournal(worldRoot+"journal.bin",worldRoot+"scene.bin",journal,journalError,&privateWorld);
+        hasNpcs=npcs.loadPopulation(worldRoot+"population.bin",worldRoot+"scene.bin",privateWorld,npcError);
+        if(!hasJournal||!hasNpcs||!npcs.loadNames(worldRoot+"npc_names.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError))return false;
+        npcs.loadCombatProfiles(worldRoot+"npc_combat.bin",worldRoot+"scene.bin",worldRoot+"population.bin",npcError);
+        if(!lab::loadAtlases(privateWorld.images,error,worldRoot)||!lab::loadPopulationAtlases(npcs,worldRoot,npcError))return false;
+        w=&privateWorld;return true;
+    };
     auto freshGame=[&](const lab::Appearance&created){
+        const unsigned previousZone=journey.zone;
+        if(previousZone&&!loadScene(0)){if(!loadScene(previousZone)){sceneFatal=true;quit=true;}menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;}
+        auto failedNew=[&](){if(previousZone&&!loadScene(previousZone)){sceneFatal=true;quit=true;}return false;};
         uint32_t generation=campaign.unusedGeneration();
-        if(!generation){menu.message="NO SE PUDO PREPARAR LA PARTIDA";return false;}
+        if(!generation){menu.message="NO SE PUDO PREPARAR LA PARTIDA";return failedNew();}
         std::string prefix=campaign.prefix(generation),error;
         lab::Inventory freshPrivate,freshDemo;
         freshDemo.init(demo,saveRoot+prefix+"inventory-demo.sav");
         freshDemo.initialDress(created.shirt,created.pants,created.shoes,created.robe);freshDemo.addAccessories();
         if(!freshDemo.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-demo.sav",demo,{demo.startX,demo.startY,demo.startZ},error)){
-            menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
+            menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return failedNew();
         }
         if(available){
             freshPrivate.init(privateWorld,saveRoot+prefix+"inventory-private.sav");
             freshPrivate.initialDress(created.shirt,created.pants,created.shoes,created.robe);freshPrivate.addAccessories();
             if(!freshPrivate.checkpoint()||!lab::savePosition(saveRoot+prefix+"position-private.sav",canonicalPrivate,{canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},error)){
-                menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return false;
+                menu.message="ERROR SD: PARTIDA ANTERIOR CONSERVADA";return failedNew();
             }
         }
-        if(!created.save(saveRoot+prefix+"appearance.sav",error)){menu.message=error;return false;}
-        if(!campaign.commit(generation,error)){menu.message=error;return false;}
-        appearance=created;savePrefix=prefix;inventory=std::move(freshPrivate);demoInventory=std::move(freshDemo);
+        if(!created.save(saveRoot+prefix+"appearance.sav",error)){menu.message=error;return failedNew();}
+        if(!campaign.commit(generation,error)){menu.message=error;return failedNew();}
+        journey=lab::Journey{};appearance=created;savePrefix=prefix;inventory=std::move(freshPrivate);demoInventory=std::move(freshDemo);
         if(hasDoors)doors.reset(privateWorld);
         if(available)hasDoors=doors.load(saveRoot+"doors.bin",saveRoot+"scene.bin",privateWorld,doorError);
         actor={w->startX,w->startY,w->startZ};alignCamera();lab::invalidateRenderList();
@@ -247,11 +392,13 @@ int main(){
         if(available)checkpoints[1].baseline({canonicalPrivate.startX,canonicalPrivate.startY,canonicalPrivate.startZ},osGetTime());
         saveMessage="NUEVA AVENTURA EN BRITANNIA";return true;
     };
-    bool quit=false;
     while(!quit){
     bool started=false,touching=false;int touchX=0,touchY=0,touchLastX=0,touchLastY=0;
     u64 nextPad=0;
     while(aptMainLoop()&&!started&&!quit){
+        auto action=boot->choice;boot->choice=lab::MenuAction::None;
+        if(action==lab::MenuAction::Continue&&!canContinue)continue;
+        if(action==lab::MenuAction::None){
         startupFrame(&menu,canContinue);hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
         if(down&KEY_START){quit=true;continue;}
         if(down&KEY_B)menu.back();
@@ -264,12 +411,14 @@ int main(){
         if((held&KEY_TOUCH)&&touching){touchPosition t;hidTouchRead(&t);touchLastX=t.px;touchLastY=t.py;}
         if((hidKeysUp()&KEY_TOUCH)&&touching){touching=false;int hit=menu.hit(touchX,touchY);if(hit>=0&&std::abs(touchLastX-touchX)<12&&std::abs(touchLastY-touchY)<12){menu.selected=hit;accept=true;}}
         if(!accept)continue;
-        auto oldOptions=menu.options;auto action=menu.activate(canContinue);
+        auto oldOptions=menu.options;action=menu.activate(canContinue);
         if(menu.options.roofs!=oldOptions.roofs||menu.options.zoom!=oldOptions.zoom||menu.options.page!=oldOptions.page){
             std::string message;if(!menu.options.save(saveRoot+"options.sav",message)){menu.options=oldOptions;menu.message=message;}else menu.message="OPCIONES GUARDADAS";
         }
+        }
         if(action==lab::MenuAction::Exit){quit=true;continue;}
         if(action==lab::MenuAction::NewGame){
+            if(boot->createdReady){boot->createdReady=false;started=freshGame(boot->created);if(!started){auto message=menu.message;menu.back();menu.message=message;}continue;}
             if(!characterAssets.ready()||!characterAssets.fullPaperdoll()){
                 if(!available){lab::Appearance diagnostic;started=freshGame(diagnostic);continue;}
                 menu.message="ACTUALIZA CHARACTER A V0.25";continue;
@@ -312,16 +461,21 @@ int main(){
     }
     std::vector<lab::Actor>occupants;occupants.reserve(npcs.all().size()*2+2);
     lab::PlayerStatus playerStatus;lab::NpcPush npcPush;lab::Commerce commerce;lab::Combat combat;combat.reset(npcs);combat.locate(actor);
-    lab::Quests quests;quests.setup(*w,npcs);lab::setQuestMarker({});
+    lab::Quests quests;quests.setup(*w,npcs);if(journey.zone)quests.select(2);lab::setQuestMarker({});
+    auto questMarker=[&](){
+        if(journey.zone)for(unsigned i=0;i<lab::QuestCount;++i)if(quests.ready(i,inventory))return lab::QuestMarker{true,6031-w->originX,1499-w->originY,42};
+        return quests.marker(npcs,inventory);
+    };
     combat.onKill=[&](const lab::Npc&npc){if(authentic)quests.killed(*w,npc,inventory);};
-    auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?"vitals-private.sav":"vitals-demo.sav");};
+    auto vitalsPath=[&](){return saveRoot+savePrefix+(authentic?std::string("vitals-")+zoneTag()+".sav":"vitals-demo.sav");};
     lab::AsyncSaves*asyncWriter=nullptr;
     auto persistVitals=[&](){if(asyncWriter&&!asyncWriter->flush()){saveMessage="ERROR SD: GUARDADO PENDIENTE";return false;}bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
     if(!lab::loadVitals(vitalsPath(),playerStatus)){menu.back();menu.message="ESTADISTICAS INVALIDAS: PARTIDA CONSERVADA";continue;}
+    if(playerStatus.recoverTraining(inventory))persistVitals();
     auto saves=std::make_unique<lab::AsyncSaves>();bool asyncReady=saves->start();
     lab::SaveSink sink;if(asyncReady){asyncWriter=saves.get();sink=[&](const std::string&path,std::vector<uint8_t>b){return saves->enqueue(path,std::move(b));};inventory.saveSink=sink;demoInventory.saveSink=sink;}
     auto queueVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus,std::rename,sink);if(!ok)saveMessage="ERROR SD: ESTADISTICAS PENDIENTES";return ok;};
-    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";return used;};
+    inventory.useItem=[&](size_t index){bool used=combat.useHealing(inventory,index,playerStatus);if(used&&!queueVitals())inventory.message="CURACION | GUARDADO PENDIENTE";return used;};
     inventory.prepareEquipment=[&](unsigned mask){unsigned key=mask|(playerStatus.mounted?lab::MountedBank:0);if(!lab::prepareEquipment(key,equipmentArt,equipmentError))return false;lab::warmEquipment(key,equipmentArt);return true;};
     if(playerStatus.mounted&&!inventory.prepareEquipment(inventory.equipmentMask())){playerStatus.mounted=false;saveMessage="CABALLO: ACTUALIZA LA CARPETA CHARACTER/MOUNTED";}
     lab::SkillsMenu skillsMenu;
@@ -333,11 +487,47 @@ int main(){
     lab::InventoryDrag inventoryDrag;lab::PauseMenu pause;u64 pauseAt=0,pausePad=0;
     lab::ResourcePreparation pausedResources;
     auto saveAtPause=[&](u64 at){auto&bag=authentic?inventory:demoInventory;bool ok=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,bag,playerStatus,saveMessage,sink);positionCheckpoint().result(actor,at,ok);pause.message=saveMessage;};
+    auto travel=[&](unsigned zone,bool death=false){
+        if(!authentic||zone==journey.zone)return false;
+        if(zone&&!std::ifstream(sewerRoot+"ready.bin").good()){saveMessage="INSTALA ALCANTARILLAS DESDE UNIVERSAL-UPDATER";return false;}
+        if(!saves->flush()){saveMessage="ERROR SD: VIAJE CANCELADO";return false;}
+        inventory.saveSink={};
+        bool saved=lab::saveSession(positionPath(),vitalsPath(),savedWorld(),actor,inventory,playerStatus,saveMessage);
+        inventory.saveSink=sink;if(!saved)return false;
+        const auto before=journey;const auto beforeActor=actor;const int originX=w->originX,originY=w->originY;
+        auto rollback=[&](const char*stage){
+            bool ok=loadScene(before.zone);journey=before;actor=beforeActor;
+            if(ok){npcs.reset(*w,actor);combat.reset(npcs);combat.locate(actor);quests.setup(*w,npcs);}
+            else {sceneFatal=true;quit=true;}
+            moving=false;alignCamera();saveMessage=std::string("ERROR VIAJE: ")+stage;inventory.message=saveMessage;return false;
+        };
+        if(!loadScene(zone))return rollback("CARGAR DESTINO");
+        auto next=std::make_unique<lab::Inventory>();
+        const std::string tag=zone?"sewers":"private";
+        next->init(privateWorld,saveRoot+savePrefix+"inventory-"+tag+".sav");
+        if(!next->healthy())return rollback("LEER MOCHILA");
+        next->copyPlayerFrom(inventory);
+        lab::Journey destination=before;destination.zone=zone;
+        if(zone)destination.returnPoint={beforeActor.x+originX,beforeActor.y+originY,beforeActor.z};
+        lab::Actor landing=zone?lab::Actor{6032-w->originX,1499-w->originY,31}:death?lab::Actor{w->startX,w->startY,w->startZ}:lab::Actor{before.returnPoint.x-w->originX,before.returnPoint.y-w->originY,before.returnPoint.z};
+        lab::Actor safe;if(!lab::safeTeleportTile(*w,npcs,landing,safe))return rollback("PUNTO DE LLEGADA");landing=safe;
+        if(!next->checkpoint())return rollback("GUARDAR MOCHILA");
+        if(!lab::savePosition(saveRoot+savePrefix+"position-"+tag+".sav",canonicalPrivate,landing,saveMessage))return rollback("GUARDAR POSICION");
+        if(!lab::saveVitals(saveRoot+savePrefix+"vitals-"+tag+".sav",playerStatus))return rollback("GUARDAR ESTADO");
+        if(!destination.save(saveRoot+savePrefix+"journey.sav"))return rollback("CONFIRMAR VIAJE");
+        auto prepare=inventory.prepareEquipment;auto use=inventory.useItem;
+        inventory=std::move(*next);inventory.saveSink=sink;inventory.prepareEquipment=prepare;inventory.useItem=use;
+        journey=destination;actor=landing;moving=false;alignCamera();animationPhase=0;npcPush.reset();inventoryDrag.cancel();
+        npcs.reset(*w,actor);npcs.prepareWindow(*w,actor);combat.reset(npcs);combat.locate(actor);quests.setup(*w,npcs);if(zone||inventory.quests[2].state)quests.select(2);commerce=lab::Commerce{};
+        positionCheckpoint().baseline(actor,osGetTime());pausedResources.restart();lab::invalidateRenderList();
+        saveMessage=zone?"ALCANTARILLAS | A EN LA ESCALERA: SALIR":"HAS REGRESADO A BRITAIN";
+        frames=0;return true;
+    };
     auto presentPause=[&](){
-        lab::setQuestMarker(authentic?quests.marker(npcs,inventory):lab::QuestMarker{});
+        lab::setQuestMarker(authentic?questMarker():lab::QuestMarker{});
         // Pump only rendering/I/O. Never advance NPCs, combat, doors or timers
         // while paused, including after a developer teleport.
-        if(pausedResources.pending()){
+        { // Keep servicing retries/uploads throughout pause, even after clean frames.
             lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
             pausedResources.observe(lab::rendererResourceWaits(),lab::rendererTextureError());
         }
@@ -345,7 +535,7 @@ int main(){
     };
     lab::FramePacer framePacer;lab::FrameStats frameStats;u64 lastHud=0;
     u64 last=osGetTime(),sample=last;positionCheckpoint().active(last);int sampleFrames=0;const char*blocked="--";
-    while(aptMainLoop()){
+    while(aptMainLoop()&&!quit){
         if(!new3ds&&!pause.active){auto delay=framePacer.delay(osGetTime()*1000);if(delay)svcSleepThread(delay*1000);}else framePacer.reset();
         u64 now=osGetTime();frameStats.observe(float(now-last));float dt=std::min(.05f,(now-last)/1000.f);last=now;
         hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();
@@ -382,11 +572,24 @@ int main(){
                 optionsEditor(menu.options,saveRoot+"options.sav");roofs=static_cast<lab::RoofMode>(menu.options.roofs);pages.zoom=menu.options.zoom;pages.page=menu.options.page;lab::invalidateRenderList();
                 now=osGetTime();pausePad=0;frames=0;
                 lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
+            }else if(action==lab::PauseAction::Explore){
+                if(!authentic)pause.message="REQUIERE LA PARTIDA DE BRITAIN";
+                else if(!saves->flush())pause.message="ESPERA EL GUARDADO PENDIENTE";
+                else {
+                    lab::setQuestMarker({});
+                    pause.message=lab::exploreBritannia(target,baseRoot,saveRoot+savePrefix+"expedition.sav",{actor.x+w->originX,actor.y+w->originY,actor.z},playerStatus,inventory,equipmentArt,statusArt,roofs,npcs,*w,itemIcons,sink);
+                    lab::setWorldLookAhead(0,0);
+                    if(!lab::loadAtlases(w->images,error,worldRoot)){pause.message="ERROR AL RESTAURAR TEXTURAS: "+error;quit=true;break;}
+                    lab::prepareEquipment(inventory.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0),equipmentArt,equipmentError);
+                    lab::warmEquipment(inventory.equipmentMask()|(playerStatus.mounted?lab::MountedBank:0),equipmentArt);
+                    lab::invalidateRenderList();pausedResources.restart();
+                }
+                now=osGetTime();pausePad=0;frames=0;
             }else if(action==lab::PauseAction::Developer){
                 lab::Actor destination;if(developerEditor(*w,npcs,destination)){
                     actor=destination;from=actor;moving=false;progress=1;animationPhase=0;alignCamera();npcPush.reset();inventoryDrag.cancel();inventory.closeContainer();combat.attacking=false;combat.target=-1;
                     for(auto&n:npcs.combatants())n.hostile=false;
-                    lab::invalidateRenderList();saveMessage="TELETRANSPORTE COMPLETADO";
+                    npcs.prepareWindow(*w,actor);lab::invalidateRenderList();pausedResources.restart();saveMessage="TELETRANSPORTE COMPLETADO";
                     bool saved=lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink)&&persistVitals();positionCheckpoint().result(actor,pauseAt,saved);
                 }
                 now=osGetTime();pausePad=0;frames=0;
@@ -429,8 +632,8 @@ int main(){
         }
         if(down&(KEY_X|KEY_A))npcPush.reset();
         if(down&KEY_SELECT)roofs=lab::nextRoofMode(roofs);
-        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!queueVitals())inventory.message="CURADO | VIDA PENDIENTE DE GUARDAR";saveMessage=inventory.message;}
-        bool pageChanged=false;
+        if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!queueVitals())inventory.message="CURACION | GUARDADO PENDIENTE";saveMessage=inventory.message;}
+        bool pageChanged=false,requestTrade=false;
         if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:pages.count-1))%pages.count;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
         touchPosition touch;
         if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH){pages.begin(touch.px,touch.py);if(pages.page==2&&authentic)inventoryDrag.begin(inventory,touch.px,touch.py);}else {pages.move(touch.px,touch.py);if(inventoryDrag.active)inventoryDrag.move(touch.px,touch.py);}}
@@ -468,17 +671,31 @@ int main(){
                 else if(action==2){if(moving)skillsMenu.message="DETENTE PARA MEDITAR";else {if(combat.meditate(playerStatus,inventory))skillsMenu.message.clear();else skillsMenu.message=combat.message;}}
                 else if(selected!=unsigned(skillsMenu.selected))skillsMenu.message.clear();
             }
-            if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)commerce.tap(*w,npcs,actor,inventory,pages.startX,pages.startY);
+            if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)requestTrade=lab::Commerce::previewHit(pages.startX,pages.startY);
             if(!changed&&oldPage==5&&authentic&&dx*dx+dy*dy<144){
-                if(pages.startY>=30&&pages.startY<52&&pages.startX>=18&&pages.startX<302)quests.select(pages.startX>=162?1:0);
+                if(pages.startY>=30&&pages.startY<52&&pages.startX>=18&&pages.startX<302)quests.select(unsigned(pages.startX-18)/95);
                 if(pages.startY>=201&&pages.startY<226&&pages.startX>=18&&pages.startX<302)quests.interact(*w,npcs,actor,inventory);
             }
             pageChanged=true;
         }
+        if(authentic&&pages.page==3&&((down&KEY_A)||requestTrade)){
+            commerce.update(*w,npcs,actor);
+            if(commerce.available()){
+                u64 started=osGetTime();
+                if(saves->flush())tradeEditor(*w,npcs,actor,inventory,commerce,playerStatus,itemIcons,persistVitals);
+                else saveMessage="ERROR SD: COMERCIO NO DISPONIBLE";
+                positionCheckpoint().suspend(osGetTime()-started);last=sample=osGetTime();sampleFrames=0;frames=0;pages.active=false;inventoryDrag.cancel();
+                lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,hasNpcs?&npcs:nullptr,&combat,&playerStatus,&inventory);
+                continue;
+            }
+        }
         if(authentic)inventory.tickGround(dt);
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
         if(authentic&&(down&KEY_X))combat.select(npcs,actor,true);
-        if(authentic&&(down&KEY_A)){if(pages.page==5)quests.interact(*w,npcs,actor,inventory);else combat.toggle(npcs,actor);}
+        if(authentic&&!moving&&(down&KEY_A)&&lab::sewerPortal(*w,actor,journey.zone)){
+            travel(1-journey.zone);if(quit)break;last=sample=osGetTime();sampleFrames=0;continue;
+        }
+        if(authentic&&(down&KEY_A)){if(pages.page==5)quests.interact(*w,npcs,actor,inventory);else if(pages.page!=3)combat.toggle(npcs,actor);}
         if(authentic){
             occupants.clear();occupants.push_back(actor);if(moving)occupants.push_back(from);npcs.addOccupants(occupants);
             if(doors.update(privateWorld,dt,occupants))lab::invalidateRenderList();
@@ -505,9 +722,13 @@ int main(){
         bool animateThisFrame=moving,running=(held&KEY_B)!=0;
         if(moving){progress+=dt/lab::movementSeconds(running,playerStatus.mounted);if(progress>=1){progress=1;moving=false;}
             cameraX=from.x+(actor.x-from.x)*progress;cameraY=from.y+(actor.y-from.y)*progress;foot=from.z+(actor.z-from.z)*progress;}
+        unsigned healingBefore=combat.healingRevision();
         if(authentic&&hasNpcs&&combat.update(*w,npcs,actor,moving,dt,playerStatus,inventory)){
+            if(journey.zone)travel(0,true);
+            if(quit)break;
             actor={w->startX,w->startY,w->startZ};moving=false;alignCamera();npcPush.reset();frames=0;animateThisFrame=false;lab::warmEquipment(inventory.equipmentMask(),equipmentArt);
         }
+        if(combat.healingRevision()!=healingBefore)queueVitals();
         if(combat.attacking&&combat.target>=0&&!moving){
             const auto&enemy=npcs.all()[combat.target];int tx=(enemy.position.x>actor.x)-(enemy.position.x<actor.x),ty=(enemy.position.y>actor.y)-(enemy.position.y<actor.y);
             const int xs[]={0,1,1,1,0,-1,-1,-1},ys[]={-1,-1,0,1,1,1,0,-1};for(int d=0;d<8;++d)if(xs[d]==tx&&ys[d]==ty)facing=(d+1)&7;
@@ -528,13 +749,14 @@ int main(){
                 if(!lab::selectEquipment(key|4096))lab::selectEquipment(key);
             }else lab::selectEquipment(key);
         }
-        lab::setQuestMarker(authentic?quests.marker(npcs,inventory):lab::QuestMarker{});
+        lab::setQuestMarker(authentic?questMarker():lab::QuestMarker{});
         lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,animation,authentic,animateThisFrame,running,authentic&&hasNpcs?&npcs:nullptr,authentic?&combat:nullptr,&playerStatus,authentic?&inventory:nullptr);
         ++frames;++sampleFrames;if(now-sample>=500){fps=sampleFrames*1000.f/(now-sample);sample=now;sampleFrames=0;}
         if(frames==1||now-lastHud>=200||down||pageChanged||saveNotice){
             lastHud=now;
-            lab::HudInfo hud{authentic?(w->width>32?"BRITAIN "+std::to_string(w->width)+"X"+std::to_string(w->height):"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
+            lab::HudInfo hud{authentic?(journey.zone?"ALCANTARILLAS DE BRITAIN":w->width>32?"BRITAIN "+std::string(worldRoot==completeRoot?"COMPLETA ":"")+std::to_string(w->width)+"X"+std::to_string(w->height):"PRIVATE UO SCENE"):"SYNTHETIC TEST",lab::roofModeName(roofs),{}};
             if(pages.page==0){
+            if(authentic&&lab::sewerPortal(*w,actor,journey.zone))hud.lines.emplace_back(journey.zone?"A: SALIR A BRITAIN":"A: ENTRAR A LAS ALCANTARILLAS");
             char line[160];
             auto add=[&](){hud.lines.emplace_back(line);};
             std::snprintf(line,sizeof(line),"XY %d,%d   Z %d | %s",actor.x+w->originX,actor.y+w->originY,actor.z,blocked);add();
@@ -573,7 +795,7 @@ int main(){
             auto bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
             if(pages.page==5)lab::drawQuests(bottom,quests.panel(*w,npcs,actor,inventory));
             else if(pages.page==4)lab::drawSkills(bottom,playerStatus.skills,skillsMenu,combat.meditating);
-            else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt,authentic&&hasNpcs?&npcs:nullptr);
+            else if(pages.page==1)lab::drawJournal(bottom,*w,actor,authentic&&hasJournal?&journal:nullptr,pages.zoom,authentic&&lab::sewerPortal(*w,actor,journey.zone)?(journey.zone?"A: SALIR A BRITAIN":"A: ENTRAR ALCANTARILLAS"):equipmentError.empty()?saveMessage:equipmentError,authentic?&inventory:nullptr,authentic&&hasEquipment?&equipmentArt:nullptr,&playerStatus,&statusArt,authentic&&hasNpcs?&npcs:nullptr);
             else if(pages.page==3)lab::drawCommerce(bottom,inventory,commerce,&itemIcons);
             else if(pages.page==2)lab::drawInventory(bottom,*w,actor,authentic?inventory:demoInventory,&itemIcons,&inventoryDrag,&playerStatus);
             else lab::drawHud(bottom,hud);
@@ -582,8 +804,10 @@ int main(){
         }
     }
     inventory.closeContainer();
-    if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink);
-    if(saves->flush())persistVitals();
+    if(!sceneFatal){
+        if(positionCheckpoint().dirty(actor))lab::savePosition(positionPath(),savedWorld(),actor,saveMessage,std::rename,sink);
+        if(saves->flush())persistVitals();
+    }
     inventory.saveSink={};demoInventory.saveSink={};inventory.prepareEquipment={};inventory.useItem={};
     }
     lab::rendererShutdown();C3D_RenderTargetDelete(target);C3D_Fini();gfxExit();return 0;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 namespace lab {
+// Animation uploads cannot consume the only admission slot for missing scenery.
+constexpr unsigned worldUploadAllowance(unsigned remaining,bool missing){return missing&&remaining==0?1:remaining;}
 // Require consecutive clean preparation passes: asynchronous reads may only
 // be admitted on one pass and uploaded on a later one.
 class ResourcePreparation {

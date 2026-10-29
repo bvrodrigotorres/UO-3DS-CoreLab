@@ -25,6 +25,47 @@ class SceneTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
+    def test_fast_startup_probe_and_scene_validation(self):
+        binary=Path(self.temp.name)/'startup55_tests'
+        sources=['tests/startup55_tests.cpp','source/startup.cpp','source/npcs.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp','source/journal.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_potion_stacks_bandage_shortcut_and_third_page(self):
+        binary=Path(self.temp.name)/'inventory54_tests'
+        sources=['tests/inventory54_tests.cpp','source/commerce.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_paid_training_reclaims_down_skills_at_cap(self):
+        binary=Path(self.temp.name)/'training551_tests'
+        sources=['tests/training551_tests.cpp','source/commerce.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_merchant_menu_and_paid_training(self):
+        binary=Path(self.temp.name)/'commerce53_tests'
+        sources=['tests/commerce53_tests.cpp','source/commerce.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_magic_gear_and_elemental_combat(self):
+        binary=Path(self.temp.name)/'gear52_tests'
+        sources=['tests/gear52_tests.cpp','source/quests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_journey_sd_return_and_recovery(self):
+        binary=Path(self.temp.name)/'journey_fat53_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/journey_fat53_tests.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_dungeon_journey_and_quest(self):
+        binary=Path(self.temp.name)/'journey51_tests'
+        sources=['tests/journey51_tests.cpp','source/quests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
     def test_upstream_differential_and_geometry(self):
         subprocess.run([str(self.binary)], check=True)
 
@@ -52,6 +93,65 @@ class SceneTests(unittest.TestCase):
         binary=Path(self.temp.name)/'equipment_tests'
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/equipment_tests.cpp'),str(ROOT/'source/inventory.cpp'),str(ROOT/'source/equipment.cpp'),str(ROOT/'source/hud.cpp'),str(ROOT/'source/character.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/exploration.cpp'),'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
+
+    def test_packed_texture_reads(self):
+        binary=Path(self.temp.name)/'packed_textures_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/packed_textures_tests.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
+    def test_expedition_npc_pilot(self):
+        binary=Path(self.temp.name)/'expedition_npcs_tests'
+        sources=['tests/expedition_npcs_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp','source/character.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
+    def test_realm49_memory_and_aquatic_movement(self):
+        binary=Path(self.temp.name)/'realm49_tests'
+        sources=['tests/realm49_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
+    def test_startup_memory_budget(self):
+        binary=Path(self.temp.name)/'startup_memory_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/startup_memory_tests.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/scene_io.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
+    def test_delayed_bandages(self):
+        binary=Path(self.temp.name)/'bandage_tests'
+        sources=['tests/bandage_tests.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/core.cpp','source/exploration.cpp','source/doors.cpp','source/character.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
+    def test_texture_previews(self):
+        binary=Path(self.temp.name)/'texture_preview_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/texture_preview_tests.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
+    def test_serialized_platform_io(self):
+        binary=Path(self.temp.name)/'platform_io_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/platform_io_tests.cpp'),str(ROOT/'source/platform_io.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
+    def test_background_world_stream(self):
+        binary=Path(self.temp.name)/'world_stream_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-pthread','-I'+str(ROOT/'include'),str(ROOT/'tests/world_stream_tests.cpp'),str(ROOT/'source/world_stream.cpp'),str(ROOT/'source/world_expedition.cpp'),str(ROOT/'source/world_archive.cpp'),str(ROOT/'source/core.cpp'),str(ROOT/'source/save_queue.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
+    def test_expedition_transition_memory_and_recovery(self):
+        binary=Path(self.temp.name)/'expedition_transition_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/expedition_transition_tests.cpp'),str(ROOT/'source/world_expedition.cpp'),str(ROOT/'source/world_archive.cpp'),str(ROOT/'source/core.cpp'),'-o',str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+
+    def test_world_expedition(self):
+        binary=Path(self.temp.name)/'world_expedition_tests'
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),str(ROOT/'tests/world_expedition_tests.cpp'),str(ROOT/'source/world_expedition.cpp'),str(ROOT/'source/world_archive.cpp'),str(ROOT/'source/core.cpp'),'-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
+
+    def test_full_world_archive(self):
+        binary=Path(self.temp.name)/'world_archive_tests'
+        sources=['tests/world_archive_tests.cpp','source/world_archive.cpp','source/core.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include')]+[str(ROOT/f) for f in sources]+['-o',str(binary)],check=True)
+        with tempfile.TemporaryDirectory() as folder:subprocess.run([str(binary),folder],check=True)
 
     def test_quests_and_conversations(self):
         binary=Path(self.temp.name)/'quest43_tests'
@@ -244,6 +344,10 @@ class SceneTests(unittest.TestCase):
             orc=creature_definition('orc',root)
             self.assertTrue(orc['aggressive'] and orc['stationary'])
             self.assertEqual((orc['body'],orc['hits']),(17,65))
+            (root/'Horse.cs').write_text('class Horse : BaseMount { Horse(string name) : base(name, 0xE2, 0x3EA0, AIType.AI_Animal, FightMode.Aggressor, 10) { Body = m_IDs[random*2]; SetHits(28,45); } }')
+            horse=creature_definition('Horse',root)
+            self.assertEqual(horse['body'],226)
+            self.assertFalse(horse['aggressive'])
 
     def test_spawner_identity_and_rectangles(self):
         import sys

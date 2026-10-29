@@ -49,6 +49,7 @@ def main():
     from ultima_sdk.uop import UopFile
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--client',type=Path,required=True)
+    p.add_argument('--doll-client',type=Path,help='Compatible paperdoll artwork source')
     p.add_argument('--scene',type=Path,required=True)
     p.add_argument('--out',type=Path,required=True)
     args=p.parse_args()
@@ -71,7 +72,7 @@ def main():
         if art>=len(data):raise ValueError('Missing static tiledata')
         flags,height=data[art];i=y*side+x
         if art>1 and z+height>=top[i]:pix[x,y]=color(0x4000+art);top[i]=z+height
-    uop=UopFile(find(args.client,'gumpartLegacyMUL.uop'),'build/gumpartlegacymul/{0:D8}.tga',has_extra=True)
+    uop=UopFile(find(args.doll_client or args.client,'gumpartLegacyMUL.uop'),'build/gumpartlegacymul/{0:D8}.tga',has_extra=True)
     gump=uop.read_raw(12)
     if not gump:raise ValueError('Missing original human paperdoll gump 12')
     original=decode_gump(gump);bounds=original.getbbox()

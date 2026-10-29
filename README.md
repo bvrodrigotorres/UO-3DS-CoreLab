@@ -1,4 +1,4 @@
-# UO-3DS-CoreLab v0.29
+# UO-3DS-CoreLab v0.55.1
 
 Laboratorio independiente para probar en la **Nintendo 3DS original** un núcleo
 de escena y movimiento adaptado de CrossUO. Este repositorio tiene historia,
@@ -7,6 +7,14 @@ ejecutable y carpeta de SD propios; no depende del repositorio UO-3DS-Offline.
 **Primera prueba técnica, no un juego completo.** Caminar, alturas, orden de
 dibujo, geometría del terreno y diagnóstico de rendimiento. Incluye NPC locales y una primera mochila con cofres persistentes. Incluye combate local experimental con cadáveres y botín. No incluye servidor
 ni recursos originales de Ultima Online.
+
+[Corrección v0.55.1](docs/v0.55.1.md): entrenamiento en 700.0 usando puntos de habilidades marcadas en Bajar, con confirmación y guardado conjunto.
+
+[Novedades e instalación de v0.55](docs/v0.55.md): menú inicial antes del mundo, personalización antes del mapa, entrada directa a alcantarillas y eliminación de relecturas del mapa.
+
+[Novedades e instalación de v0.54](docs/v0.54.md): pociones apilables, Y para vendas y mochila de 36 espacios en tres páginas.
+
+[Novedades e instalación de v0.53](docs/v0.53.md): comercio pausado en la pantalla superior, compras y ventas por cantidad y entrenamiento de habilidades por profesión hasta 30.0.
 
 [Novedades e instalación de v0.12](docs/v0.12.md): carga inicial, título en la
 pantalla superior y menú táctil con Nuevo Juego, Continuar y Opciones.

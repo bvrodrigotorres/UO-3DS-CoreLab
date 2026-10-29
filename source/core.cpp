@@ -11,14 +11,12 @@ namespace lab {
 bool World::contains(int x,int y) const {return x>=0&&y>=0&&x<width&&y<height;}
 int World::vertex(int x,int y) const {return vertices[y*(width+1)+x];}
 void World::index(){
-    cells.assign(width*height,{});
-    for(size_t i=0;i<objects.size();++i)if(contains(objects[i].x,objects[i].y))
-        cells[objects[i].y*width+objects[i].x].push_back(i);
+    cells.build(size_t(width)*height,objects.size(),[&](size_t i){const auto&o=objects[i];return contains(o.x,o.y)?o.y*width+o.x:-1;});
 }
 void World::moved(size_t i,int oldX,int oldY){
     if(i>=objects.size())return;
-    if(contains(oldX,oldY)){auto&v=cells[oldY*width+oldX];v.erase(std::remove(v.begin(),v.end(),i),v.end());}
-    const auto&o=objects[i];if(contains(o.x,o.y)){auto&v=cells[o.y*width+o.x];auto at=std::lower_bound(v.begin(),v.end(),i);v.insert(at,i);}
+    if(contains(oldX,oldY))cells.remove(size_t(oldY)*width+oldX,i);
+    const auto&o=objects[i];if(contains(o.x,o.y))cells.add(size_t(o.y)*width+o.x,i);
 }
 Heights heights(const World&w,int x,int y){
     Heights h={w.vertex(x,y),w.vertex(x+1,y),w.vertex(x+1,y+1),w.vertex(x,y+1),0,0,false};
@@ -45,7 +43,7 @@ std::vector<Draw> renderList(const World&w,const Actor&a,bool cutaway){
     int ceiling=128;
     if(cutaway&&w.contains(a.x,a.y))for(size_t i:w.cells[a.y*w.width+a.x]){
         const auto&o=w.objects[i];
-        if(o.z>a.z+14&&(o.flags&(Roof|Surface)))ceiling=std::min(ceiling,o.z);
+        if(o.z>a.z+14&&(o.flags&(Roof|Surface)))ceiling=std::min(ceiling,int(o.z));
     }
     std::vector<Draw> column;column.reserve(24);
     const int left=std::max(0,a.x-12),right=std::min(w.width-1,a.x+12);

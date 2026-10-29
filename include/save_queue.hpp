@@ -22,11 +22,15 @@ namespace lab {
 struct ResourceRead {std::vector<uint8_t>bytes;bool valid=false;};
 class AsyncResources {
     struct Impl;std::unique_ptr<Impl>impl;
+    bool requestImpl(const std::string&,const std::string&,uint64_t,unsigned,uint32_t,bool,bool);
 public:
     AsyncResources();~AsyncResources();
     bool start();
     // At most four outstanding reads and 4 MiB completed data, never GPU work.
     bool request(const std::string&,unsigned maximumBytes,uint32_t checksum=0,bool protectedRead=false);
+    // Exact archive slice; key identifies the page for take/retain. Caller must
+    // use a distinct key for each range. The archive stays open on the worker.
+    bool requestSlice(const std::string&key,const std::string&archive,uint64_t offset,unsigned bytes,uint32_t checksum,bool protectedRead=true);
     bool take(const std::string&,ResourceRead&);
     void retain(const std::vector<std::string>&);
 };

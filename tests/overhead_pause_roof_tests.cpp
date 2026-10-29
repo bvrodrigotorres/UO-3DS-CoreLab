@@ -23,7 +23,7 @@ int main(int argc,char**argv){
     PauseMenu pause;pause.open();assert(pause.active&&pause.selected==0&&pause.activate()==PauseAction::Resume);
     pause.move(-1);assert(pause.activate()==PauseAction::Exit);pause.move(-1);assert(pause.activate()==PauseAction::MainMenu);
     pause.selected=1;assert(pause.activate()==PauseAction::Customize);
-    assert(pause.hit(50,55)==0&&pause.hit(50,77)==1&&pause.hit(50,99)==2&&pause.hit(50,121)==3&&pause.hit(50,143)==4&&pause.hit(50,165)==5&&pause.hit(0,80)==-1);
+    assert(pause.hit(50,50)==0&&pause.hit(50,70)==1&&pause.hit(50,90)==2&&pause.hit(50,110)==3&&pause.hit(50,130)==4&&pause.hit(50,150)==5&&pause.hit(50,170)==6&&pause.hit(0,80)==-1);
     PositionCheckpoint checkpoint;checkpoint.baseline({0,0,0},1000);checkpoint.active(2000);Actor moved{1,0,0};
     assert(!checkpoint.due(moved,6000));checkpoint.suspend(120000);assert(!checkpoint.due(moved,126000));assert(checkpoint.due(moved,182000));
     assert(labelPixelOffset(0,0)==0&&labelPixelOffset(127,63)==8191);

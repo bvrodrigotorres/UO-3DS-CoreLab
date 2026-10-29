@@ -31,10 +31,30 @@ inline void orderNpcPoseNeeds(std::vector<NpcPoseNeed>&out){std::stable_sort(out
 // replace it. The same selector is exercised by delayed-I/O native regressions.
 struct WorldPageRead {
     int pending=-1;
-    int choose(const std::vector<unsigned char>&needed,const std::vector<unsigned char>&resident,const std::vector<uint64_t>&retry,uint64_t now)const{
+    int choose(const std::vector<unsigned char>&needed,const std::vector<unsigned char>&resident,const std::vector<uint64_t>&retry,uint64_t now,const std::vector<uint32_t>&priority={})const{
         if(pending>=0)return pending;
-        for(size_t i=0;i<needed.size();++i)if(needed[i]&&!resident[i]&&now>=retry[i])return int(i);
-        return -1;
+        int best=-1;
+        for(size_t i=0;i<needed.size();++i)if(needed[i]&&!resident[i]&&now>=retry[i]){
+            if(priority.size()!=needed.size())return int(i);
+            if(best<0||priority[i]<priority[unsigned(best)])best=int(i);
+        }
+        return best;
+    }
+    // Keep the protected in-flight page, then read the closest visible misses.
+    // Small scenery pages can overlap disk I/O with the next GPU upload without
+    // increasing the existing four-request / four-MiB AsyncResources limit.
+    std::vector<int> batch(const std::vector<unsigned char>&needed,const std::vector<unsigned char>&resident,const std::vector<uint64_t>&retry,uint64_t now,const std::vector<uint32_t>&priority,const std::vector<size_t>&costs,int first)const{
+        if(first<0)return {};
+        std::vector<int>out{first};size_t total=costs[unsigned(first)];
+        // A speculative read may finish, but never starts more speculation.
+        if(!needed[unsigned(first)])return out;
+        auto admitted=resident;admitted[unsigned(first)]=1;WorldPageRead next;
+        while(out.size()<4){int page=next.choose(needed,admitted,retry,now,priority);if(page<0)break;
+            admitted[unsigned(page)]=1;
+            if(costs[unsigned(page)]>512*1024||total>512*1024-costs[unsigned(page)])break;
+            out.push_back(page);total+=costs[unsigned(page)];
+        }
+        return out;
     }
 };
 struct NpcPoseCache {

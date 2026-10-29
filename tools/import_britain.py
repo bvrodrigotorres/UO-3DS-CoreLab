@@ -25,12 +25,15 @@ ADDONS={
 def placements(text,ox,oy,side):
     result=[];header=None
     for number,line in enumerate(text.splitlines(),1):
-        s=line.split('#',1)[0].strip()
+        s=line.split('#',1)[0].split('//',1)[0].strip()
         if not s:continue
         m=re.fullmatch(r'(\w+)\s+(0x[\da-fA-F]+|\d+)(?:\s+\((.*)\))?',s)
         if m:header=(m[1],int(m[2],0),m[3] or '');continue
         m=re.fullmatch(r'(-?\d+)\s+(-?\d+)\s+(-?\d+)(?:\s+\((.*)\))?',s)
-        if not m or header is None:raise ValueError(f'Unparsed decoration line {number}: {s}')
+        if not m or header is None:
+            xy=re.match(r'(-?\d+)\s+(-?\d+)\s+',s)
+            if xy and not (ox<=int(xy[1])<ox+side and oy<=int(xy[2])<oy+side):continue
+            raise ValueError(f'Unparsed decoration line {number}: {s}')
         x,y,z=map(int,m.group(1,2,3))
         if ox<=x<ox+side and oy<=y<oy+side:
             kind,art,props=header;props+=';'+(m[4] or '')
@@ -128,12 +131,16 @@ def resolve_doors(rows,additions,generated,source,side):
     return remaining,result,promoted
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--client',type=Path,required=True);p.add_argument('--reference',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--x',type=int,default=1488);p.add_argument('--y',type=int,default=1596);p.add_argument('--side',type=int,default=32);args=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--reference-world',type=Path);p.add_argument('--all-decorations',type=Path,nargs='+');p.add_argument('--client',type=Path,required=True);p.add_argument('--reference',type=Path,required=True);p.add_argument('--out',type=Path,required=True);p.add_argument('--x',type=int,default=1488);p.add_argument('--y',type=int,default=1596);p.add_argument('--side',type=int,default=32);args=p.parse_args()
     if args.out.exists():raise FileExistsError(args.out)
     ox,oy,side=args.x,args.y,args.side
+    if args.reference_world:
+        from audit_region_sources import audit,require_match
+        require_match(audit(args.client,args.reference_world,ox,oy,side))
     additions=[]
-    for name in ('britain.cfg','patches.cfg'):
-        for r in placements((args.reference/name).read_text(),ox,oy,side):r['source']=name;additions.append(r)
+    files=sorted(f for root in args.all_decorations for f in root.rglob('*.cfg')) if args.all_decorations else [args.reference/n for n in ('britain.cfg','patches.cfg')]
+    for file in files:
+        for r in placements(file.read_text(),ox,oy,side):r['source']=str(file);additions.append(r)
     signs=[]
     for line in (args.reference/'signs.cfg').read_text().splitlines():
         m=re.match(r'(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)',line)
