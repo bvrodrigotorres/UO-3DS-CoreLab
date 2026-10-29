@@ -10,7 +10,8 @@ inline int elementalDamage(int raw,const std::array<uint8_t,5>&types,const std::
 }
 // Initial local character attributes. Combat/spells will update these resources.
 struct PlayerStatus {
-    Skills skills;
+    Skills skills; uint32_t trainingSerial=0;
+    bool recoverTraining(const Inventory&inv){if(inv.trainingSerial<=trainingSerial)return false;skills=inv.trainingSkills;trainingSerial=inv.trainingSerial;return true;}
     int strength=50,dexterity=50,intelligence=50;
     int hits=50,hitsMax=50,mana=50,manaMax=50,stamina=50,staminaMax=50;
     int statCap=225,luck=0,followers=0,followersMax=5;

@@ -5,6 +5,7 @@
 #include "exploration.hpp"
 #include "save_dispatch.hpp"
 #include "quest_state.hpp"
+#include "skills.hpp"
 #include <array>
 #include <functional>
 namespace lab {
@@ -68,7 +69,9 @@ public:
     bool unequip(size_t,SaveRename=std::rename);
     bool toggleEquipment(size_t,SaveRename=std::rename);
     // Copy personal possessions only; containers and ground belong to their zone.
-    void copyPlayerFrom(const Inventory&old){backpack=old.backpack;equipment=old.equipment;lastEquipment=old.lastEquipment;quests=old.quests;dressed=old.dressed;accessories=old.accessories;closeContainer();}
+    void copyPlayerFrom(const Inventory&old){backpack=old.backpack;equipment=old.equipment;lastEquipment=old.lastEquipment;quests=old.quests;trainingSerial=old.trainingSerial;trainingSkills=old.trainingSkills;dressed=old.dressed;accessories=old.accessories;closeContainer();}
+    uint32_t trainingSerial=0; Skills trainingSkills;
+    bool commitTraining(const Skills&,unsigned cost,SaveRename=std::rename);
     Bag backpack;
     std::array<QuestProgress,QuestCount>quests{};
     bool commitQuest(unsigned,const QuestProgress&,Bag,SaveRename=std::rename);
@@ -99,6 +102,7 @@ public:
     bool transfer(const World&,const Actor&,bool fromChest,size_t,SaveRename=std::rename);
     bool takeAll(const World&,const Actor&,SaveRename=std::rename);
     bool consume(size_t,SaveRename=std::rename);
+    bool tradeQuantity(bool buy,unsigned type,unsigned price,unsigned quantity,SaveRename=std::rename);
     bool trade(bool buy,unsigned type,unsigned price,SaveRename=std::rename);
     void tap(const World&,const Actor&,int x,int y);
 };

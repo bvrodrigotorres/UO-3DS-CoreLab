@@ -106,7 +106,7 @@ bool ItemIcons::load(const std::string&p){
     rgba.assign(b.begin()+8,b.end());return true;
 }
 void Inventory::init(const World&w,const std::string&p){
-    path=p;ground={};quests={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=useMode=false;dressed=accessories=false;
+    path=p;trainingSerial=0;trainingSkills={};ground={};quests={};groundFormat=false;groundRetry=0;closeContainer();backpack.clear();chests.clear();writable=true;restored=false;bagPage=0;equipment.fill(-1);lastEquipment.fill(-1);equipMode=useMode=false;dressed=accessories=false;
     uint32_t canonical=inventoryWorldId(w);
     // Canonical object order identifies containers independently of open doors.
     for(size_t i=0;i<w.objects.size();++i){const auto&o=w.objects[i];
@@ -134,8 +134,8 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&b[0]=='U'&&b[1]=='I'&&b[2]=='N'&&((b[3]>='1'&&b[3]<='9')||b[3]=='A')&&get(b,4)==identity&&get(b,8)==chests.size();
-    const unsigned itemLimit=b.size()>=4&&b[3]=='A'?ItemTypes:BaseItemTypes;
+    bool ok=b.size()>=20&&b.size()<=524288&&b[0]=='U'&&b[1]=='I'&&b[2]=='N'&&((b[3]>='1'&&b[3]<='9')||b[3]=='A'||b[3]=='B')&&get(b,4)==identity&&get(b,8)==chests.size();
+    const unsigned itemLimit=b.size()>=4&&(b[3]=='A'||b[3]=='B')?ItemTypes:BaseItemTypes;
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
@@ -151,7 +151,7 @@ void Inventory::init(const World&w,const std::string&p){
     }
     bool legacy=b.size()>=4&&b[3]=='1';
     std::array<int,11>loaded;loaded.fill(-1);
-    bool hasQuests=b.size()>=4&&(b[3]=='8'||b[3]=='9'||b[3]=='A');
+    bool hasQuests=b.size()>=4&&(b[3]=='8'||b[3]=='9'||b[3]=='A'||b[3]=='B');
     bool hasGround=b.size()>=4&&(b[3]=='7'||hasQuests);
     bool expanded=b.size()>=4&&(b[3]=='6'||hasGround);
     int slots=expanded?11:8;
@@ -183,10 +183,11 @@ void Inventory::init(const World&w,const std::string&p){
     }
     if(ok&&hasQuests){
         unsigned savedQuests=b[3]=='8'?2:QuestCount;
-        if(pos+savedQuests*16!=b.size()-4)ok=false;
+        if(pos+savedQuests*16+(b[3]=='B'?4+Skills::WireSize:0)!=b.size()-4)ok=false;
         else for(unsigned i=0;i<savedQuests;++i){auto&q=quests[i];q={get(b,pos),get(b,pos+4),get(b,pos+8),get(b,pos+12)};pos+=16;if(!validQuest(i,q))ok=false;}
     }
-    if(!ok||pos!=b.size()-4){writable=false;ground={};quests={};backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
+    if(ok&&b[3]=='B'){trainingSerial=get(b,pos);pos+=4;ok=trainingSerial>0&&trainingSerial<=1000000&&trainingSkills.decode(b.data()+pos,Skills::WireSize)&&trainingSkills.ready;pos+=Skills::WireSize;}
+    if(!ok||pos!=b.size()-4){trainingSerial=0;trainingSkills={};writable=false;ground={};quests={};backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
     restored=true;equipment=loaded;if(legacy)seedGear();
     message=input==path?"INVENTARIO RESTAURADO":"INVENTARIO RECUPERADO";
@@ -313,14 +314,14 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
     scan(backpack);for(const auto&c:chests)scan(c.items);for(const auto&p:ground)scan(p.items);
     for(int t:equipment)if(t>=int(BaseItemTypes))magic=true;
     for(int t:lastEquipment)if(t>=int(BaseItemTypes))magic=true;
-    bool hasQuests=magic;for(const auto&q:quests)if(q.state)hasQuests=true;
+    bool hasQuests=magic||trainingSerial;for(const auto&q:quests)if(q.state)hasQuests=true;
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
     bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
     bool expanded=false;for(size_t s=8;s<11;++s)if(equipment[s]>=0||lastEquipment[s]>=0)expanded=true;
     if(hasGround||hasQuests)expanded=true;
     if(expanded){extended=true;remembered=true;}
     size_t slots=expanded?11:8;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(magic?'A':hasQuests?(quests[2].state?'9':'8'):hasGround?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    std::vector<uint8_t>b={'U','I','N',uint8_t(trainingSerial?'B':magic?'A':hasQuests?(quests[2].state?'9':'8'):hasGround?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     size_t capacity=128+backpack.size()*8;for(const auto&c:chests)capacity+=4+c.items.size()*8;for(const auto&p:ground)capacity+=16+p.items.size()*12;b.reserve(capacity);
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
     append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));
@@ -328,7 +329,8 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
         for(const auto&pile:ground)if(!pile.items.empty()){put(b,pile.position.x);put(b,pile.position.y);put(b,pile.position.z);put(b,pile.items.size());
             for(size_t i=0;i<pile.items.size();++i){put(b,pile.items[i].type);put(b,pile.items[i].count);put(b,unsigned(std::max(1.f,std::min(180000.f,std::ceil(pile.remaining[i]*1000)))));}}
     }
-    if(hasQuests)for(unsigned i=0;i<((magic||quests[2].state)?QuestCount:2u);++i){const auto&q=quests[i];put(b,q.state);put(b,q.count);put(b,q.giver);put(b,q.signature);}
+    if(hasQuests)for(unsigned i=0;i<((magic||trainingSerial||quests[2].state)?QuestCount:2u);++i){const auto&q=quests[i];put(b,q.state);put(b,q.count);put(b,q.giver);put(b,q.signature);}
+    if(trainingSerial){put(b,trainingSerial);trainingSkills.encode(b);}
     put(b,hash(b));
     if(saveSink&&renameFile==std::rename){if(saveSink(path,std::move(b)))return true;error="GUARDADO OCUPADO: REINTENTA";return false;}
     std::string tmp=path+".tmp",bak=path+".bak";
@@ -412,18 +414,31 @@ bool Inventory::commitQuest(unsigned id,const QuestProgress&next,Bag items,SaveR
     auto before=quests[id];auto previous=backpack;quests[id]=next;backpack=std::move(items);
     if(!persist(message,renameFile)){quests[id]=before;backpack=std::move(previous);return false;}return true;
 }
-bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFile){
-    if(!writable||type==0||type>=ItemTypes||!price||price>65535){message="COMERCIO NO DISPONIBLE";return false;}
+bool Inventory::commitTraining(const Skills&book,unsigned cost,SaveRename renameFile){
+    if(saveSink||!writable||!cost||cost>65535||!book.ready||book.total()>Skills::TotalCap||trainingSerial>=1000000){message="ENTRENAMIENTO NO DISPONIBLE";return false;}
+    auto coins=std::find_if(backpack.begin(),backpack.end(),[](ItemStack s){return s.type==0;});
+    if(coins==backpack.end()||coins->count<cost){message="ORO INSUFICIENTE";return false;}
+    Bag oldBag=backpack;auto oldBook=trainingSkills;auto serial=trainingSerial;
+    coins->count-=cost;if(!coins->count)backpack.erase(coins);
+    trainingSkills=book;++trainingSerial;
+    if(!persist(message,renameFile)){backpack=std::move(oldBag);trainingSkills=std::move(oldBook);trainingSerial=serial;return false;}
+    message="ENTRENAMIENTO GUARDADO";return true;
+}
+bool Inventory::trade(bool buy,unsigned type,unsigned price,SaveRename renameFile){return tradeQuantity(buy,type,price,1,renameFile);}
+bool Inventory::tradeQuantity(bool buy,unsigned type,unsigned price,unsigned quantity,SaveRename renameFile){
+    if(!writable||type==0||type>=ItemTypes||!price||price>65535||!quantity||quantity>65535||(!itemDefs[type].stackable&&quantity!=1)){message="COMERCIO NO DISPONIBLE";return false;}
+    uint64_t total=uint64_t(price)*quantity;
+    if(total>65535){message="EL TOTAL SUPERA EL LIMITE DE ORO";return false;}
     Bag next=backpack;
     auto find=[&](unsigned t){return std::find_if(next.begin(),next.end(),[&](ItemStack v){return v.type==t;});};
-    if(buy){auto coins=find(0);if(coins==next.end()||coins->count<price){message="ORO INSUFICIENTE";return false;}
-        coins->count-=price;if(!coins->count)next.erase(coins);
-        auto item=find(type);if(itemDefs[type].stackable&&item!=next.end()){if(item->count==65535){message="PILA LLENA";return false;}++item->count;}
-        else {if(next.size()>=BagSlots){message="MOCHILA LLENA";return false;}next.push_back({uint16_t(type),1});}
-    }else{auto item=find(type);if(item==next.end()){message="OBJETO NO DISPONIBLE";return false;}
-        if(!--item->count)next.erase(item);
-        auto coins=find(0);if(coins!=next.end()){if(unsigned(coins->count)+price>65535){message="PILA DE ORO LLENA";return false;}coins->count+=price;}
-        else{if(next.size()>=BagSlots){message="MOCHILA LLENA";return false;}next.push_back({0,uint16_t(price)});}
+    if(buy){auto coins=find(0);if(coins==next.end()||coins->count<total){message="ORO INSUFICIENTE";return false;}
+        coins->count-=total;if(!coins->count)next.erase(coins);
+        auto item=find(type);if(itemDefs[type].stackable&&item!=next.end()){if(item->count+quantity>65535){message="PILA LLENA";return false;}item->count+=quantity;}
+        else {if(next.size()>=BagSlots){message="MOCHILA LLENA";return false;}next.push_back({uint16_t(type),uint16_t(quantity)});}
+    }else{auto item=find(type);if(item==next.end()||item->count<quantity){message="OBJETO NO DISPONIBLE";return false;}
+        item->count-=quantity;if(!item->count)next.erase(item);
+        auto coins=find(0);if(coins!=next.end()){if(coins->count+total>65535){message="PILA DE ORO LLENA";return false;}coins->count+=total;}
+        else{if(next.size()>=BagSlots){message="MOCHILA LLENA";return false;}next.push_back({0,uint16_t(total)});}
     }
     Bag previous=backpack;backpack=std::move(next);
     if(!persist(message,renameFile)){backpack=std::move(previous);return false;}

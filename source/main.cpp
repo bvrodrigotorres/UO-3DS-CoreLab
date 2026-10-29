@@ -65,6 +65,41 @@ bool developerEditor(const lab::World&w,const lab::Npcs&npcs,lab::Actor&landing)
     }return false;
 }
 struct EditorReadFence {unsigned state=lab::pauseRendererReads();~EditorReadFence(){lab::resumeRendererReads(state);}};
+void tradeEditor(const lab::World&w,const lab::Npcs&npcs,const lab::Actor&actor,lab::Inventory&bag,lab::Commerce&shop,lab::PlayerStatus&status,const lab::ItemIcons&icons,const std::function<bool()>&saveVitals){
+    EditorReadFence fence;C3D_FrameSync();
+    auto menu=std::make_unique<lab::TradeMenu>();menu->refresh(shop,bag);u64 repeat=0;bool first=true;
+    // Caller flushes all pending saves before switching to synchronous transactions.
+    auto sink=std::move(bag.saveSink);bag.saveSink={};
+    while(aptMainLoop()){
+        auto top=gfxGetFramebuffer(GFX_TOP,GFX_LEFT,nullptr,nullptr),bottom=gfxGetFramebuffer(GFX_BOTTOM,GFX_LEFT,nullptr,nullptr);
+        lab::drawTradeMenu(top,bottom,bag,shop,*menu,status,&icons);
+        GSPGPU_FlushDataCache(top,400*240*3);GSPGPU_FlushDataCache(bottom,320*240*3);gfxScreenSwapBuffers(GFX_TOP,false);gfxScreenSwapBuffers(GFX_BOTTOM,false);gspWaitForVBlank();
+        hidScanInput();u32 down=hidKeysDown(),held=hidKeysHeld();u64 now=osGetTime();if(first){first=false;continue;}
+        if(down&(KEY_B|KEY_START)){if(menu->back())break;}
+        if(down&(KEY_L|KEY_R))menu->switchTab((down&KEY_R)?1:-1,shop,bag);
+        circlePosition pad;hidCircleRead(&pad);
+        int vertical=((held&KEY_DOWN)||pad.dy< -35)-((held&KEY_UP)||pad.dy>35);
+        int horizontal=((held&KEY_RIGHT)||pad.dx>35)-((held&KEY_LEFT)||pad.dx< -35);
+        if(!vertical&&!horizontal)repeat=0;
+        else if(now>=repeat){
+            if(menu->confirming)menu->changeQuantity(horizontal-vertical*10);
+            else if(vertical)menu->move(vertical);else menu->switchTab(horizontal,shop,bag);
+            repeat=now+170;
+        }
+        bool accept=down&KEY_A;
+        if(down&KEY_TOUCH){touchPosition t;hidTouchRead(&t);
+            if(t.py>=34&&t.py<58&&t.px>=24&&t.px<296)menu->switchTab(int((t.px-24)/92)-menu->tab,shop,bag);
+            else if(menu->confirming&&t.py>=119&&t.py<143&&t.px>=24&&t.px<296){int button=(t.px-24)/70;if(button==3)menu->quantity=menu->maximum;else menu->changeQuantity(button==0?-1:button==1?1:10);}
+            else if(t.py>=190&&t.py<214){if(t.px>=24&&t.px<198)accept=true;else if(t.px>=206&&t.px<296&&menu->back())break;}
+        }
+        if(accept){
+            if(shop.update(w,npcs,actor)||!shop.available()){menu->confirming=false;menu->refresh(shop,bag);menu->message="EL NPC YA NO ESTA DISPONIBLE";continue;}
+            if(menu->confirming){bool lesson=menu->tab==2;if(menu->execute(shop,bag,status)&&lesson&&!saveVitals())menu->message="LECCION GUARDADA: ESTADO PENDIENTE";}
+            else menu->quote(shop,bag,status);
+        }
+    }
+    bag.saveSink=std::move(sink);
+}
 bool equipmentEditor(lab::CharacterAssets&assets,const lab::Appearance&appearance,lab::Inventory&bag,const lab::PlayerStatus&status){
     EditorReadFence fence;lab::EquipmentMenu editor(bag);std::vector<uint16_t>doll,sprite;bool changed=true,valid=false;u64 repeat=0;
     while(aptMainLoop()){
@@ -375,6 +410,7 @@ int main(){
     lab::AsyncSaves*asyncWriter=nullptr;
     auto persistVitals=[&](){if(asyncWriter&&!asyncWriter->flush()){saveMessage="ERROR SD: GUARDADO PENDIENTE";return false;}bool ok=lab::saveVitals(vitalsPath(),playerStatus);if(!ok)saveMessage="ERROR SD: ESTADISTICAS NO GUARDADAS";return ok;};
     if(!lab::loadVitals(vitalsPath(),playerStatus)){menu.back();menu.message="ESTADISTICAS INVALIDAS: PARTIDA CONSERVADA";continue;}
+    if(playerStatus.recoverTraining(inventory))persistVitals();
     auto saves=std::make_unique<lab::AsyncSaves>();bool asyncReady=saves->start();
     lab::SaveSink sink;if(asyncReady){asyncWriter=saves.get();sink=[&](const std::string&path,std::vector<uint8_t>b){return saves->enqueue(path,std::move(b));};inventory.saveSink=sink;demoInventory.saveSink=sink;}
     auto queueVitals=[&](){bool ok=lab::saveVitals(vitalsPath(),playerStatus,std::rename,sink);if(!ok)saveMessage="ERROR SD: ESTADISTICAS PENDIENTES";return ok;};
@@ -536,7 +572,7 @@ int main(){
         if(down&(KEY_X|KEY_A))npcPush.reset();
         if(down&KEY_SELECT)roofs=lab::nextRoofMode(roofs);
         if(authentic&&(down&KEY_Y)){bool used=combat.repeatHealing(inventory,playerStatus);if(used&&!queueVitals())inventory.message="CURACION | GUARDADO PENDIENTE";saveMessage=inventory.message;}
-        bool pageChanged=false;
+        bool pageChanged=false,requestTrade=false;
         if(down&(KEY_R|KEY_L)){pages.page=(pages.page+((down&KEY_R)?1:pages.count-1))%pages.count;pageChanged=true;pages.active=false;inventoryDrag.cancel();}
         touchPosition touch;
         if(held&KEY_TOUCH){hidTouchRead(&touch);if(down&KEY_TOUCH){pages.begin(touch.px,touch.py);if(pages.page==2&&authentic)inventoryDrag.begin(inventory,touch.px,touch.py);}else {pages.move(touch.px,touch.py);if(inventoryDrag.active)inventoryDrag.move(touch.px,touch.py);}}
@@ -574,12 +610,23 @@ int main(){
                 else if(action==2){if(moving)skillsMenu.message="DETENTE PARA MEDITAR";else {if(combat.meditate(playerStatus,inventory))skillsMenu.message.clear();else skillsMenu.message=combat.message;}}
                 else if(selected!=unsigned(skillsMenu.selected))skillsMenu.message.clear();
             }
-            if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)commerce.tap(*w,npcs,actor,inventory,pages.startX,pages.startY);
+            if(!changed&&oldPage==3&&authentic&&dx*dx+dy*dy<144)requestTrade=lab::Commerce::previewHit(pages.startX,pages.startY);
             if(!changed&&oldPage==5&&authentic&&dx*dx+dy*dy<144){
                 if(pages.startY>=30&&pages.startY<52&&pages.startX>=18&&pages.startX<302)quests.select(unsigned(pages.startX-18)/95);
                 if(pages.startY>=201&&pages.startY<226&&pages.startX>=18&&pages.startX<302)quests.interact(*w,npcs,actor,inventory);
             }
             pageChanged=true;
+        }
+        if(authentic&&pages.page==3&&((down&KEY_A)||requestTrade)){
+            commerce.update(*w,npcs,actor);
+            if(commerce.available()){
+                u64 started=osGetTime();
+                if(saves->flush())tradeEditor(*w,npcs,actor,inventory,commerce,playerStatus,itemIcons,persistVitals);
+                else saveMessage="ERROR SD: COMERCIO NO DISPONIBLE";
+                positionCheckpoint().suspend(osGetTime()-started);last=sample=osGetTime();sampleFrames=0;frames=0;pages.active=false;inventoryDrag.cancel();
+                lab::drawWorld(target,*w,actor,cameraX,cameraY,foot,roofs,facing,int(animationPhase),authentic,false,false,hasNpcs?&npcs:nullptr,&combat,&playerStatus,&inventory);
+                continue;
+            }
         }
         if(authentic)inventory.tickGround(dt);
         if(authentic)inventory.update(*w,actor);else inventory.opened=-1;
@@ -587,7 +634,7 @@ int main(){
         if(authentic&&!moving&&(down&KEY_A)&&lab::sewerPortal(*w,actor,journey.zone)){
             travel(1-journey.zone);if(quit)break;last=sample=osGetTime();sampleFrames=0;continue;
         }
-        if(authentic&&(down&KEY_A)){if(pages.page==5)quests.interact(*w,npcs,actor,inventory);else combat.toggle(npcs,actor);}
+        if(authentic&&(down&KEY_A)){if(pages.page==5)quests.interact(*w,npcs,actor,inventory);else if(pages.page!=3)combat.toggle(npcs,actor);}
         if(authentic){
             occupants.clear();occupants.push_back(actor);if(moving)occupants.push_back(from);npcs.addOccupants(occupants);
             if(doors.update(privateWorld,dt,occupants))lab::invalidateRenderList();

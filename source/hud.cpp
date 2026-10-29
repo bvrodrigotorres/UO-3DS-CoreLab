@@ -260,31 +260,76 @@ void drawEquipmentMenu(uint8_t*top,uint8_t*bottom,const EquipmentMenu&e,const Ap
     box(bottom,18,216,132,18,gold);text(bottom,33,222,"B: CANCELAR",ink);box(bottom,170,216,133,18,gold);text(bottom,185,222,"APLICAR",ink);
 }
 
-void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemIcons*icons){
-    drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={226,213,177};
-    text(fb,18,12,"MOCHILA",ink);text(fb,170,12,shop.title,ink,1,21);
-    text(fb,18,24,"ORO: "+std::to_string(PlayerStatus::gold(&inv)),ink);
-    text(fb,170,24,"TIENDA",ink);
-    for(int side=0;side<2;++side)for(int n=0;n<12;++n){int x=(side?170:18)+n%3*44,y=38+n/3*38;
-        box(fb,x,y,41,35,ink);box(fb,x+1,y+1,39,33,paper);int type=-1;
-        if(side&&size_t(n)<shop.stock.size())type=int(shop.stock[n]);
-        if(!side&&size_t(n+shop.bagPage*12)<inv.backpack.size())type=inv.backpack[n+shop.bagPage*12].type;
-        if(type<0||type>=int(ItemTypes))continue;
-        if(shop.selected()==type&&shop.purchase()==bool(side)){box(fb,x+1,y+1,39,33,gold);}
-        if(icons&&icons->rgba.size()==BaseItemTypes*24*24*4)for(int iy=0;iy<24;++iy)for(int ix=0;ix<24;++ix){size_t at=(itemBase(type)*576+iy*24+ix)*4;if(icons->rgba[at+3]>127)pixel(fb,x+8+ix,y+1+iy,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
-        else text(fb,x+2,y+5,itemDefs[type].name,ink,1,6);
-        unsigned count=0;for(auto owned:inv.backpack)if(owned.type==type)count+=owned.count;
-        std::string quantity=std::to_string(count);int qx=x+39-int(quantity.size())*6;box(fb,qx,y+1,int(quantity.size())*6,8,ink);text(fb,qx,y+2,quantity,{244,222,160},1,5);
-        text(fb,x+2,y+26,shop.accepts(type)?"$"+std::to_string(shop.price(type,side!=0)):"--",ink,1,6);
-    }
-    box(fb,18,194,130,16,gold);text(fb,22,198,"HOJA "+std::to_string(shop.bagPage+1)+"/2 >",ink);
-    box(fb,170,194,130,16,gold);text(fb,176,198,shop.selected()<0?"ELIGE OBJETO":shop.purchase()?"COMPRAR 1":"VENDER 1",ink);
-    std::string message=shop.message;
-    if(shop.selected()>0)message=(shop.purchase()?"COMPRAR ":"VENDER ")+std::string(itemDefs[shop.selected()].name)+" POR $"+std::to_string(shop.price(unsigned(shop.selected()),shop.purchase()));
-    if(shop.message.find("COMPRADO")==0||shop.message.find("VENDIDO")==0||shop.message.find("NO DISPONIBLE")!=std::string::npos||shop.message.find("NO COMPRA")!=std::string::npos||shop.message.find("ERROR")!=std::string::npos||shop.message.find("INSUFICIENTE")!=std::string::npos||shop.message.find("LLENA")!=std::string::npos)message=shop.message;
-    text(fb,18,225,message,ink,1,47);
-    if(shop.selected()>0){const auto&d=itemDefs[shop.selected()];std::string info=itemQuality(shop.selected())?std::string(qualityName(itemQuality(shop.selected())))+" | "+powerName(itemPower(shop.selected())):shop.selected()==28?"EFECTO: +2 DANO":d.damageMax?"DANO "+std::to_string(d.damageMin)+"-"+std::to_string(d.damageMax)+" | "+std::to_string(int(d.delay*1000))+" MS":"PROTECCION "+std::to_string(d.protection)+"%";text(fb,18,214,info,ink,1,47);}
+namespace {
+const Color tradeInk{57,40,27},tradeGold{182,146,77},tradePaper{232,222,195},tradeMuted{119,104,82};
+void tradeIcon(uint8_t*fb,int x,int y,unsigned type,const ItemIcons*icons){
+    if(!icons||icons->rgba.size()!=BaseItemTypes*576*4)return;
+    for(int j=0;j<24;++j)for(int i=0;i<24;++i){auto at=(itemBase(type)*576+j*24+i)*4;if(icons->rgba[at+3]>127)pixel(fb,x+i,y+j,{icons->rgba[at],icons->rgba[at+1],icons->rgba[at+2]});}
 }
+void tradeButton(uint8_t*fb,int x,int y,int width,const std::string&label,bool selected=false){
+    box(fb,x,y,width,24,tradeInk);box(fb,x+1,y+1,width-2,22,selected?tradeGold:tradePaper);text(fb,x+(width-int(label.size())*6)/2,y+9,label,tradeInk);
+}
+void tradeWrap(uint8_t*fb,int x,int y,const std::string&label,int width,int lines,Color color){
+    size_t at=0;for(int line=0;line<lines&&at<label.size();++line){size_t n=std::min(size_t(width),label.size()-at);if(at+n<label.size()){auto space=label.rfind(' ',at+n);if(space!=std::string::npos&&space>at)n=space-at;}text(fb,x,y+line*11,label.substr(at,n),color,1,width);at+=n;while(at<label.size()&&label[at]==' ')++at;}
+}
+}
+void drawCommerce(uint8_t*fb,const Inventory&inv,const Commerce&shop,const ItemIcons*icons){
+    drawHudFrame(fb,{},false,true);
+    text(fb,24,17,"MERCADO",tradeInk,2);text(fb,208,21,"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeInk,1,15);
+    text(fb,24,46,shop.title,tradeInk,1,44);text(fb,24,59,shop.profession,tradeMuted,1,44);
+    box(fb,24,76,272,1,tradeGold);
+    if(shop.available()){
+        text(fb,24,87,shop.stock.empty()?"MAESTRO DE HABILIDADES":"UNA MUESTRA DE SU TIENDA",tradeMuted);
+        for(unsigned i=0;i<std::min(size_t(4),shop.stock.size());++i){unsigned type=shop.stock[i];int x=24+int(i)*69;
+            box(fb,x,103,64,65,tradeGold);box(fb,x+1,104,62,63,tradePaper);tradeIcon(fb,x+20,109,type,icons);
+            unsigned count=0;for(auto owned:inv.backpack)if(owned.type==type)count+=owned.count;
+            text(fb,x+62-int(std::to_string(count).size())*6,106,std::to_string(count),tradeInk,1,5);
+            text(fb,x+4,140,itemDefs[type].name,tradeInk,1,9);text(fb,x+4,155,"$"+std::to_string(shop.price(type,true)),tradeInk,1,9);
+        }
+        if(shop.stock.empty())tradeWrap(fb,24,112,"APRENDE HABILIDADES RELACIONADAS CON SU PROFESION HASTA 30.0.",43,4,tradeInk);
+        else if(!shop.lessons.empty())text(fb,24,176,"TAMBIEN OFRECE ENTRENAMIENTO",tradeMuted);
+        tradeButton(fb,24,190,272,"COMERCIAR",true);
+        text(fb,47,218,"A / TOCAR: ABRIR Y PAUSAR",tradeInk);
+    }else {tradeWrap(fb,24,103,"ACERCATE A UN COMERCIANTE O MAESTRO PARA VER SUS MERCANCIAS Y LECCIONES.",42,5,tradeInk);text(fb,24,205,"EL MUNDO SIGUE EN MOVIMIENTO",tradeMuted);}
+}
+void drawTradeMenu(uint8_t*top,uint8_t*bottom,const Inventory&inv,const Commerce&shop,const TradeMenu&menu,const PlayerStatus&status,const ItemIcons*icons){
+    canvasWidth=400;box(top,0,0,400,240,{35,29,24});box(top,6,6,388,228,tradeGold);box(top,8,8,384,224,tradePaper);
+    text(top,19,18,shop.title,tradeInk,2,22);text(top,20,37,shop.profession,tradeMuted,1,40);text(top,287,37,"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeInk,1,15);
+    const char*tabs[]={"COMPRAR","VENDER","ENTRENAR"};
+    for(int t=0;t<3;++t)tradeButton(top,18+t*123,50,118,tabs[t],menu.tab==t);
+    unsigned first=unsigned(menu.row/6)*6;
+    if(menu.rows.empty())text(top,26,104,menu.tab==2?"NO OFRECE LECCIONES":"NO HAY OBJETOS PARA MOSTRAR",tradeMuted);
+    for(unsigned i=first;i<menu.rows.size()&&i<first+6;++i){unsigned id=menu.rows[i];int y=81+int(i-first)*20;bool selected=int(i)==menu.row;
+        box(top,18,y,230,19,selected?tradeGold:tradePaper);
+        if(menu.tab==2){text(top,24,y+3,skillDefs[id].name,tradeInk,1,29);text(top,207,y+3,skillValue(status.skills.entries[id].value),tradeInk,1,6);}
+        else {tradeIcon(top,22,y-2,id,icons);text(top,49,y+3,itemDefs[id].name,tradeInk,1,25);text(top,203,y+3,"$"+std::to_string(shop.price(id,menu.tab==0)),tradeInk,1,7);}
+    }
+    box(top,255,82,1,120,tradeGold);
+    if(!menu.rows.empty()){
+        unsigned id=menu.rows[menu.row];
+        if(menu.tab==2){text(top,269,86,"LECCION",tradeMuted);tradeWrap(top,269,103,skillDefs[id].name,18,2,tradeInk);text(top,269,131,"LIMITE 30.0",tradeInk);text(top,269,146,"$10 POR 1.0",tradeInk);tradeWrap(top,269,167,skillDefs[id].active?"MEJORA TU PERSONAJE":"SIN USO JUGABLE TODAVIA",18,3,tradeMuted);}
+        else {tradeIcon(top,307,86,id,icons);tradeWrap(top,269,118,itemDefs[id].name,18,3,tradeInk);text(top,269,155,"TIENES "+std::to_string(menu.owned(inv,id)),tradeInk,1,18);auto detail=itemDetails(id);if(!detail.empty())tradeWrap(top,269,171,detail[0],18,3,tradeMuted);}
+    }
+    text(top,20,207,std::to_string(menu.rows.empty()?0:menu.row+1)+" / "+std::to_string(menu.rows.size()),tradeMuted);
+    text(top,100,207,"EL MUNDO ESTA EN PAUSA",tradeMuted);
+    text(top,20,221,menu.confirming?"ELIGE CANTIDAD ABAJO | A: CONFIRMAR | B: VOLVER":"PAD: ELEGIR | L/R: PESTANAS | A: SELECCIONAR | B: SALIR",tradeInk,1,60);
+    canvasWidth=320;drawHudFrame(bottom,{},false,true);
+    text(bottom,25,17,menu.confirming?"CONFIRMAR OPERACION":"COMERCIO EN PAUSA",tradeInk);
+    for(int t=0;t<3;++t)tradeButton(bottom,24+t*92,34,88,tabs[t],menu.tab==t);
+    if(!menu.rows.empty()){
+        unsigned id=menu.confirming?menu.entry:menu.rows[menu.row];tradeWrap(bottom,24,70,menu.tab==2?skillDefs[id].name:itemDefs[id].name,44,2,tradeInk);
+        if(menu.confirming){
+            text(bottom,24,98,menu.tab==2?"SUBIR "+skillValue(status.skills.entries[id].value)+" A "+skillValue(status.skills.entries[id].value+menu.quantity):"CANTIDAD: "+std::to_string(menu.quantity)+"  /  "+std::to_string(menu.maximum),tradeInk);
+            tradeButton(bottom,24,119,62,"-",false);tradeButton(bottom,94,119,62,"+",false);tradeButton(bottom,164,119,62,"+10",false);tradeButton(bottom,234,119,62,"MAX",false);
+            text(bottom,24,153,(menu.tab==1?"RECIBES $":"PAGAS $")+std::to_string(menu.unitPrice*menu.quantity),tradeInk,2,21);
+        }else {text(bottom,24,104,"A: VER PRECIO Y CANTIDAD",tradeMuted);text(bottom,24,122,"IZQ/DER O L/R: CAMBIAR PESTANA",tradeMuted);text(bottom,24,140,"B: CERRAR Y VOLVER AL JUEGO",tradeMuted);}
+    }
+    text(bottom,24,174,menu.message,tradeInk,1,45);
+    tradeButton(bottom,24,190,174,menu.confirming?(menu.tab==2?"PAGAR Y ENTRENAR":menu.tab==1?"VENDER":"COMPRAR"):"SELECCIONAR",true);
+    tradeButton(bottom,206,190,90,menu.confirming?"VOLVER":"SALIR");
+    text(bottom,24,218,menu.confirming?"PAD: +/-1 | ARRIBA/ABAJO: +/-10":"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeMuted,1,45);
+}
+
 
 void drawQuests(uint8_t*fb,const QuestPanel&p){
     drawHudFrame(fb,{},false,true);const Color ink={55,37,22},gold={174,131,64},paper={231,213,177};
