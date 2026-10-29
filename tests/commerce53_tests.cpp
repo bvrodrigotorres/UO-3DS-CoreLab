@@ -15,9 +15,9 @@ int main(int argc,char**argv){
  assert(!bag.tradeQuantity(true,3,8,10,failTraining)&&PlayerStatus::gold(&bag)==680&&bag.backpack[1].count==30);
  assert(!bag.tradeQuantity(true,3,8,65535)&&!bag.tradeQuantity(true,3,8,0)&&!bag.tradeQuantity(true,5,35,2));
  bag.backpack={{0,65535},{3,65530}};assert(!bag.tradeQuantity(true,3,1,6)&&bag.backpack[1].count==65530);
- bag.backpack.assign(24,{4,1});bag.backpack[0]={0,80};assert(bag.tradeQuantity(true,3,8,10)&&bag.backpack.size()==24&&PlayerStatus::gold(&bag)==0);
- assert(bag.tradeQuantity(false,3,4,10)&&PlayerStatus::gold(&bag)==40&&bag.backpack.size()==24);
- bag.backpack.assign(24,{4,1});bag.backpack[0]={0,81};assert(!bag.tradeQuantity(true,3,8,10)&&PlayerStatus::gold(&bag)==81);
+ bag.backpack.assign(BagSlots,{5,1});bag.backpack[0]={0,80};assert(bag.tradeQuantity(true,3,8,10)&&bag.backpack.size()==BagSlots&&PlayerStatus::gold(&bag)==0);
+ assert(bag.tradeQuantity(false,3,4,10)&&PlayerStatus::gold(&bag)==40&&bag.backpack.size()==BagSlots);
+ bag.backpack.assign(BagSlots,{5,1});bag.backpack[0]={0,81};assert(!bag.tradeQuantity(true,3,8,10)&&PlayerStatus::gold(&bag)==81);
  bag.backpack={{0,1000}};Npcs npcs;Npc healer;healer.name="Anastasia";healer.title="the healer";healer.position=healer.from=healer.home={6,5,0};npcs.combatants().push_back(healer);
  Commerce shop;assert(shop.update(w,npcs,actor)&&shop.available()&&!shop.lessons.empty());
  PlayerStatus status;status.skills.start(5);TradeMenu menu;menu.refresh(shop,bag);menu.row=0;assert(menu.quote(shop,bag,status)&&menu.confirming&&menu.quantity==1&&menu.maximum==125);menu.changeQuantity(9);assert(menu.quantity==10);

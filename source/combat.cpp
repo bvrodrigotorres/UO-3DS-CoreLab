@@ -72,7 +72,7 @@ void Combat::kill(size_t index,Npcs&npcs,Inventory&inv,int luck){
     bool undead=is("skeleton")||is("zombie")||is("wraith")||is("spectre");
     bool armed=is("orc")||is("ratman")||is("lizardman")||is("ogre")||is("ettin")||is("troll");
     if(is("el devorador")){
-        slot->loot={{0,uint16_t(roll(300,450))},{3,10},{4,1},{4,1},{23,5}};
+        slot->loot={{0,uint16_t(roll(300,450))},{3,10},{4,2},{23,5}};
         slot->loot.push_back({uint16_t(rollEquipment(4,random,luck,0)),1});
         slot->loot.push_back({uint16_t(rollEquipment(3,random,luck,2)),1});
         slot->loot.push_back({uint16_t(rollEquipment(2,random,luck,1)),1});
@@ -131,9 +131,9 @@ bool Combat::meditate(PlayerStatus&status,const Inventory&inv){
     meditating=true;meditationPulse=0;message="MEDITANDO: NO TE MUEVAS";return true;
 }
 bool Combat::repeatHealing(Inventory&inv,PlayerStatus&status,SaveRename renameFile){
-    if(!itemHealing(status.lastHealing)){inv.message="USA PRIMERO UN OBJETO CURATIVO";return false;}
-    for(size_t i=0;i<inv.backpack.size();++i)if(inv.backpack[i].type==status.lastHealing)return useHealing(inv,i,status,renameFile);
-    inv.message="NO QUEDA "+std::string(itemDefs[status.lastHealing].name);return false;
+    // Y always selects bandages, independently of saved/manual healing choices.
+    for(size_t i=0;i<inv.backpack.size();++i)if(inv.backpack[i].type==3)return useHealing(inv,i,status,renameFile);
+    inv.message="NO TIENES VENDAS";return false;
 }
 bool Combat::update(const World&w,Npcs&npcs,Actor&player,bool moving,float dt,PlayerStatus&status,Inventory&inv){
     if(mob.size()!=npcs.all().size())reset(npcs);

@@ -10,7 +10,7 @@
 namespace lab {
 static const std::array<ItemDef,BaseItemTypes> baseDefs={{{0xEED,"ORO",true,-1,0,0,.85f,0,0,0},
 {0x103B,"PAN",true,-1,0,0,.85f,0,1,6},{0x9D0,"MANZANA",true,-1,0,0,.85f,0,1,4},
-{0xE21,"VENDAS",true,-1,0,0,.85f,0,1,8},{0xF0E,"POCION",false,-1,0,0,.85f,0,1,25},
+{0xE21,"VENDAS",true,-1,0,0,.85f,0,1,8},{0xF0E,"POCION",true,-1,0,0,.85f,0,1,25},
 {0xF51,"DAGA",false,0,7,11,.65f,0,1,35},{0x1F03,"TUNICA",false,1,0,0,.85f,0,3,20},
 {0x170B,"BOTAS",false,2,0,0,.85f,2,2,18},{0x1517,"CAMISA",false,5,0,0,.85f,0,1,10},
 {0x1EFD,"CAMISA ELEGANTE",false,5,0,0,.85f,0,1,16},{0x152F,"PANTALON",false,7,0,0,.85f,0,2,12},
@@ -119,7 +119,7 @@ void Inventory::init(const World&w,const std::string&p){
             uint32_t seed=canonical^uint32_t(o.x*7919+o.y*104729+o.art*31);
             bool dungeon=w.originX==6016&&w.originY==1408;
             if(dungeon){
-                loot={{0,uint16_t(n?240:120)},{3,8},{4,1},{4,1}};
+                loot={{0,uint16_t(n?240:120)},{3,8},{4,2}};
                 loot.push_back({uint16_t(rollEquipment(n?3:2,seed,0,n?2:0)),1});
                 loot.push_back({uint16_t(rollEquipment(2,seed,0,1)),1});
             }else {
@@ -134,24 +134,28 @@ void Inventory::init(const World&w,const std::string&p){
     if(!exists(input)&&exists(path+".bak"))input=path+".bak";
     if(!exists(input)){seedGear();return;}
     std::ifstream f(input,std::ios::binary);std::vector<uint8_t>b(524289);f.read(reinterpret_cast<char*>(b.data()),b.size());b.resize(size_t(f.gcount()));
-    bool ok=b.size()>=20&&b.size()<=524288&&b[0]=='U'&&b[1]=='I'&&b[2]=='N'&&((b[3]>='1'&&b[3]<='9')||b[3]=='A'||b[3]=='B')&&get(b,4)==identity&&get(b,8)==chests.size();
-    const unsigned itemLimit=b.size()>=4&&(b[3]=='A'||b[3]=='B')?ItemTypes:BaseItemTypes;
+    bool ok=b.size()>=20&&b.size()<=524288&&b[0]=='U'&&b[1]=='I'&&b[2]=='N'&&((b[3]>='1'&&b[3]<='9')||b[3]=='A'||b[3]=='B'||b[3]=='C')&&get(b,4)==identity&&get(b,8)==chests.size();
+    bool modern=b.size()>=4&&b[3]=='C';
+    const unsigned itemLimit=b.size()>=4&&(b[3]=='A'||b[3]=='B'||b[3]=='C')?ItemTypes:BaseItemTypes;
     if(ok){std::vector<uint8_t>body(b.begin(),b.end()-4);ok=get(b,b.size()-4)==hash(body);}
     size_t pos=12;std::vector<Bag>bags;
     if(ok)for(size_t n=0;n<=chests.size();++n){
         if(pos+4>b.size()-4){ok=false;break;}unsigned count=get(b,pos);pos+=4;
-        if(count>(n==0?BagSlots:ChestSlots)||pos+count*8>b.size()-4){ok=false;break;}
+        if(count>(n==0?(modern?BagSlots:24):ChestSlots)||pos+count*8>b.size()-4){ok=false;break;}
         Bag bag;std::array<bool,ItemTypes>used{};
         for(unsigned k=0;k<count;++k){unsigned type=get(b,pos),amount=get(b,pos+4);pos+=8;
-            if(type>=itemLimit||!amount||amount>65535||(used[type]&&itemDefs[type].stackable)||(!itemDefs[type].stackable&&amount!=1)){ok=false;break;}
-            used[type]=true;bag.push_back({uint16_t(type),uint16_t(amount)});
+            if(type>=itemLimit||!amount||amount>65535||(used[type]&&itemDefs[type].stackable&&type!=4)||(!itemDefs[type].stackable&&amount!=1)||(!modern&&type==4&&amount!=1)){ok=false;break;}
+            used[type]=true;
+            auto potion=type==4?std::find_if(bag.begin(),bag.end(),[](ItemStack v){return v.type==4;}):bag.end();
+            if(potion!=bag.end()){if(unsigned(potion->count)+amount>65535){ok=false;break;}potion->count+=amount;}
+            else bag.push_back({uint16_t(type),uint16_t(amount)});
         }
         if(!ok)break;
         bags.push_back(bag);
     }
     bool legacy=b.size()>=4&&b[3]=='1';
     std::array<int,11>loaded;loaded.fill(-1);
-    bool hasQuests=b.size()>=4&&(b[3]=='8'||b[3]=='9'||b[3]=='A'||b[3]=='B');
+    bool hasQuests=b.size()>=4&&(b[3]=='8'||b[3]=='9'||b[3]=='A'||b[3]=='B'||b[3]=='C');
     bool hasGround=b.size()>=4&&(b[3]=='7'||hasQuests);
     bool expanded=b.size()>=4&&(b[3]=='6'||hasGround);
     int slots=expanded?11:8;
@@ -175,7 +179,7 @@ void Inventory::init(const World&w,const std::string&p){
             auto&pile=ground[n];pile.position={int(int32_t(get(b,pos))),int(int32_t(get(b,pos+4))),int(int32_t(get(b,pos+8)))};unsigned size=get(b,pos+12);pos+=16;
             if(!w.contains(pile.position.x,pile.position.y)||(pile.position.z< -512||pile.position.z>512)||!size||size>ChestSlots||pos+size*12>b.size()-4){ok=false;break;}
             for(unsigned i=0;i<size;++i){unsigned type=get(b,pos),amount=get(b,pos+4),ms=get(b,pos+8);pos+=12;
-                if(type>=itemLimit||!amount||amount>65535||(!itemDefs[type].stackable&&amount!=1)||!ms||ms>180000){ok=false;break;}
+                if(type>=itemLimit||!amount||amount>65535||(!itemDefs[type].stackable&&amount!=1)||(!modern&&type==4&&amount!=1)||!ms||ms>180000){ok=false;break;}
                 pile.items.push_back({uint16_t(type),uint16_t(amount)});pile.remaining.push_back(ms/1000.f);
             }
         }
@@ -183,10 +187,10 @@ void Inventory::init(const World&w,const std::string&p){
     }
     if(ok&&hasQuests){
         unsigned savedQuests=b[3]=='8'?2:QuestCount;
-        if(pos+savedQuests*16+(b[3]=='B'?4+Skills::WireSize:0)!=b.size()-4)ok=false;
+        if(pos+savedQuests*16+((b[3]=='B'||modern)?4+Skills::WireSize:0)!=b.size()-4)ok=false;
         else for(unsigned i=0;i<savedQuests;++i){auto&q=quests[i];q={get(b,pos),get(b,pos+4),get(b,pos+8),get(b,pos+12)};pos+=16;if(!validQuest(i,q))ok=false;}
     }
-    if(ok&&b[3]=='B'){trainingSerial=get(b,pos);pos+=4;ok=trainingSerial>0&&trainingSerial<=1000000&&trainingSkills.decode(b.data()+pos,Skills::WireSize)&&trainingSkills.ready;pos+=Skills::WireSize;}
+    if(ok&&(b[3]=='B'||modern)){trainingSerial=get(b,pos);pos+=4;ok=(modern||trainingSerial>0)&&trainingSerial<=1000000&&trainingSkills.decode(b.data()+pos,Skills::WireSize)&&(!trainingSerial||trainingSkills.ready);pos+=Skills::WireSize;}
     if(!ok||pos!=b.size()-4){trainingSerial=0;trainingSkills={};writable=false;ground={};quests={};backpack.clear();for(auto&c:chests)c.items.clear();message="ERROR INVENTARIO: ARCHIVO INTACTO";return;}
     backpack=bags[0];for(size_t n=0;n<chests.size();++n)chests[n].items=bags[n+1];
     restored=true;equipment=loaded;if(legacy)seedGear();
@@ -310,18 +314,18 @@ void Inventory::open(const World&w,const Actor&a){
 }
 bool Inventory::persist(std::string&error,SaveRename renameFile){
     bool hasGround=groundFormat;for(const auto&p:ground)if(!p.items.empty())hasGround=true;
-    bool magic=false;auto scan=[&](const Bag&items){for(auto s:items)if(s.type>=BaseItemTypes)magic=true;};
+    bool modern=backpack.size()>24;bool magic=false;auto scan=[&](const Bag&items){for(auto s:items){if(s.type>=BaseItemTypes)magic=true;if(s.type==4&&s.count>1)modern=true;}};
     scan(backpack);for(const auto&c:chests)scan(c.items);for(const auto&p:ground)scan(p.items);
     for(int t:equipment)if(t>=int(BaseItemTypes))magic=true;
     for(int t:lastEquipment)if(t>=int(BaseItemTypes))magic=true;
-    bool hasQuests=magic||trainingSerial;for(const auto&q:quests)if(q.state)hasQuests=true;
+    bool hasQuests=modern||magic||trainingSerial;for(const auto&q:quests)if(q.state)hasQuests=true;
     bool extended=dressed||accessories;for(size_t s=3;s<8;++s)if(equipment[s]>=0)extended=true;
     bool remembered=false;for(int t:lastEquipment)if(t>=0)remembered=true;extended=extended||remembered;
     bool expanded=false;for(size_t s=8;s<11;++s)if(equipment[s]>=0||lastEquipment[s]>=0)expanded=true;
     if(hasGround||hasQuests)expanded=true;
     if(expanded){extended=true;remembered=true;}
     size_t slots=expanded?11:8;
-    std::vector<uint8_t>b={'U','I','N',uint8_t(trainingSerial?'B':magic?'A':hasQuests?(quests[2].state?'9':'8'):hasGround?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
+    std::vector<uint8_t>b={'U','I','N',uint8_t(modern?'C':trainingSerial?'B':magic?'A':hasQuests?(quests[2].state?'9':'8'):hasGround?'7':expanded?'6':remembered?'5':extended?'4':'3')};put(b,identity);put(b,chests.size());
     size_t capacity=128+backpack.size()*8;for(const auto&c:chests)capacity+=4+c.items.size()*8;for(const auto&p:ground)capacity+=16+p.items.size()*12;b.reserve(capacity);
     auto append=[&](const Bag&bag){put(b,bag.size());for(auto s:bag){put(b,s.type);put(b,s.count);}};
     append(backpack);for(const auto&c:chests)append(c.items);for(size_t s=0;s<(extended?slots:3u);++s)put(b,uint32_t(equipment[s]));if(extended)put(b,(dressed?1:0)|(accessories?2:0));if(remembered)for(size_t s=0;s<slots;++s)put(b,uint32_t(lastEquipment[s]));
@@ -329,8 +333,8 @@ bool Inventory::persist(std::string&error,SaveRename renameFile){
         for(const auto&pile:ground)if(!pile.items.empty()){put(b,pile.position.x);put(b,pile.position.y);put(b,pile.position.z);put(b,pile.items.size());
             for(size_t i=0;i<pile.items.size();++i){put(b,pile.items[i].type);put(b,pile.items[i].count);put(b,unsigned(std::max(1.f,std::min(180000.f,std::ceil(pile.remaining[i]*1000)))));}}
     }
-    if(hasQuests)for(unsigned i=0;i<((magic||trainingSerial||quests[2].state)?QuestCount:2u);++i){const auto&q=quests[i];put(b,q.state);put(b,q.count);put(b,q.giver);put(b,q.signature);}
-    if(trainingSerial){put(b,trainingSerial);trainingSkills.encode(b);}
+    if(hasQuests)for(unsigned i=0;i<((modern||magic||trainingSerial||quests[2].state)?QuestCount:2u);++i){const auto&q=quests[i];put(b,q.state);put(b,q.count);put(b,q.giver);put(b,q.signature);}
+    if(trainingSerial||modern){put(b,trainingSerial);trainingSkills.encode(b);}
     put(b,hash(b));
     if(saveSink&&renameFile==std::rename){if(saveSink(path,std::move(b)))return true;error="GUARDADO OCUPADO: REINTENTA";return false;}
     std::string tmp=path+".tmp",bak=path+".bak";
@@ -445,7 +449,7 @@ bool Inventory::tradeQuantity(bool buy,unsigned type,unsigned price,unsigned qua
     detailType=type;message=std::string(buy?"COMPRADO: ":"VENDIDO: ")+itemDefs[type].name;return true;
 }
 void Inventory::tap(const World&w,const Actor&a,int x,int y){
-    if(InventoryLayout::page(x,y)){bagPage=1-bagPage;return;}
+    if(InventoryLayout::page(x,y)){bagPage=(bagPage+1)%BagPages;return;}
     if(InventoryLayout::mode(x,y)){if(equipMode){equipMode=false;useMode=true;}else if(useMode)useMode=false;else equipMode=true;message=useMode?"TOCA POCION, VENDA O COMIDA":equipMode?"TOCA OBJETO PARA EQUIPAR":"TOCA OBJETO PARA TRANSFERIR";return;}
     if(InventoryLayout::take(x,y)){takeAll(w,a);return;}
     int left=InventoryLayout::slot(x,y,InventoryLayout::Left),right=InventoryLayout::slot(x,y,InventoryLayout::Right);

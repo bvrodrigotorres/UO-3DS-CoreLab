@@ -69,7 +69,7 @@ bool Commerce::update(const World&w,const Npcs&npcs,const Actor&a){
 }
 void Commerce::tap(const World&w,const Npcs&npcs,const Actor&a,Inventory&inv,int x,int y){
     update(w,npcs,a);
-    if(InventoryLayout::page(x,y)){bagPage=1-bagPage;selectedType=-1;return;}
+    if(InventoryLayout::page(x,y)){bagPage=(bagPage+1)%BagPages;selectedType=-1;return;}
     if(!available()){message="ACERCATE A UN VENDEDOR";return;}
     int left=InventoryLayout::slot(x,y,18),right=InventoryLayout::slot(x,y,170);
     int type=-1;bool buy=right>=0;

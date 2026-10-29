@@ -21,7 +21,7 @@ int main(int argc,char**argv){
  assert(loaded.unequip(9)&&loaded.equipment[9]==-1&&status.damageMin(&loaded)==7);assert(loaded.toggleEquipment(9)&&loaded.equipment[9]==28);
  auto previous=loaded.equipment;auto count=loaded.backpack.size();unsigned last=~0u;loaded.prepareEquipment=[&](unsigned key){last=key;return true;};auto desired=loaded.equipment;desired[10]=-1;assert(!loaded.setOutfit(desired,fail)&&loaded.equipment==previous&&loaded.backpack.size()==count&&last==loaded.equipmentMask());
  desired[10]=28;assert(!loaded.setOutfit(desired)&&loaded.equipment==previous); // wrong slot rejected
- loaded.backpack.assign(BagSlots,{4,1});desired=loaded.equipment;desired[9]=-1;assert(!loaded.setOutfit(desired)&&loaded.equipment==previous); // no space to remove jewelry
+ loaded.backpack.assign(BagSlots,{5,1});desired=loaded.equipment;desired[9]=-1;assert(!loaded.setOutfit(desired)&&loaded.equipment==previous); // no space to remove jewelry
  EquipmentMenu empty(loaded);empty.row=3;empty.change(1);assert(empty.desired[3]==-1); // cannot invent unowned hats
  // Cancellation does not touch bag/equipment; arrows/pages remain within all slots.
  for(int n=0;n<100;++n){empty.move(1);assert(empty.row>=0&&empty.row<11);empty.change(-1);}assert(loaded.equipment==previous);

@@ -29,10 +29,10 @@ int main(int argc,char**argv){
     Inventory restored;restored.init(w,path);assert(restored.restored&&equal(restored.backpack,inv.backpack));
     inv.chests[0].items={{0,2},{3,4}};assert(inv.checkpoint());auto oldFile=read(path);Bag oldBag=inv.backpack,oldChest=inv.chests[0].items;calls=0;
     assert(!inv.takeAll(w,player,failInstall)&&equal(oldBag,inv.backpack)&&equal(oldChest,inv.chests[0].items)&&read(path)==oldFile);
-    inv.backpack.assign(23,{4,1});inv.chests[0].items={{0,5},{3,2}};
-    assert(inv.takeAll(w,player)&&inv.backpack.size()==24&&inv.chests[0].items.size()==1&&inv.chests[0].items[0].type==3);
+    inv.backpack.assign(BagSlots-1,{5,1});inv.chests[0].items={{0,5},{3,2}};
+    assert(inv.takeAll(w,player)&&inv.backpack.size()==BagSlots&&inv.chests[0].items.size()==1&&inv.chests[0].items[0].type==3);
     assert(!inv.takeAll(w,player)&&inv.chests[0].items[0].count==2);
-    inv.backpack.assign(23,{4,1});inv.backpack.push_back({0,65535});inv.chests[0].items={{0,1}};
+    inv.backpack.assign(BagSlots-1,{5,1});inv.backpack.push_back({0,65535});inv.chests[0].items={{0,1}};
     assert(!inv.takeAll(w,player)&&inv.chests[0].items[0].count==1&&PlayerStatus::gold(&inv)==65535);
     // All 24 slots persist; the second page maps its last tile to item 23.
     inv.backpack.assign(24,{5,1});inv.backpack[23]={7,1};inv.equipment.fill(-1);inv.equipMode=true;assert(inv.checkpoint());
@@ -49,7 +49,7 @@ int main(int argc,char**argv){
     // Corpse bulk transfer persists collected loot and leaves no borrowed items.
     body.active=true;body.position=player;body.loot={{0,4},{3,1}};legacy.backpack.clear();assert(combat.inspectNearest(w,player,legacy));assert(legacy.takeAll(w,player)&&body.loot.empty());
     assert(!legacy.takeAll(w,player));Inventory loot;loot.init(w,path);assert(PlayerStatus::gold(&loot)==4);
-    for(int page=0;page<2;++page){pages.bagPage=page;std::vector<uint8_t>fb(320*240*3+32,0xCD);drawInventory(fb.data()+16,w,player,pages);for(int i=0;i<16;++i)assert(fb[i]==0xCD&&fb[fb.size()-1-i]==0xCD);}
+    for(int page=0;page<int(BagPages);++page){pages.bagPage=page;std::vector<uint8_t>fb(320*240*3+32,0xCD);drawInventory(fb.data()+16,w,player,pages);for(int i=0;i<16;++i)assert(fb[i]==0xCD&&fb[fb.size()-1-i]==0xCD);}
     TouchPages touch;touch.page=2;touch.begin(200,220);assert(!touch.end()&&touch.page==2);
     std::cout<<"Nearest chest/corpse preview, atomic/partial take-all, SD rollback, 24-slot saves, UIN2 migration, page-2 equipment and enlarged touch/HUD bounds passed\n";
 }

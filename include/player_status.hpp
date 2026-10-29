@@ -19,7 +19,7 @@ struct PlayerStatus {
     float healthVisible=0,flash=0;
     int recoveryGoal=0;
     bool mounted=false;
-    unsigned lastHealing=0; // Item type, never a backpack index.
+    unsigned lastHealing=0; // Legacy save field; Y always uses bandages.
     bool showHealth()const{return healthVisible>0||(recoveryGoal>0&&hits<recoveryGoal);}
     void tookDamage(){recoveryGoal=std::min(hitsMax,hits+(hitsMax+3)/4);healthVisible=6;}
     void recovered(){if(recoveryGoal>0&&hits>=recoveryGoal)recoveryGoal=0;}

@@ -9,7 +9,7 @@
 #include <array>
 #include <functional>
 namespace lab {
-constexpr size_t BagSlots=24, ChestSlots=12, BagPageSlots=12;
+constexpr size_t BagSlots=36, ChestSlots=12, BagPageSlots=12, BagPages=BagSlots/BagPageSlots;
 struct InventoryLayout {
     static constexpr int Left=18,Right=170,Top=38,StepX=44,StepY=38,Width=41,Height=35;
     static int slot(int x,int y,int left){if(x<left||x>=left+3*StepX||y<Top||y>=Top+4*StepY)return -1;int dx=x-left,dy=y-Top;if(dx%StepX>=Width||dy%StepY>=Height)return -1;return (dy/StepY)*3+dx/StepX;}
