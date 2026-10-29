@@ -37,6 +37,12 @@ class SceneTests(unittest.TestCase):
         subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
         subprocess.run([str(binary),self.temp.name],check=True)
 
+    def test_paid_training_reclaims_down_skills_at_cap(self):
+        binary=Path(self.temp.name)/'training551_tests'
+        sources=['tests/training551_tests.cpp','source/commerce.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']
+        subprocess.run([os.environ.get('CXX','c++'),'-std=c++17','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer','-g','-I'+str(ROOT/'include'),*[str(ROOT/s) for s in sources],'-o',str(binary)],check=True)
+        subprocess.run([str(binary),self.temp.name],check=True)
+
     def test_merchant_menu_and_paid_training(self):
         binary=Path(self.temp.name)/'commerce53_tests'
         sources=['tests/commerce53_tests.cpp','source/commerce.cpp','source/combat.cpp','source/npcs.cpp','source/inventory.cpp','source/hud.cpp','source/character.cpp','source/core.cpp','source/scene_io.cpp','source/exploration.cpp','source/doors.cpp']

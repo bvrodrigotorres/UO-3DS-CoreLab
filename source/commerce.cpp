@@ -104,8 +104,8 @@ bool TradeMenu::quote(const Commerce&shop,const Inventory&inv,const PlayerStatus
     if(tab==2){auto&s=status.skills.entries[entry];unitPrice=1;
         if(!status.skills.ready||s.value>=300){message="YA ALCANZASTE EL LIMITE DE 30.0";return false;}
         if(s.lock!=SkillLock::Up){message="MARCA ESTA HABILIDAD EN SUBIR";return false;}
-        maximum=std::min({300u-s.value,gold,Skills::TotalCap-status.skills.total()});
-        if(!maximum){message=gold?"LIMITE TOTAL DE HABILIDADES: 700.0":"ORO INSUFICIENTE";return false;}
+        maximum=std::min(gold,status.skills.trainingRoom(Skill(entry)));
+        if(!maximum){message=gold?"LIMITE 700.0: MARCA SKILLS EN BAJAR":"ORO INSUFICIENTE";return false;}
         quantity=maximum;
     }else{
         unitPrice=shop.price(entry,tab==0);
@@ -122,9 +122,8 @@ bool TradeMenu::execute(const Commerce&shop,Inventory&inv,PlayerStatus&status,Sa
     bool ok=false;
     if(tab==2){
         if(std::find(shop.lessons.begin(),shop.lessons.end(),Skill(entry))==shop.lessons.end())return false;
-        auto book=status.skills;auto&s=book.entries[entry];
-        if(s.lock!=SkillLock::Up||s.value>=300||s.value+quantity>300||book.total()+quantity>Skills::TotalCap){message="LECCION NO DISPONIBLE";return false;}
-        s.value+=quantity;s.checks=0;s.wait=0;
+        auto book=status.skills;
+        if(!book.train(Skill(entry),quantity)){message="REVISA EL LIMITE Y LAS SKILLS EN BAJAR";return false;}
         ok=inv.commitTraining(book,quantity,renameFile);if(ok){status.skills=std::move(book);status.trainingSerial=inv.trainingSerial;}
     }else if(shop.accepts(entry))ok=inv.tradeQuantity(tab==0,entry,unitPrice,quantity,renameFile);
     message=ok?(tab==2?std::string(skillDefs[entry].name)+" = "+skillValue(status.skills.entries[entry].value):(tab==0?"COMPRA":"VENTA")+std::string(" COMPLETADA: ")+std::to_string(quantity)):inv.message;

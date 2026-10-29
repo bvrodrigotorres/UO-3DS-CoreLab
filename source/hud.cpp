@@ -324,7 +324,9 @@ void drawTradeMenu(uint8_t*top,uint8_t*bottom,const Inventory&inv,const Commerce
             text(bottom,24,153,(menu.tab==1?"RECIBES $":"PAGAS $")+std::to_string(menu.unitPrice*menu.quantity),tradeInk,2,21);
         }else {text(bottom,24,104,"A: VER PRECIO Y CANTIDAD",tradeMuted);text(bottom,24,122,"IZQ/DER O L/R: CAMBIAR PESTANA",tradeMuted);text(bottom,24,140,"B: CERRAR Y VOLVER AL JUEGO",tradeMuted);}
     }
-    text(bottom,24,174,menu.message,tradeInk,1,45);
+    std::string notice=menu.message;
+    if(notice.empty()&&menu.confirming&&menu.tab==2){unsigned sum=status.skills.total()+menu.quantity;if(sum>Skills::TotalCap)notice="BAJARAN "+skillValue(sum-Skills::TotalCap)+" DE SKILLS EN -";}
+    text(bottom,24,174,notice,tradeInk,1,45);
     tradeButton(bottom,24,190,174,menu.confirming?(menu.tab==2?"PAGAR Y ENTRENAR":menu.tab==1?"VENDER":"COMPRAR"):"SELECCIONAR",true);
     tradeButton(bottom,206,190,90,menu.confirming?"VOLVER":"SALIR");
     text(bottom,24,218,menu.confirming?"PAD: +/-1 | ARRIBA/ABAJO: +/-10":"ORO $"+std::to_string(PlayerStatus::gold(&inv)),tradeMuted,1,45);

@@ -26,6 +26,23 @@ struct Skills {
     void start(int weapon){if(ready)return;ready=true;entries[unsigned(weaponSkill(weapon))].value=500;entries[unsigned(Skill::Tactics)].value=250;entries[unsigned(Skill::Anatomy)].value=250;}
     void tick(float dt){if(dt<=0)return;for(auto&s:entries)s.wait=std::max(0.f,s.wait-dt);notice=std::max(0.f,notice-dt);}
     bool cycle(unsigned index){if(index>=SkillCount)return false;auto&s=entries[index];s.lock=SkillLock((unsigned(s.lock)+1)%3);return true;}
+    // NPC training can reclaim only points explicitly marked Down. The target
+    // must be Up; free space is used first, with the same highest-donor order as practice.
+    unsigned trainingRoom(Skill id)const{
+        unsigned i=unsigned(id),sum=total();
+        if(!ready||i>=SkillCount||sum>TotalCap||entries[i].lock!=SkillLock::Up||entries[i].value>=300)return 0;
+        unsigned room=TotalCap-sum;for(unsigned j=0;j<SkillCount;++j)if(j!=i&&entries[j].lock==SkillLock::Down)room+=entries[j].value;
+        return std::min(300u-entries[i].value,room);
+    }
+    bool train(Skill id,unsigned gain){
+        if(!gain||gain>trainingRoom(id))return false;
+        unsigned i=unsigned(id),sum=total(),needed=sum+gain>TotalCap?sum+gain-TotalCap:0;
+        while(needed){int donor=-1;for(unsigned j=0;j<SkillCount;++j)if(j!=i&&entries[j].lock==SkillLock::Down&&entries[j].value&&(donor<0||entries[j].value>entries[unsigned(donor)].value))donor=int(j);
+            // trainingRoom guarantees sufficient donors before any mutation.
+            --entries[unsigned(donor)].value;--needed;
+        }
+        entries[i].value+=gain;entries[i].checks=0;entries[i].wait=0;return true;
+    }
     unsigned nextRandom(){random=random*1664525u+1013904223u;return random>>16;}
     // Chance plus bounded eligible-use guarantee. Difficulty stops easy-target GM farming.
     bool practice(Skill id,int difficulty,bool success=true){
